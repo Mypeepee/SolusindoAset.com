@@ -43,7 +43,7 @@ export const headerData: HeaderItem[] = [
       },
       {
         label: "Gabung Jadi Agent",
-        href: "/careers/join-agent",
+        href: "/gabung-jadi-agent",
         icon: "solar:user-hand-up-bold",
       },
       {

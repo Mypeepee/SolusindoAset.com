@@ -1,4 +1,3 @@
-// app/Jual/[slug]/page.tsx
 import React from "react";
 import { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
@@ -9,20 +8,81 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 interface Props {
   params: {
-    slug: string; // contoh: "rumah-minimalis-di-citraland-uuid"
+    slug: string; // contoh: "rumah-minimalis-di-citraland-123"
   };
 }
 
-// Ambil id_property (UUID v4) dari slug-id => 5 segmen terakhir
-function extractIdPropertyFromSlug(slug: string): string | null {
-  const parts = slug.split("-");
-  if (parts.length < 5) return null;
-  const uuidParts = parts.slice(-5); // 8-4-4-4-12
-  return uuidParts.join("-");
+// Ambil id_property (BigInt) dari slug-di-akhir → segmen terakhir setelah tanda "-"
+function extractIdPropertyFromSlug(slugWithId: string): bigint | null {
+  const parts = slugWithId.split("-");
+  const last = parts[parts.length - 1];
+  if (!last) return null;
+  const asNumber = Number(last);
+  if (Number.isNaN(asNumber)) return null;
+  return BigInt(asNumber);
 }
 
-async function getProperty(id: string) {
-  const product = await prisma.property.findUnique({
+// --------- SERIALIZER ---------
+function serializeListing(listing: any) {
+  if (!listing) return null;
+
+  return {
+    ...listing,
+    id_property: listing.id_property
+      ? listing.id_property.toString()
+      : null,
+
+    harga: listing.harga != null ? Number(listing.harga) : 0,
+    harga_promo:
+      listing.harga_promo != null ? Number(listing.harga_promo) : null,
+    nilai_limit_lelang:
+      listing.nilai_limit_lelang != null
+        ? Number(listing.nilai_limit_lelang)
+        : null,
+    uang_jaminan:
+      listing.uang_jaminan != null ? Number(listing.uang_jaminan) : null,
+    nilai_limit:
+      listing.nilai_limit != null ? Number(listing.nilai_limit) : null,
+
+    luas_tanah:
+      listing.luas_tanah != null ? Number(listing.luas_tanah) : null,
+    luas_bangunan:
+      listing.luas_bangunan != null ? Number(listing.luas_bangunan) : null,
+
+    latitude:
+      listing.latitude != null ? Number(listing.latitude) : null,
+    longitude:
+      listing.longitude != null ? Number(listing.longitude) : null,
+
+    tanggal_dibuat: listing.tanggal_dibuat
+      ? listing.tanggal_dibuat.toISOString()
+      : null,
+    tanggal_diupdate: listing.tanggal_diupdate
+      ? listing.tanggal_diupdate.toISOString()
+      : null,
+    tanggal_lelang: listing.tanggal_lelang
+      ? listing.tanggal_lelang.toISOString()
+      : null,
+
+    agent: listing.agent
+      ? {
+          ...listing.agent,
+          rating:
+            listing.agent.rating != null
+              ? Number(listing.agent.rating)
+              : null,
+          jumlah_closing:
+            listing.agent.jumlah_closing != null
+              ? Number(listing.agent.jumlah_closing)
+              : null,
+        }
+      : null,
+  };
+}
+
+// --------- DB HELPERS ----------
+async function getProperty(id: bigint) {
+  const product = await prisma.listing.findUnique({
     where: { id_property: id },
     include: {
       agent: {
@@ -33,12 +93,13 @@ async function getProperty(id: string) {
           nomor_whatsapp: true,
           kota_area: true,
           jabatan: true,
+          foto_profil_url: true, // avatar agent disimpan di Agent
           pengguna: {
             select: {
               nama_lengkap: true,
-              foto_profil_url: true,
               nomor_telepon: true,
               email: true,
+              // ⬅️ foto_profil_url TIDAK ada di model Pengguna Jual, jadi jangan select di sini
             },
           },
         },
@@ -46,17 +107,16 @@ async function getProperty(id: string) {
     },
   });
 
-  if (product && product.status_tayang !== "TERSEDIA") {
-    return null;
-  }
+  if (!product) return null;
+  if (product.status_tayang !== "TERSEDIA") return null;
 
   return product;
 }
 
-// Similar properties (khusus JUAL/SEWA, bukan LELANG)
+// Similar properties (khusus PRIMARY/SECONDARY, bukan LELANG/SEWA)
 async function getSimilarProperties(currentProperty: any) {
   try {
-    const similarProperties = await prisma.property.findMany({
+    const similar = await prisma.listing.findMany({
       where: {
         AND: [
           { id_property: { not: currentProperty.id_property } },
@@ -69,7 +129,7 @@ async function getSimilarProperties(currentProperty: any) {
           { status_tayang: "TERSEDIA" },
           {
             jenis_transaksi: {
-              in: ["JUAL", "SEWA"],
+              in: ["PRIMARY", "SECONDARY"], // enum jenis_transaksi_enum
             },
           },
         ],
@@ -83,10 +143,10 @@ async function getSimilarProperties(currentProperty: any) {
             nomor_whatsapp: true,
             kota_area: true,
             jabatan: true,
+            foto_profil_url: true,
             pengguna: {
               select: {
                 nama_lengkap: true,
-                foto_profil_url: true,
                 nomor_telepon: true,
                 email: true,
               },
@@ -101,13 +161,14 @@ async function getSimilarProperties(currentProperty: any) {
       ],
     });
 
-    return similarProperties;
+    return similar;
   } catch (error) {
     console.error("❌ Error fetching similar properties (Jual):", error);
     return [];
   }
 }
 
+// --------- METADATA ----------
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const idProperty = extractIdPropertyFromSlug(params.slug);
   if (!idProperty) {
@@ -118,7 +179,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 
   const product = await getProperty(idProperty);
-
   if (!product) {
     return {
       title: "Properti Tidak Ditemukan | Premier Asset",
@@ -149,7 +209,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     : `${product.jenis_transaksi} ${product.kategori} di ${product.kota}, ${product.provinsi}. ${specs}. Hubungi ${namaAgent} untuk info lebih lanjut.`;
 
   const firstImage =
-    product.gambar_utama_url || "/images/hero/banner.jpg";
+    (product.gambar &&
+      product.gambar.split(",").map((s) => s.trim())[0]) ||
+    "/images/hero/banner.jpg";
 
   const canonicalUrl = `https://premierasset.com/Jual/${params.slug}`;
 
@@ -160,8 +222,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       product.kategori,
       product.jenis_transaksi,
       product.kota,
-      product.kecamatan,
-      product.provinsi,
+      product.kecamatan || "",
+      product.provinsi || "",
       "jual rumah",
       "properti",
       "real estate",
@@ -206,6 +268,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
+// --------- PAGE ----------
 export default async function DetailPage({ params }: Props) {
   const idProperty = extractIdPropertyFromSlug(params.slug);
   if (!idProperty) {
@@ -219,8 +282,7 @@ export default async function DetailPage({ params }: Props) {
 
   // Ambil session: kalau agent login, punya agentId
   const session = await getServerSession(authOptions);
-  const currentAgentId =
-    (session?.user as any)?.agentId || null;
+  const currentAgentId = (session?.user as any)?.agentId || null;
 
   // Self-healing slug: dari DB (slug) + id_property
   if (product.slug && product.id_property) {
@@ -228,9 +290,7 @@ export default async function DetailPage({ params }: Props) {
 
     if (expectedSlug !== params.slug) {
       if (currentAgentId) {
-        return redirect(
-          `/Jual/${expectedSlug}/${currentAgentId}`
-        );
+        return redirect(`/Jual/${expectedSlug}/${currentAgentId}`);
       }
       return redirect(`/Jual/${expectedSlug}`);
     }
@@ -238,24 +298,32 @@ export default async function DetailPage({ params }: Props) {
 
   // Kalau slug sudah benar dan agent sedang login → paksa URL pakai /[slug]/[agentId]
   if (currentAgentId) {
-    return redirect(
-      `/Jual/${params.slug}/${currentAgentId}`
-    );
+    return redirect(`/Jual/${params.slug}/${currentAgentId}`);
   }
 
   const canonicalUrl = `https://premierasset.com/Jual/${params.slug}`;
 
-  const finalFotoArray = [
-    product.gambar_utama_url || "/images/hero/banner.jpg",
-  ];
+  const firstImage =
+    (product.gambar &&
+      product.gambar.split(",").map((s) => s.trim())[0]) ||
+    "/images/hero/banner.jpg";
+
+  const finalFotoArray = [firstImage];
 
   const similarPropertiesRaw = await getSimilarProperties(product);
+  const similarProperties = similarPropertiesRaw.map((prop) => {
+    const firstImg =
+      (prop.gambar &&
+        prop.gambar.split(",").map((s: string) => s.trim())[0]) ||
+      "/images/hero/banner.jpg";
+    return {
+      ...prop,
+      gambar_utama_url: firstImg,
+    };
+  });
 
-  const similarProperties = similarPropertiesRaw.map((prop) => ({
-    ...prop,
-    gambar_utama_url:
-      prop.gambar_utama_url || "/images/hero/banner.jpg",
-  }));
+  const serializedProduct = serializeListing(product);
+  const serializedSimilar = similarProperties.map(serializeListing);
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -316,8 +384,9 @@ export default async function DetailPage({ params }: Props) {
       />
 
       <DetailClient
-        product={JSON.parse(JSON.stringify(product))}
-        currentAgentId={null} // di route tanpa /agentId, biarkan null (kalau agent login akan diarahkan ke /Jual/[slug]/[agentId])
+        product={serializedProduct as any}
+        currentAgentId={null}
+        similarProperties={serializedSimilar as any}
       />
     </main>
   );

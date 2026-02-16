@@ -1,5 +1,5 @@
 import React from "react";
-import { Metadata } from "next";
+import type { Metadata } from "next";
 import SearchHero from "./searchhero";
 import ProductList from "./produklist";
 import prisma from "@/lib/prisma";
@@ -11,50 +11,147 @@ type Props = {
 };
 
 // --- 1. GENERATE METADATA DINAMIS (SEO) ---
-export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
-  const kota = typeof searchParams.kota === "string" ? searchParams.kota : undefined;
+export async function generateMetadata({
+  searchParams,
+}: Props): Promise<Metadata> {
+  const kota =
+    typeof searchParams.kota === "string" ? searchParams.kota : undefined;
 
   const formatText = (text?: string) =>
     text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
 
-  let title = "Jual Beli Properti Primary & Secondary Terlengkap | Premier";
-  if (kota) title = `Jual Properti di ${formatText(kota)} Harga Terbaik | Premier`;
+  let title =
+    "Jual Beli Properti Primary & Secondary Terlengkap | Premier";
+  if (kota)
+    title = `Jual Properti di ${formatText(
+      kota
+    )} Harga Terbaik | Premier`;
 
   return {
     title,
-    description: `Temukan properti idaman di ${kota || "Indonesia"}. Tersedia Primary & Secondary dengan legalitas terjamin.`,
+    description: `Temukan properti idaman di ${
+      kota || "Indonesia"
+    }. Tersedia Primary & Secondary dengan legalitas terjamin.`,
     alternates: {
       canonical: `/Jual${kota ? `?kota=${kota}` : ""}`,
     },
   };
 }
 
+// --- HELPERS GAMBAR ---
+// validasi URL gambar listing
+function isValidImageUrl(url: string): boolean {
+  if (!url || url.trim() === "") return false;
+  const trimmed = url.trim().toLowerCase();
+
+  return (
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("/")
+  );
+}
+
+// normalisasi daftar gambar listing (campuran URL & ID Drive)
+function normalizeListingImages(raw: string | null | undefined): string[] {
+  if (!raw || raw.trim() === "") return [];
+
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .map((s) => {
+      if (isValidImageUrl(s)) {
+        // sudah URL penuh (file.lelang.go.id, drive.google.com, dll) atau path relatif
+        return s;
+      }
+      // selain itu anggap Google Drive fileId
+      return `https://drive.google.com/thumbnail?id=${s}`;
+    });
+}
+
+// normalisasi foto agent dari Google Drive ID / URL
+function normalizeAgentPhoto(fileId: string | null | undefined): string {
+  if (!fileId || fileId.trim() === "") {
+    return "/images/default-profile.png";
+  }
+
+  const trimmed = fileId.trim();
+
+  // jika sudah URL atau path relatif
+  if (
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("/")
+  ) {
+    return trimmed;
+  }
+
+  // selain itu anggap sebagai Google Drive fileId
+  return `https://drive.google.com/thumbnail?id=${trimmed}&sz=w64`;
+}
+
+const allowedKategori = [
+  "RUMAH",
+  "APARTEMEN",
+  "RUKO",
+  "TANAH",
+  "GUDANG",
+  "HOTEL_DAN_VILLA",
+  "TOKO",
+  "PABRIK",
+] as const;
+
 // --- 2. SERVER COMPONENT UTAMA (ASYNC) ---
 export default async function SearchPage({ searchParams }: Props) {
   // A. Ambil Parameter URL (Standard)
-  const page = typeof searchParams.page === "string" ? Number(searchParams.page) : 1;
-  const kota = typeof searchParams.kota === "string" ? searchParams.kota : undefined;
-  const tipe = typeof searchParams.tipe === "string" ? searchParams.tipe : undefined;
+  const page =
+    typeof searchParams.page === "string"
+      ? Number(searchParams.page)
+      : 1;
+  const kota =
+    typeof searchParams.kota === "string"
+      ? searchParams.kota
+      : undefined;
+  const tipe =
+    typeof searchParams.tipe === "string"
+      ? searchParams.tipe
+      : undefined;
 
   // A.2. Ambil Parameter Filter Lanjutan (DARI SIDEBAR)
   const minKT =
-    typeof searchParams.minKT === "string" ? Number(searchParams.minKT) : undefined;
+    typeof searchParams.minKT === "string"
+      ? Number(searchParams.minKT)
+      : undefined;
   const minKM =
-    typeof searchParams.minKM === "string" ? Number(searchParams.minKM) : undefined;
+    typeof searchParams.minKM === "string"
+      ? Number(searchParams.minKM)
+      : undefined;
   const lantai =
-    typeof searchParams.lantai === "string" ? Number(searchParams.lantai) : undefined;
-  const hadap = typeof searchParams.hadap === "string" ? searchParams.hadap : undefined;
+    typeof searchParams.lantai === "string"
+      ? Number(searchParams.lantai)
+      : undefined;
+  const hadap =
+    typeof searchParams.hadap === "string"
+      ? searchParams.hadap
+      : undefined;
   const kondisi =
-    typeof searchParams.kondisi === "string" ? searchParams.kondisi : undefined;
+    typeof searchParams.kondisi === "string"
+      ? searchParams.kondisi
+      : undefined;
   const legalitas =
-    typeof searchParams.legalitas === "string" ? searchParams.legalitas : undefined;
-  const sort = typeof searchParams.sort === "string" ? searchParams.sort : "desc";
+    typeof searchParams.legalitas === "string"
+      ? searchParams.legalitas
+      : undefined;
+  const sort =
+    typeof searchParams.sort === "string"
+      ? searchParams.sort
+      : "desc";
 
   const limit = 15;
   const skip = (page - 1) * limit;
 
   // B. BUILD FILTER QUERY (WHERE)
-  const whereClause: Prisma.propertyWhereInput = {
+  const whereClause: Prisma.ListingWhereInput = {
     jenis_transaksi: { in: ["PRIMARY", "SECONDARY"] },
     status_tayang: "TERSEDIA",
 
@@ -62,19 +159,20 @@ export default async function SearchPage({ searchParams }: Props) {
       kota: { contains: kota, mode: "insensitive" },
     }),
 
-    ...(tipe && {
-      kategori: { equals: tipe.toUpperCase() as any },
-    }),
+    ...(tipe &&
+      allowedKategori.includes(tipe.toUpperCase() as any) && {
+        kategori: tipe.toUpperCase() as any,
+      }),
 
-    ...(minKT && {
+    ...(minKT !== undefined && {
       kamar_tidur: { gte: minKT },
     }),
 
-    ...(minKM && {
+    ...(minKM !== undefined && {
       kamar_mandi: { gte: minKM },
     }),
 
-    ...(lantai && {
+    ...(lantai !== undefined && {
       jumlah_lantai: { gte: lantai },
     }),
 
@@ -83,7 +181,10 @@ export default async function SearchPage({ searchParams }: Props) {
     }),
 
     ...(kondisi && {
-      kondisi_interior: { contains: kondisi, mode: "insensitive" },
+      kondisi_interior: {
+        contains: kondisi,
+        mode: "insensitive",
+      },
     }),
 
     ...(legalitas && {
@@ -92,7 +193,9 @@ export default async function SearchPage({ searchParams }: Props) {
   };
 
   // C. TENTUKAN SORTING (ORDER BY)
-  let orderBy: Prisma.propertyOrderByWithRelationInput = { tanggal_dibuat: "desc" };
+  let orderBy: Prisma.ListingOrderByWithRelationInput = {
+    tanggal_dibuat: "desc",
+  };
 
   if (sort === "asc") {
     orderBy = { harga: "asc" };
@@ -102,20 +205,21 @@ export default async function SearchPage({ searchParams }: Props) {
 
   // D. EKSEKUSI QUERY DATABASE (TRANSACTION)
   const [totalItems, propertiesRaw] = await prisma.$transaction([
-    prisma.property.count({ where: whereClause }),
+    prisma.listing.count({ where: whereClause }),
 
-    prisma.property.findMany({
+    prisma.listing.findMany({
       where: whereClause,
       take: limit,
       skip,
       orderBy,
       include: {
         agent: {
-          include: {
+          select: {
+            nama_kantor: true,
+            foto_profil_url: true,
             pengguna: {
               select: {
                 nama_lengkap: true,
-                foto_profil_url: true,
               },
             },
           },
@@ -126,37 +230,38 @@ export default async function SearchPage({ searchParams }: Props) {
 
   const totalPages = Math.ceil(totalItems / limit);
 
-  // E. FORMAT DATA UNTUK UI (split kolom gambar jadi foto_list[])
+  // E. FORMAT DATA UNTUK UI
   const formattedData = propertiesRaw.map((item) => {
-    const rawGambar = item.gambar || "";
-    const foto_list =
-      rawGambar.trim().length > 0
-        ? rawGambar
-            .split(",")
-            .map((s) => s.trim())
-            .filter((s) => s.length > 0)
-        : [];
+    const foto_list = normalizeListingImages(item.gambar);
+    const agentPhotoUrl = normalizeAgentPhoto(
+      item.agent?.foto_profil_url || null
+    );
 
     return {
-      id_property: item.id_property,
+      id_property: String(item.id_property),
       slug: item.slug,
       judul: item.judul,
       kota: item.kota,
       harga: Number(item.harga),
+      harga_promo:
+        item.harga_promo != null ? Number(item.harga_promo) : null,
       jenis_transaksi: item.jenis_transaksi,
       kategori: item.kategori,
 
+      // ambil gambar pertama + list lengkap
       gambar: foto_list[0] || "/images/hero/banner.jpg",
       foto_list,
 
-      luas_tanah: Number(item.luas_tanah),
-      luas_bangunan: Number(item.luas_bangunan),
+      luas_tanah: item.luas_tanah ? Number(item.luas_tanah) : 0,
+      luas_bangunan: item.luas_bangunan
+        ? Number(item.luas_bangunan)
+        : 0,
       kamar_tidur: item.kamar_tidur ?? 0,
       kamar_mandi: item.kamar_mandi ?? 0,
 
-      agent_name: item.agent.pengguna.nama_lengkap,
-      agent_photo: item.agent.pengguna.foto_profil_url || "",
-      agent_office: item.agent.nama_kantor,
+      agent_name: item.agent?.pengguna?.nama_lengkap || "Agent Premier",
+      agent_photo: agentPhotoUrl,
+      agent_office: item.agent?.nama_kantor || "Premier Asset",
     };
   });
 

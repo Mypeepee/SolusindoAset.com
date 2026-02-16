@@ -1,4 +1,3 @@
-// app/Jual/[slug]/[agentId]/page.tsx
 import React from "react";
 import { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
@@ -7,21 +6,77 @@ import DetailClient from "../DetailClient";
 
 interface Props {
   params: {
-    slug: string;    // contoh: "rumah-minimalis-di-citraland-uuid"
-    agentId: string; // id_agent dari tabel agent
+    slug: string; // contoh: "rumah-minimalis-di-citraland-123"
+    agentId: string;
   };
 }
 
-// Ambil id_property (UUID v4) dari slug-id => 5 segmen terakhir
-function extractIdPropertyFromSlug(slug: string): string | null {
-  const parts = slug.split("-");
-  if (parts.length < 5) return null;
-  const uuidParts = parts.slice(-5); // 8-4-4-4-12
-  return uuidParts.join("-");
+// Ambil id_property (BigInt) dari slug → segmen terakhir setelah "-"
+function extractIdPropertyFromSlug(slugWithId: string): bigint | null {
+  const parts = slugWithId.split("-");
+  const last = parts[parts.length - 1];
+  if (!last) return null;
+  const asNumber = Number(last);
+  if (Number.isNaN(asNumber)) return null;
+  return BigInt(asNumber);
 }
 
-async function getProperty(id: string) {
-  const product = await prisma.property.findUnique({
+// --- HELPER GAMBAR: bikin array foto_list dari kolom gambar (CSV) ---
+function buildFotoList(gambar: string | null): string[] {
+  if (!gambar || gambar.trim() === "") return [];
+  return gambar
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+// Serialize Listing (BigInt/Decimal/Date → string/number)
+function serializeListing(l: any) {
+  return {
+    ...l,
+    id_property: l.id_property ? l.id_property.toString() : null,
+
+    harga: l.harga != null ? Number(l.harga) : 0,
+    harga_promo: l.harga_promo != null ? Number(l.harga_promo) : null,
+    nilai_limit_lelang:
+      l.nilai_limit_lelang != null ? Number(l.nilai_limit_lelang) : null,
+    uang_jaminan: l.uang_jaminan != null ? Number(l.uang_jaminan) : null,
+    nilai_limit: l.nilai_limit != null ? Number(l.nilai_limit) : null,
+
+    luas_tanah: l.luas_tanah != null ? Number(l.luas_tanah) : null,
+    luas_bangunan:
+      l.luas_bangunan != null ? Number(l.luas_bangunan) : null,
+
+    latitude: l.latitude != null ? Number(l.latitude) : null,
+    longitude: l.longitude != null ? Number(l.longitude) : null,
+
+    tanggal_dibuat: l.tanggal_dibuat
+      ? l.tanggal_dibuat.toISOString()
+      : null,
+    tanggal_diupdate: l.tanggal_diupdate
+      ? l.tanggal_diupdate.toISOString()
+      : null,
+    tanggal_lelang: l.tanggal_lelang
+      ? l.tanggal_lelang.toISOString()
+      : null,
+
+    agent: l.agent
+      ? {
+          ...l.agent,
+          rating:
+            l.agent.rating != null ? Number(l.agent.rating) : null,
+          jumlah_closing:
+            l.agent.jumlah_closing != null
+              ? Number(l.agent.jumlah_closing)
+              : null,
+        }
+      : null,
+  };
+}
+
+// --------- DB HELPERS ----------
+async function getProperty(id: bigint) {
+  const product = await prisma.listing.findUnique({
     where: { id_property: id },
     include: {
       agent: {
@@ -32,10 +87,10 @@ async function getProperty(id: string) {
           nomor_whatsapp: true,
           kota_area: true,
           jabatan: true,
+          foto_profil_url: true,
           pengguna: {
             select: {
               nama_lengkap: true,
-              foto_profil_url: true,
               nomor_telepon: true,
               email: true,
             },
@@ -45,16 +100,15 @@ async function getProperty(id: string) {
     },
   });
 
-  if (product && product.status_tayang !== "TERSEDIA") {
-    return null;
-  }
+  if (!product) return null;
+  if (product.status_tayang !== "TERSEDIA") return null;
 
   return product;
 }
 
 async function getSimilarProperties(currentProperty: any) {
   try {
-    const similarProperties = await prisma.property.findMany({
+    const similar = await prisma.listing.findMany({
       where: {
         AND: [
           { id_property: { not: currentProperty.id_property } },
@@ -67,7 +121,7 @@ async function getSimilarProperties(currentProperty: any) {
           { status_tayang: "TERSEDIA" },
           {
             jenis_transaksi: {
-              in: ["JUAL", "SEWA"],
+              in: ["PRIMARY", "SECONDARY"],
             },
           },
         ],
@@ -81,10 +135,10 @@ async function getSimilarProperties(currentProperty: any) {
             nomor_whatsapp: true,
             kota_area: true,
             jabatan: true,
+            foto_profil_url: true,
             pengguna: {
               select: {
                 nama_lengkap: true,
-                foto_profil_url: true,
                 nomor_telepon: true,
                 email: true,
               },
@@ -99,13 +153,14 @@ async function getSimilarProperties(currentProperty: any) {
       ],
     });
 
-    return similarProperties;
+    return similar;
   } catch (error) {
-    console.error("❌ Error fetching similar properties (Jual):", error);
+    console.error("❌ Error fetching similar properties (Jual/agent):", error);
     return [];
   }
 }
 
+// --------- METADATA ----------
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const idProperty = extractIdPropertyFromSlug(params.slug);
   if (!idProperty) {
@@ -116,7 +171,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 
   const product = await getProperty(idProperty);
-
   if (!product) {
     return {
       title: "Properti Tidak Ditemukan | Premier Asset",
@@ -147,9 +201,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     : `${product.jenis_transaksi} ${product.kategori} di ${product.kota}, ${product.provinsi}. ${specs}. Hubungi ${namaAgent} untuk info lebih lanjut.`;
 
   const firstImage =
-    product.gambar_utama_url || "/images/hero/banner.jpg";
+    (product.gambar &&
+      product.gambar.split(",").map((s) => s.trim())[0]) ||
+    "/images/hero/banner.jpg";
 
-  // Canonical fokus ke slug-id tanpa agentId
   const canonicalUrl = `https://premierasset.com/Jual/${params.slug}`;
 
   return {
@@ -159,8 +214,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       product.kategori,
       product.jenis_transaksi,
       product.kota,
-      product.kecamatan,
-      product.provinsi,
+      product.kecamatan || "",
+      product.provinsi || "",
       "jual rumah",
       "properti",
       "real estate",
@@ -205,6 +260,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
+// --------- PAGE ----------
 export default async function DetailPage({ params }: Props) {
   const { slug, agentId } = params;
 
@@ -226,17 +282,19 @@ export default async function DetailPage({ params }: Props) {
     }
   }
 
-  const finalFotoArray = [
-    product.gambar_utama_url || "/images/hero/banner.jpg",
-  ];
+  const foto_list = buildFotoList(product.gambar);
+  const firstImage = foto_list[0] || "/images/hero/banner.jpg";
 
   const similarPropertiesRaw = await getSimilarProperties(product);
-
-  const similarProperties = similarPropertiesRaw.map((prop) => ({
-    ...prop,
-    gambar_utama_url:
-      prop.gambar_utama_url || "/images/hero/banner.jpg",
-  }));
+  const similarProperties = similarPropertiesRaw.map((prop) => {
+    const propFotoList = buildFotoList(prop.gambar);
+    const img = propFotoList[0] || "/images/hero/banner.jpg";
+    return {
+      ...prop,
+      gambar_utama_url: img,
+      foto_list: propFotoList,
+    };
+  });
 
   const canonicalUrl = `https://premierasset.com/Jual/${slug}`;
 
@@ -249,7 +307,7 @@ export default async function DetailPage({ params }: Props) {
     description:
       product.deskripsi ||
       `${product.kategori} ${product.jenis_transaksi} di ${product.kota}`,
-    image: finalFotoArray,
+    image: [firstImage],
   };
 
   const breadcrumbJsonLd = {
@@ -283,6 +341,15 @@ export default async function DetailPage({ params }: Props) {
     ],
   };
 
+  const serializedProduct = {
+    ...serializeListing(product),
+    foto_list,
+  };
+  const serializedSimilar = similarProperties.map((prop) => ({
+    ...serializeListing(prop),
+    foto_list: prop.foto_list,
+  }));
+
   return (
     <main className="bg-[#0F0F0F] min-h-screen text-white">
       <script
@@ -299,8 +366,9 @@ export default async function DetailPage({ params }: Props) {
       />
 
       <DetailClient
-        product={JSON.parse(JSON.stringify(product))}
+        product={serializedProduct}
         currentAgentId={agentId}
+        similarProperties={serializedSimilar}
       />
     </main>
   );

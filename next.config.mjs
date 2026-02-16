@@ -3,11 +3,9 @@ const nextConfig = {
   reactStrictMode: false, // matikan Strict Mode di dev
   turbopack: false,       // optional, pakai webpack klasik
 
-  // output: "export",
-
   images: {
-    // unoptimized: true,
     remotePatterns: [
+      // Avatar Google (OAuth)
       {
         protocol: "https",
         hostname: "lh3.googleusercontent.com",
@@ -18,32 +16,40 @@ const nextConfig = {
         hostname: "googleusercontent.com",
         pathname: "**",
       },
+
+      // Avatar GitHub
       {
         protocol: "https",
         hostname: "avatars.githubusercontent.com",
         pathname: "**",
       },
+
+      // Gambar lelang dari Kemenkeu
       {
         protocol: "https",
         hostname: "file.lelang.go.id",
         pathname: "/lelang/photo_barang/**",
       },
-      // untuk foto profil dari Google Drive thumbnail
+
+      // Foto dari Google Drive (thumbnail generator)
       {
         protocol: "https",
         hostname: "drive.google.com",
         pathname: "/thumbnail/**",
       },
+      // Foto dari Google Drive dengan /uc?export=view&id=...
       {
         protocol: "https",
         hostname: "drive.google.com",
-        pathname: "/uc*", // karena kita pakai /uc?export=view&id=...
+        pathname: "/uc**", // lebih luas sedikit agar mencakup /uc?...
       },
+
+      // Unsplash
       {
         protocol: "https",
         hostname: "images.unsplash.com",
+        pathname: "**",
       },
-      
     ],
   },
 };

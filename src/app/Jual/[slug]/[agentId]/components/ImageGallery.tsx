@@ -1,11 +1,52 @@
 "use client";
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { Icon } from "@iconify/react";
 import { AnimatePresence, motion } from "framer-motion";
 
+// --- HELPERS GAMBAR ---
+function isValidImageUrl(url: string): boolean {
+  if (!url || url.trim() === "") return false;
+  const trimmed = url.trim().toLowerCase();
+
+  if (
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("/")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function normalizeImages(rawImages: string[] | undefined | null): string[] {
+  if (!rawImages || rawImages.length === 0) return [];
+
+  return rawImages
+    .map((s) => (s || "").trim())
+    .filter((s) => s.length > 0)
+    .map((s) => {
+      if (isValidImageUrl(s)) return s;
+      // selain itu anggap fileId Google Drive
+      return `https://drive.google.com/thumbnail?id=${s}`;
+    });
+}
+
 export default function ImageGallery({ images }: { images: string[] }) {
+  // Normalisasi semua URL yang masuk (file.lelang.go.id, drive, fileId, dll)
+  const normalizedImages = normalizeImages(images);
+  const safeImages =
+    normalizedImages.length > 0
+      ? normalizedImages
+      : ["/images/hero/banner.jpg"];
+
   // --- STATE ---
   const [isOpen, setIsOpen] = useState(false);
   const [photoIndex, setPhotoIndex] = useState(0);
@@ -19,17 +60,18 @@ export default function ImageGallery({ images }: { images: string[] }) {
 
   // Pastikan minimal ada 5 gambar untuk Grid Desktop
   const displayImagesGrid =
-    images.length >= 5
-      ? images.slice(0, 5)
+    safeImages.length >= 5
+      ? safeImages.slice(0, 5)
       : [
-          ...images,
-          ...Array(5 - images.length).fill(
-            images[images.length - 1] || "/images/banner.jpg"
+          ...safeImages,
+          ...Array(5 - safeImages.length).fill(
+            safeImages[safeImages.length - 1] ||
+              "/images/hero/banner.jpg"
           ),
         ];
 
   const mobileImages =
-    images.length > 0 ? images : ["/images/banner.jpg"];
+    safeImages.length > 0 ? safeImages : ["/images/hero/banner.jpg"];
 
   useEffect(() => {
     setMounted(true);
@@ -45,12 +87,14 @@ export default function ImageGallery({ images }: { images: string[] }) {
   const closeLightbox = () => setIsOpen(false);
 
   const nextPhoto = useCallback(() => {
-    setPhotoIndex((prev) => (prev + 1) % images.length);
-  }, [images.length]);
+    setPhotoIndex((prev) => (prev + 1) % safeImages.length);
+  }, [safeImages.length]);
 
   const prevPhoto = useCallback(() => {
-    setPhotoIndex((prev) => (prev + images.length - 1) % images.length);
-  }, [images.length]);
+    setPhotoIndex(
+      (prev) => (prev + safeImages.length - 1) % safeImages.length
+    );
+  }, [safeImages.length]);
 
   // --- MOBILE SLIDER LOGIC ---
   const handleScrollUpdate = () => {
@@ -69,7 +113,10 @@ export default function ImageGallery({ images }: { images: string[] }) {
 
     let targetIndex =
       direction === "left" ? currentIndex - 1 : currentIndex + 1;
-    targetIndex = Math.max(0, Math.min(targetIndex, mobileImages.length - 1));
+    targetIndex = Math.max(
+      0,
+      Math.min(targetIndex, mobileImages.length - 1)
+    );
 
     mobileSliderRef.current.scrollTo({
       left: targetIndex * clientWidth,
@@ -97,9 +144,7 @@ export default function ImageGallery({ images }: { images: string[] }) {
 
   return (
     <div className="w-full relative">
-      {/* =========================================================
-          1. DESKTOP GRID VIEW
-      ========================================================== */}
+      {/* 1. DESKTOP GRID VIEW */}
       <div className="hidden lg:grid grid-cols-4 grid-rows-2 gap-3 h-[450px] rounded-2xl overflow-hidden">
         {/* Main Image */}
         <div
@@ -132,7 +177,7 @@ export default function ImageGallery({ images }: { images: string[] }) {
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-500" />
 
             {/* Tombol Lihat Semua di Gambar Terakhir */}
-            {idx === 3 && images.length > 5 && (
+            {idx === 3 && safeImages.length > 5 && (
               <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                 <button
                   onClick={(e) => {
@@ -142,7 +187,7 @@ export default function ImageGallery({ images }: { images: string[] }) {
                   className="bg-white text-black px-4 py-2 rounded-lg text-xs font-bold shadow-lg flex items-center gap-2 hover:bg-gray-200 transition-colors active:scale-95"
                 >
                   <Icon icon="solar:gallery-bold-duotone" />
-                  Lihat Semua ({images.length})
+                  Lihat Semua ({safeImages.length})
                 </button>
               </div>
             )}
@@ -150,9 +195,7 @@ export default function ImageGallery({ images }: { images: string[] }) {
         ))}
       </div>
 
-      {/* =========================================================
-          2. MOBILE SLIDER VIEW
-      ========================================================== */}
+      {/* 2. MOBILE SLIDER VIEW */}
       <div className="lg:hidden relative w-full h-[280px] sm:h-[320px] rounded-2xl overflow-hidden shadow-sm group mt-4">
         <div
           ref={mobileSliderRef}
@@ -186,7 +229,10 @@ export default function ImageGallery({ images }: { images: string[] }) {
             }}
             className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/70 text-white p-2.5 rounded-full shadow-xl active:scale-95 transition-all z-20 border border-white/20"
           >
-            <Icon icon="solar:alt-arrow-left-linear" className="text-xl" />
+            <Icon
+              icon="solar:alt-arrow-left-linear"
+              className="text-xl"
+            />
           </button>
         )}
 
@@ -198,7 +244,10 @@ export default function ImageGallery({ images }: { images: string[] }) {
             }}
             className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/70 text-white p-2.5 rounded-full shadow-xl active:scale-95 transition-all z-20 border border-white/20"
           >
-            <Icon icon="solar:alt-arrow-right-linear" className="text-xl" />
+            <Icon
+              icon="solar:alt-arrow-right-linear"
+              className="text-xl"
+            />
           </button>
         )}
 
@@ -213,7 +262,9 @@ export default function ImageGallery({ images }: { images: string[] }) {
             <div
               key={i}
               className={`h-1.5 rounded-full backdrop-blur-sm transition-all duration-300 ${
-                i === mobileActiveIndex ? "bg-white w-4" : "bg-white/40 w-1.5"
+                i === mobileActiveIndex
+                  ? "bg-white w-4"
+                  : "bg-white/40 w-1.5"
               }`}
             />
           ))}
@@ -225,9 +276,7 @@ export default function ImageGallery({ images }: { images: string[] }) {
         </div>
       </div>
 
-      {/* =========================================================
-          3. CINEMA MODE (LIGHTBOX)
-      ========================================================== */}
+      {/* 3. CINEMA MODE (LIGHTBOX) */}
       {mounted &&
         isOpen &&
         createPortal(
@@ -273,7 +322,7 @@ export default function ImageGallery({ images }: { images: string[] }) {
                 className="relative w-full h-full max-h-[80vh] lg:max-h-[85vh] max-w-[95vw] lg:max-w-[90vw] flex items-center justify-center"
               >
                 <Image
-                  src={images[photoIndex]}
+                  src={safeImages[photoIndex]}
                   alt="Cinema View"
                   fill
                   className="object-contain"
@@ -298,14 +347,13 @@ export default function ImageGallery({ images }: { images: string[] }) {
 
               {/* Counter */}
               <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white/10 backdrop-blur-md px-6 py-2 rounded-full border border-white/5 text-white font-bold text-sm tracking-widest z-50">
-                {photoIndex + 1} / {images.length}
+                {photoIndex + 1} / {safeImages.length}
               </div>
             </motion.div>
           </AnimatePresence>,
           document.body
         )}
 
-      {/* CSS scrollbar-hide */}
       <style jsx>{`
         .scrollbar-hide::-webkit-scrollbar {
           display: none;

@@ -12,7 +12,7 @@ import DetailInfo from "./[agentId]/components/DetailInfo";
 import BookingSidebar from "./[agentId]/components/AgentSidebar";
 import SimilarProperties from "./[agentId]/components/SimilarProperties";
 
-// Interface sesuai DB
+// ================== INTERFACE ==================
 interface ProductData {
   id_property: string;
   kode_properti?: string;
@@ -27,7 +27,10 @@ interface ProductData {
   kelurahan?: string;
   kecamatan?: string;
   provinsi?: string;
+
   gambar_utama_url: string;
+  foto_list?: string[];
+
   kamar_tidur: number;
   kamar_mandi: number;
   luas_tanah: number;
@@ -41,7 +44,7 @@ interface ProductData {
   latitude?: number;
   longitude?: number;
   kategori: string;
-  jenis_transaksi: string; // JUAL / SEWA / LELANG
+  jenis_transaksi: string;
   status_tayang?: string;
   is_hot_deal?: boolean;
   dilihat?: number;
@@ -52,25 +55,50 @@ interface ProductData {
     nomor_whatsapp?: string;
     kota_area?: string;
     jabatan?: string;
+    foto_profil_url?: string;
     pengguna?: {
       nama_lengkap?: string;
-      foto_profil_url?: string;
       nomor_telepon?: string;
       email?: string;
     };
   };
 }
 
-// tambahan: agent yang sedang login (untuk share)
 interface DetailClientProps {
   product: ProductData;
   currentAgentId?: string | null;
 }
 
+// ================== COMPONENT ==================
 export default function DetailClient({
   product,
   currentAgentId,
 }: DetailClientProps) {
+  // ================== INCREMENT VIEW ==================
+  useEffect(() => {
+    if (!product?.id_property) return;
+
+    const storageKey = `viewed_${product.id_property}`;
+
+    // Hindari double increment dalam 1 browser session
+    if (sessionStorage.getItem(storageKey)) return;
+
+    const incrementView = async () => {
+      try {
+        await fetch(`/api/listing/${product.id_property}/dilihat`, {
+          method: "POST",
+        });
+
+        sessionStorage.setItem(storageKey, "true");
+      } catch (error) {
+        console.error("❌ Gagal increment view:", error);
+      }
+    };
+
+    incrementView();
+  }, [product?.id_property]);
+
+  // ================== HELPER ==================
   const convertToNumber = (value: any): number => {
     if (typeof value === "number") return value;
     if (typeof value === "string") {
@@ -85,10 +113,7 @@ export default function DetailClient({
     ? convertToNumber(product.harga_promo)
     : null;
 
-  useEffect(() => {
-    console.log("🔍 DetailClient Jual - Product Data:", product);
-  }, [product, harga, hargaPromo]);
-
+  // ================== PROPERTY DATA ==================
   const propertyData = {
     id_property: product.id_property,
     slug: product.slug || "",
@@ -128,7 +153,7 @@ export default function DetailClient({
     deskripsi: product.deskripsi || null,
 
     gambar_utama_url:
-      product.gambar_utama_url || "/images/placeholder.jpg",
+      product.gambar_utama_url || "/images/hero/banner.jpg",
 
     agent: product.agent
       ? {
@@ -140,7 +165,7 @@ export default function DetailClient({
           whatsapp: product.agent.nomor_whatsapp || "",
           email: product.agent.pengguna?.email,
           kantor: product.agent.nama_kantor || "Premier Asset",
-          foto_url: product.agent.pengguna?.foto_profil_url || "",
+          foto_url: product.agent.foto_profil_url || "",
           rating: product.agent.rating || 5,
           jumlah_closing: product.agent.jumlah_closing || 0,
           kota_area: product.agent.kota_area || "",
@@ -151,7 +176,7 @@ export default function DetailClient({
     owner: product.agent
       ? {
           name: product.agent.pengguna?.nama_lengkap || "Agent Premier",
-          avatar: product.agent.pengguna?.foto_profil_url || "",
+          avatar: product.agent.foto_profil_url || "",
           phone: product.agent.nomor_whatsapp || "",
           office: product.agent.nama_kantor || "Premier Asset",
           rating: product.agent.rating || 5.0,
@@ -192,13 +217,12 @@ export default function DetailClient({
       ? "Sewa"
       : "Lelang";
 
+  // ================== RENDER ==================
   return (
     <div className="text-white font-sans bg-[#0F0F0F]">
       <MobileNav />
 
-      {/* Spacer mobile utk header fixed */}
       <div className="lg:hidden h-[60px]" />
-      {/* Spacer desktop */}
       <div className="hidden lg:block h-24 w-full" />
 
       {/* Breadcrumb */}
@@ -224,9 +248,11 @@ export default function DetailClient({
       {/* Image Gallery */}
       <div className="container mx-auto lg:px-4 mb-8 px-4 mt-2 lg:mt-0">
         <ImageGallery
-          images={[
-            product.gambar_utama_url || "/images/placeholder.jpg",
-          ]}
+          images={
+            product.foto_list && product.foto_list.length > 0
+              ? product.foto_list
+              : [product.gambar_utama_url || "/images/hero/banner.jpg"]
+          }
         />
       </div>
 
@@ -237,7 +263,7 @@ export default function DetailClient({
             data={propertyData as any}
             selectedRoom={selectedRoom}
             setSelectedRoom={setSelectedRoom}
-            currentAgentId={currentAgentId} // ⬅️ kirim ke DetailInfo Jual
+            currentAgentId={currentAgentId}
           />
           <BookingSidebar data={propertyData as any} />
         </div>
