@@ -22,7 +22,13 @@ interface MobileNavProps {
   status: "loading" | "authenticated" | "unauthenticated";
   userName?: string | null;
   userImage?: string | null;
+
+  // ✅ pakai peran yang sudah dihitung dari session
   isAgent: boolean;
+
+  // ✅ supaya bisa hide/show "Gabung jadi Agent" di menu data
+  canJoinAgent: boolean;
+
   onLogout: () => void;
   baseMenu: any[];
 }
@@ -34,6 +40,7 @@ const MobileNav: React.FC<MobileNavProps> = ({
   userName,
   userImage,
   isAgent,
+  canJoinAgent,
   onLogout,
   baseMenu,
 }) => {
@@ -60,9 +67,37 @@ const MobileNav: React.FC<MobileNavProps> = ({
   const showBackButton = !noBackPaths.includes(pathname || "/");
   const backHref = "/Jual";
 
+  // ✅ filter base menu: hide "Gabung Jadi Agent" jika tidak eligible
+  const filteredBaseMenu = React.useMemo(() => {
+    const isJoinAgentItem = (it: any) =>
+      String(it?.href || "").startsWith("/gabung-jadi-agent") ||
+      String(it?.label || "").toLowerCase().includes("gabung jadi agent");
+
+    const deepFilter = (items: any[]): any[] =>
+      (items || [])
+        .map((it) => {
+          if (it?.submenu?.length) {
+            const next = { ...it, submenu: deepFilter(it.submenu) };
+            return next;
+          }
+          return it;
+        })
+        .filter((it) => {
+          if (!canJoinAgent && isJoinAgentItem(it)) return false;
+          // kalau parent submenu jadi kosong, boleh tetap tampil atau hilang
+          if (it?.submenu && Array.isArray(it.submenu) && it.submenu.length === 0) {
+            // biar clean, hilangkan parent kosong
+            return false;
+          }
+          return true;
+        });
+
+    return deepFilter([...baseMenu]);
+  }, [baseMenu, canJoinAgent]);
+
   // menu untuk mobile: prepend Profile/Dashboard saat login
   const mobileMenu = React.useMemo(() => {
-    const items = [...baseMenu];
+    const items = [...filteredBaseMenu];
 
     if (status !== "authenticated") return items;
 
@@ -74,6 +109,7 @@ const MobileNav: React.FC<MobileNavProps> = ({
       },
     ];
 
+    // ✅ dashboard hanya kalau agent
     if (isAgent) {
       extra.push({
         label: "Dashboard Agent",
@@ -83,7 +119,7 @@ const MobileNav: React.FC<MobileNavProps> = ({
     }
 
     return [...extra, { divider: true }, ...items];
-  }, [baseMenu, status, isAgent]);
+  }, [filteredBaseMenu, status, isAgent]);
 
   return (
     <>
@@ -488,24 +524,53 @@ const Header: React.FC = () => {
     setProfileDropdownOpen(false);
   };
 
-  const isAgent = (session?.user as any)?.role === "AGENT";
+  // ✅ PERAN: pakai session.user.peran (baru), fallback ke role (lama)
+  const peran = (session?.user as any)?.peran || (session?.user as any)?.role || "USER";
+  const isAgent = status === "authenticated" && peran === "AGENT";
 
+  // ✅ "Gabung jadi agent" hanya muncul untuk:
+  // - unauthenticated
+  // - authenticated tapi USER
+  const canJoinAgent =
+    status !== "authenticated" || (status === "authenticated" && peran === "USER");
+
+  // ✅ menu computed:
+  // - sisipkan dashboard hanya jika isAgent
+  // - buang "Gabung Jadi Agent" jika !canJoinAgent
   const computedMenu = React.useMemo(() => {
-    if (!isAgent) return headerData;
+    // 1) filter headerData untuk join agent
+    const isJoinAgentItem = (it: any) =>
+      String(it?.href || "").startsWith("/gabung-jadi-agent") ||
+      String(it?.label || "").toLowerCase().includes("gabung jadi agent");
 
-    const items = [...headerData];
-    const dashboardItem = {
-      label: "Dashboard",
-      href: "/dashboard",
-    };
+    const deepFilter = (items: any[]): any[] =>
+      (items || [])
+        .map((it) => {
+          if (it?.submenu?.length) {
+            return { ...it, submenu: deepFilter(it.submenu) };
+          }
+          return it;
+        })
+        .filter((it) => {
+          if (!canJoinAgent && isJoinAgentItem(it)) return false;
+          if (it?.submenu && Array.isArray(it.submenu) && it.submenu.length === 0) return false;
+          return true;
+        });
 
-    const idx = items.findIndex((m) => m.label === "Cari Properti");
-    if (idx === -1) return [dashboardItem, ...items];
+    const base = deepFilter([...headerData]);
 
-    const withDashboard = [...items];
+    // 2) inject dashboard jika agent
+    if (!isAgent) return base;
+
+    const dashboardItem = { label: "Dashboard", href: "/dashboard" };
+
+    const idx = base.findIndex((m) => m.label === "Cari Properti");
+    if (idx === -1) return [dashboardItem, ...base];
+
+    const withDashboard = [...base];
     withDashboard.splice(idx + 1, 0, dashboardItem);
     return withDashboard;
-  }, [isAgent]);
+  }, [isAgent, canJoinAgent]);
 
   if (isDashboard) return null;
 
@@ -519,6 +584,7 @@ const Header: React.FC = () => {
         userName={session?.user?.name}
         userImage={session?.user?.image}
         isAgent={isAgent}
+        canJoinAgent={canJoinAgent}
         onLogout={handleLogout}
         baseMenu={computedMenu}
       />
@@ -588,6 +654,15 @@ const Header: React.FC = () => {
                           <p className="text-sm font-bold text-white truncate">
                             {session?.user?.name || "Pengguna"}
                           </p>
+                          {isAgent ? (
+                            <p className="text-[11px] text-emerald-300 font-medium mt-1">
+                              Agent Premier
+                            </p>
+                          ) : (
+                            <p className="text-[11px] text-white/45 font-medium mt-1">
+                              User
+                            </p>
+                          )}
                         </div>
 
                         <Link
@@ -601,6 +676,7 @@ const Header: React.FC = () => {
                           Profil Saya
                         </Link>
 
+                        {/* ✅ dashboard hanya jika agent */}
                         {isAgent && (
                           <Link
                             href="/dashboard"

@@ -60,7 +60,8 @@ async function compressImageIfPossible(
 
     return { buffer: out, contentType: "image/jpeg", ext: "jpg" };
   } catch {
-    const ext = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
+    const ext =
+      mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
     return { buffer: buf, contentType: mime || "application/octet-stream", ext };
   }
 }
@@ -128,26 +129,17 @@ async function driveFetch(accessToken: string, url: string, init?: RequestInit) 
     const status = res.status;
     const txt = await res.text().catch(() => "");
 
-    // retry only 5xx (termasuk 500 Internal Error)
     const isRetryable = status >= 500 && status <= 599;
 
     if (!isRetryable || attempt === maxRetry - 1) {
       throw new Error(`Google Drive error ${status}: ${txt.slice(0, 600)}`);
     }
 
-    // exponential backoff + sedikit jitter
     const backoff = 600 * Math.pow(2, attempt) + Math.floor(Math.random() * 250);
     await sleep(backoff);
   }
 
-  // unreachable
   throw new Error("Google Drive error: retry exhausted");
-}
-
-function withAllDrives(url: string) {
-  const u = new URL(url);
-  u.searchParams.set("supportsAllDrives", "true");
-  return u.toString();
 }
 
 async function findFolder(accessToken: string, parentId: string, name: string) {
@@ -226,11 +218,10 @@ async function uploadFileMultipart(params: {
   });
 
   const data = await res.json().catch(() => ({} as any));
-  return data.id as string;
+  return data.id as string; // ✅ FILE ID
 }
 
 async function makeFilePublic(accessToken: string, fileId: string) {
-  // supportsAllDrives penting kalau file/folder ada di Shared Drive
   const permUrl = new URL(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`);
   permUrl.searchParams.set("supportsAllDrives", "true");
 
@@ -241,8 +232,8 @@ async function makeFilePublic(accessToken: string, fileId: string) {
   });
 }
 
-function publicDriveUrl(fileId: string) {
-  // URL direct view (umumnya OK untuk display image)
+// ✅ untuk response/preview saja (DB tidak simpan url)
+function publicDriveUrlFromId(fileId: string) {
   return `https://drive.google.com/uc?id=${fileId}`;
 }
 
@@ -331,6 +322,7 @@ export async function POST(req: Request) {
     const folderName = slugify(nama_lengkap) || `user_${id_pengguna}`;
     const targetFolderId = await getOrCreateFolder(accessToken, parentFolderId, folderName);
 
+    // ✅ upload helper: return fileId saja (yang disimpan ke DB)
     async function uploadOne(file: File, prefix: string, compressProfile = false) {
       const raw = await fileToBuffer(file);
 
@@ -350,10 +342,9 @@ export async function POST(req: Request) {
         buffer,
       });
 
-      // bikin public (kadang intermittent 500 → sudah ada retry di driveFetch)
       await makeFilePublic(accessToken, fileId);
 
-      return { fileId, url: publicDriveUrl(fileId) };
+      return { fileId }; // ✅ hanya fileId
     }
 
     const ktpUp = await uploadOne(foto_ktp, "ktp", false);
@@ -361,6 +352,7 @@ export async function POST(req: Request) {
     const profilUp = await uploadOne(foto_profil, "profil", true);
 
     // Upsert Agent by id_pengguna
+    // ✅ SIMPAN FILE ID ke kolom foto_ktp_url / foto_npwp_url / foto_profil_url (meski namanya url)
     const agent = await prisma.agent.upsert({
       where: { id_pengguna },
       create: {
@@ -369,21 +361,26 @@ export async function POST(req: Request) {
         kota_area,
         nomor_whatsapp,
         id_upline,
-        foto_ktp_url: ktpUp.url,
-        foto_npwp_url: npwpUp?.url ?? null,
-        foto_profil_url: profilUp.url,
+
+        foto_ktp_url: ktpUp.fileId, // ✅ fileId saja
+        foto_npwp_url: npwpUp?.fileId ?? null, // ✅ fileId saja
+        foto_profil_url: profilUp.fileId, // ✅ fileId saja
+
         link_instagram,
         link_tiktok,
         link_facebook,
+        status_keanggotaan: status_agent_enum.PENDING,
       },
       update: {
         nama_kantor: nama_kantor_final,
         kota_area,
         nomor_whatsapp,
         id_upline,
-        foto_ktp_url: ktpUp.url,
-        foto_npwp_url: npwpUp?.url ?? undefined,
-        foto_profil_url: profilUp.url,
+
+        foto_ktp_url: ktpUp.fileId, // ✅ fileId saja
+        foto_npwp_url: npwpUp ? npwpUp.fileId : undefined, // undefined biar tidak overwrite jadi null kalau tidak upload
+        foto_profil_url: profilUp.fileId, // ✅ fileId saja
+
         link_instagram,
         link_tiktok,
         link_facebook,
@@ -395,16 +392,28 @@ export async function POST(req: Request) {
         status_keanggotaan: true,
         nama_kantor: true,
         kota_area: true,
+        foto_ktp_url: true,
+        foto_npwp_url: true,
+        foto_profil_url: true,
       },
     });
 
+    // ✅ kalau frontend butuh preview url, kirim derived_url di response saja
     return NextResponse.json({
       ok: true,
       message: "Pendaftaran agen berhasil. Menunggu verifikasi (PENDING).",
       agent,
+      derived_urls: {
+        foto_ktp_url: agent.foto_ktp_url ? publicDriveUrlFromId(agent.foto_ktp_url) : null,
+        foto_npwp_url: agent.foto_npwp_url ? publicDriveUrlFromId(agent.foto_npwp_url) : null,
+        foto_profil_url: agent.foto_profil_url ? publicDriveUrlFromId(agent.foto_profil_url) : null,
+      },
     });
   } catch (err: any) {
     console.error("daftar-agent error:", err);
-    return NextResponse.json({ ok: false, message: err?.message || "Server error" }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, message: err?.message || "Server error" },
+      { status: 500 }
+    );
   }
 }

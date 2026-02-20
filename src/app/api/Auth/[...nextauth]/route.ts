@@ -114,6 +114,10 @@ export const authOptions: AuthOptions = {
 
           if (!user) throw new Error("Akun tidak ditemukan.");
 
+          if (user.status_akun && user.status_akun !== "AKTIF") {
+            throw new Error("Akun kamu sedang tidak aktif. Hubungi admin.");
+          }
+
           if (!user.kata_sandi) {
             throw new Error(
               "Akun terdaftar via Google. Silakan login dengan tombol Google."
@@ -121,7 +125,10 @@ export const authOptions: AuthOptions = {
           }
 
           // guard bcrypt hash
-          if (typeof user.kata_sandi === "string" && !user.kata_sandi.startsWith("$2")) {
+          if (
+            typeof user.kata_sandi === "string" &&
+            !user.kata_sandi.startsWith("$2")
+          ) {
             throw new Error(
               "Password di database belum bcrypt. Silakan reset password / migrasi hash."
             );
@@ -130,12 +137,12 @@ export const authOptions: AuthOptions = {
           const ok = await bcrypt.compare(password, user.kata_sandi);
           if (!ok) throw new Error("Kata sandi salah.");
 
+          // ✅ Kembalikan minimal payload yang dibutuhkan JWT
           return {
             id: user.id_pengguna,
             name: user.nama_lengkap,
             email: user.email,
-            image: null, // ✅ aman (karena field foto_profil_url tidak ada di schema)
-            role: user.peran,
+            image: null,
           } as any;
         } catch (err) {
           console.error("❌ AUTHORIZE ERROR:", err);
@@ -155,6 +162,9 @@ export const authOptions: AuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
 
   callbacks: {
+    /**
+     * ✅ Google sign-in: upsert user
+     */
     async signIn({ account, profile }: any) {
       if (account?.provider !== "google") return true;
 
@@ -184,18 +194,12 @@ export const authOptions: AuthOptions = {
               peran: "USER",
               status_akun: "AKTIF",
               wa_terverifikasi: true,
-              // ⚠️ kalau kamu punya field foto, isi di sini setelah kamu kasih nama fieldnya
-              // contoh: foto_profil: profile?.picture,
             },
           });
         } else if (!existingUser.google_id) {
           await prisma.pengguna.update({
             where: { id_pengguna: existingUser.id_pengguna },
-            data: {
-              google_id: providerAccountId,
-              // ⚠️ kalau kamu punya field foto, update di sini
-              // contoh: foto_profil: profile?.picture,
-            },
+            data: { google_id: providerAccountId },
           });
         }
 
@@ -206,45 +210,94 @@ export const authOptions: AuthOptions = {
       }
     },
 
+    /**
+     * ✅ JWT: SINGLE SOURCE OF TRUTH dari DB
+     * Ini yang bikin suspend/aktif langsung ngaruh ke header + middleware.
+     */
     async jwt({ token, user, account }: any) {
-      if (user) {
-        token.id = user.id;
-        token.role = user.role;
-        if (user.email) token.email = user.email;
+      // 1) Saat login pertama (credentials / google), set identitas awal
+      if (user?.id) token.id = user.id;
+      if (user?.email) token.email = user.email;
+
+      // 2) Pastikan token.id ada untuk google (kadang cuma email)
+      //    -> cari user by email kalau belum kebentuk id
+      if (!token.id && token.email) {
+        const db = await prisma.pengguna.findFirst({
+          where: { email: { equals: String(token.email), mode: "insensitive" } },
+          select: { id_pengguna: true },
+        });
+        if (db) token.id = db.id_pengguna;
       }
 
-      if (account?.provider === "google" && token.email) {
-        const dbUser = await prisma.pengguna.findFirst({
-          where: { email: { equals: String(token.email), mode: "insensitive" } },
-          select: { id_pengguna: true, peran: true, email: true },
+      // 3) Kalau sudah ada id, selalu refresh peran + agentId dari DB (setiap request)
+      if (token.id) {
+        const dbUser = await prisma.pengguna.findUnique({
+          where: { id_pengguna: String(token.id) },
+          select: {
+            id_pengguna: true,
+            nama_lengkap: true,
+            email: true,
+            peran: true,
+            status_akun: true,
+            agent: { select: { id_agent: true, status_keanggotaan: true } },
+          },
         });
 
         if (dbUser) {
           token.id = dbUser.id_pengguna;
-          token.role = dbUser.peran;
+          token.name = dbUser.nama_lengkap || token.name;
           token.email = dbUser.email || token.email;
-        }
-      }
 
-      // lookup agentId
-      if (token.id) {
-        const agent = await prisma.agent.findFirst({
-          where: { id_pengguna: String(token.id) },
-          select: { id_agent: true },
-        });
-        token.agentId = agent?.id_agent || null;
+          // ✅ pakai peran sebagai patokan utama
+          token.peran = dbUser.peran;
+
+          // kompatibilitas dengan kode lama yang masih baca token.role
+          token.role = dbUser.peran;
+
+          // agent id (boleh null)
+          token.agentId = dbUser.agent?.id_agent ?? null;
+
+          // optional: bisa dipakai UI
+          token.agentStatus = dbUser.agent?.status_keanggotaan ?? null;
+          token.status_akun = dbUser.status_akun ?? null;
+        } else {
+          // user hilang dari DB
+          token.peran = "USER";
+          token.role = "USER";
+          token.agentId = null;
+          token.agentStatus = null;
+        }
       } else {
-        token.agentId = null;
+        token.peran = token.peran ?? token.role ?? "USER";
+        token.role = token.role ?? token.peran ?? "USER";
+        token.agentId = token.agentId ?? null;
+        token.agentStatus = token.agentStatus ?? null;
       }
 
       return token;
     },
 
+    /**
+     * ✅ Session: expose fields ke client
+     * Mulai sekarang pakai session.user.peran di FE.
+     */
     async session({ session, token }: any) {
       if (session.user) {
         session.user.id = token.id;
-        session.user.role = token.role;
-        session.user.agentId = token.agentId;
+        session.user.name = session.user.name ?? token.name ?? null;
+        session.user.email = session.user.email ?? token.email ?? null;
+
+        // ✅ field utama
+        session.user.peran = token.peran ?? token.role ?? "USER";
+
+        // ✅ kompatibilitas lama
+        session.user.role = token.role ?? token.peran ?? "USER";
+
+        session.user.agentId = token.agentId ?? null;
+
+        // optional untuk UI
+        session.user.agentStatus = token.agentStatus ?? null;
+        session.user.status_akun = token.status_akun ?? null;
       }
       return session;
     },
