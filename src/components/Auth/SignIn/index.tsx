@@ -3,7 +3,7 @@
 import { signIn } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
 import { useState } from "react";
-import toast from "react-hot-toast";
+import { toast } from "sonner";
 import Loader from "@/components/Common/Loader";
 import Image from "next/image";
 

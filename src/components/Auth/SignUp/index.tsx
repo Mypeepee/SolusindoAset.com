@@ -1,7 +1,7 @@
 "use client";
 
 import { signIn } from "next-auth/react";
-import toast from "react-hot-toast";
+import { toast } from "sonner";
 import Loader from "@/components/Common/Loader";
 import { useState } from "react";
 import Image from "next/image";
@@ -17,12 +17,7 @@ function EyeIcon({ open }: { open: boolean }) {
   return open ? (
     // Eye Off
     <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M3 3l18 18"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
+      <path d="M3 3l18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       <path
         d="M10.58 10.58a3 3 0 104.24 4.24"
         stroke="currentColor"
@@ -65,11 +60,35 @@ function EyeIcon({ open }: { open: boolean }) {
   );
 }
 
+/**
+ * Normalisasi input phone untuk UI +62|:
+ * - buang semua non-digit
+ * - buang prefix 62 kalau kepaste
+ * - buang semua 0 di depan
+ * output: "8123..."
+ */
 function normalizePhoneDigits(raw: string) {
   let digits = (raw || "").replace(/\D/g, "");
   if (digits.startsWith("62")) digits = digits.slice(2);
   digits = digits.replace(/^0+/, "");
   return digits;
+}
+
+/**
+ * Parse response secara kebal:
+ * - kalau JSON => parse json
+ * - kalau bukan JSON => ambil text
+ * - kalau gagal => {}
+ */
+async function parseResponse(res: Response): Promise<any> {
+  const contentType = res.headers.get("content-type") || "";
+  try {
+    if (contentType.includes("application/json")) return await res.json();
+    const text = await res.text();
+    return { message: text };
+  } catch {
+    return {};
+  }
 }
 
 export default function SignUp({ closeModal, openSigninModal }: SignUpProps) {
@@ -79,6 +98,11 @@ export default function SignUp({ closeModal, openSigninModal }: SignUpProps) {
   const [email, setEmail] = useState("");
   const [phoneDigits, setPhoneDigits] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+
+  const openSignin = () => {
+    if (closeModal) closeModal();
+    if (openSigninModal) openSigninModal();
+  };
 
   const handleGoogle = async () => {
     setLoading(true);
@@ -103,16 +127,33 @@ export default function SignUp({ closeModal, openSigninModal }: SignUpProps) {
       const name = String(data.get("name") || "").trim();
       const password = String(data.get("password") || "");
 
-      let finalData: any = { name, password };
+      if (!name) {
+        toast.error("Nama wajib diisi.");
+        return;
+      }
+      if (!password || password.length < 8) {
+        toast.error("Password minimal 8 karakter.");
+        return;
+      }
+
+      const finalData: any = { name, password };
 
       if (mode === "email") {
         const emailValue = email.trim();
-        if (!emailValue) throw new Error("Email wajib diisi.");
+        if (!emailValue) {
+          toast.error("Email wajib diisi.");
+          return;
+        }
         finalData.email = emailValue;
         finalData.login_mode = "email";
       } else {
-        if (!phoneDigits) throw new Error("No. HP wajib diisi.");
-        finalData.phone = `+62${phoneDigits}`;
+        // UI +62| => yang disimpan harus tanpa 0 di depan
+        const normalized = normalizePhoneDigits(phoneDigits);
+        if (!normalized) {
+          toast.error("No. HP wajib diisi.");
+          return;
+        }
+        finalData.phone = `+62${normalized}`;
         finalData.login_mode = "phone";
       }
 
@@ -122,15 +163,39 @@ export default function SignUp({ closeModal, openSigninModal }: SignUpProps) {
         body: JSON.stringify(finalData),
       });
 
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload?.message || "Pendaftaran gagal.");
+      const payload = await parseResponse(res);
 
-      toast.success("Pendaftaran berhasil. Silakan masuk.");
+      // ✅ sukses
+      if (res.ok) {
+        toast.success(payload?.message || "Pendaftaran berhasil. Silakan masuk.");
+        openSignin();
+        return;
+      }
 
-      // Tutup modal sign up dan buka modal sign in (tanpa pindah halaman)
-      if (closeModal) closeModal();
-      if (openSigninModal) openSigninModal();
+      // ✅ ini yang kamu mau: kalau sudah terdaftar, WAJIB ada info + arahkan login
+      if (res.status === 409) {
+        const msg =
+          payload?.message ||
+          (mode === "email"
+            ? "Email ini sudah terdaftar. Silakan login."
+            : "Nomor HP ini sudah terdaftar. Silakan login.");
+
+        toast.error(msg);
+
+        // Kalau backend kasih action LOGIN_GOOGLE, kamu bisa arahkan user (optional)
+        // contoh: payload?.action === "LOGIN_GOOGLE" => tampilkan toast tambahan
+        if (payload?.action === "LOGIN_GOOGLE") {
+          toast("Gunakan tombol Google untuk masuk.", { icon: "🔐" });
+        }
+
+        openSignin();
+        return;
+      }
+
+      // error lain
+      toast.error(payload?.message || "Pendaftaran gagal.");
     } catch (err: any) {
+      console.error(err);
       toast.error(err?.message || "Terjadi kesalahan.");
     } finally {
       setLoading(false);
@@ -166,7 +231,7 @@ export default function SignUp({ closeModal, openSigninModal }: SignUpProps) {
         </div>
       </div>
 
-      {/* Google only */}
+      {/* Google */}
       <button
         type="button"
         onClick={handleGoogle}
@@ -216,9 +281,7 @@ export default function SignUp({ closeModal, openSigninModal }: SignUpProps) {
             onClick={() => setMode("email")}
             className={[
               "flex-1 rounded-md px-3 py-2 text-sm font-medium transition",
-              mode === "email"
-                ? "bg-primary text-darkmode"
-                : "text-white/80 hover:bg-white/5",
+              mode === "email" ? "bg-primary text-darkmode" : "text-white/80 hover:bg-white/5",
             ].join(" ")}
           >
             Email
@@ -228,9 +291,7 @@ export default function SignUp({ closeModal, openSigninModal }: SignUpProps) {
             onClick={() => setMode("phone")}
             className={[
               "flex-1 rounded-md px-3 py-2 text-sm font-medium transition",
-              mode === "phone"
-                ? "bg-primary text-darkmode"
-                : "text-white/80 hover:bg-white/5",
+              mode === "phone" ? "bg-primary text-darkmode" : "text-white/80 hover:bg-white/5",
             ].join(" ")}
           >
             No. HP
@@ -281,9 +342,7 @@ export default function SignUp({ closeModal, openSigninModal }: SignUpProps) {
                 value={phoneDigits}
                 onChange={(e) => setPhoneDigits(normalizePhoneDigits(e.target.value))}
                 onKeyDown={(e) => {
-                  if (phoneDigits.length === 0 && e.key === "0") {
-                    e.preventDefault();
-                  }
+                  if (phoneDigits.length === 0 && e.key === "0") e.preventDefault();
                 }}
                 className={[inputClass, "rounded-l-none border-l-0"].join(" ")}
               />
@@ -350,10 +409,7 @@ export default function SignUp({ closeModal, openSigninModal }: SignUpProps) {
         <button
           type="button"
           className="pl-2 text-primary hover:underline"
-          onClick={() => {
-            if (closeModal) closeModal();
-            if (openSigninModal) openSigninModal();
-          }}
+          onClick={openSignin}
         >
           Masuk
         </button>
