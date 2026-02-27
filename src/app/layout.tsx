@@ -9,10 +9,10 @@ import Aoscompo from "@/utils/aos";
 
 import type { Metadata } from "next";
 
-import ChatWidget from "@/components/Chat/ChatWidget";
+import ChatWidgetWrapper from "@/components/Chat/ChatWidgetWrapper"; // ✅ ganti
 import { ChatProvider } from "@/context/ChatContext";
 import NextAuthProvider from "@/providers/NextAuthProvider";
-import { Toaster } from "sonner"; // ✅ Ganti dari react-hot-toast ke sonner
+import { Toaster } from "sonner";
 import LoadingBar from "@/components/LoadingBar";
 
 import "@/lib/cron";
@@ -40,42 +40,37 @@ export default function RootLayout({
   return (
     <html lang="id" suppressHydrationWarning>
       <body className={font.className}>
-        {/* Global loading bar */}
         <LoadingBar />
 
-        <ThemeProvider
-          attribute="class"
-          enableSystem={true}
-          defaultTheme="system"
-        >
+        <ThemeProvider attribute="class" enableSystem defaultTheme="system">
           <NextAuthProvider>
             <ChatProvider>
               <Aoscompo>
                 <Header />
                 {children}
-                {/* Footer tidak muncul di /dashboard/* */}
                 <FooterWrapper />
               </Aoscompo>
 
               <ScrollToTop />
-              <ChatWidget />
-              
-              {/* ✅ Sonner Toaster - Modern & Beautiful */}
-              <Toaster 
+
+              {/* ✅ Chat auto hide di /dashboard */}
+              <ChatWidgetWrapper />
+
+              <Toaster
                 position="top-right"
                 expand={false}
                 richColors
                 closeButton
-                theme="system" // Ikut theme (dark/light)
+                theme="system"
                 toastOptions={{
                   style: {
-                    background: 'rgba(15, 23, 42, 0.95)',
-                    backdropFilter: 'blur(16px)',
-                    border: '1px solid rgba(16, 185, 129, 0.3)',
-                    color: '#e2e8f0',
-                    boxShadow: '0 10px 40px rgba(0, 0, 0, 0.3)',
+                    background: "rgba(15, 23, 42, 0.95)",
+                    backdropFilter: "blur(16px)",
+                    border: "1px solid rgba(16, 185, 129, 0.3)",
+                    color: "#e2e8f0",
+                    boxShadow: "0 10px 40px rgba(0, 0, 0, 0.3)",
                   },
-                  className: 'group',
+                  className: "group",
                   duration: 4000,
                 }}
               />

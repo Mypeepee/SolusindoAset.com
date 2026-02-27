@@ -19,9 +19,9 @@ export interface MenuItem {
       href: "/dashboard/human-resource-management",
     },
     {
-      label: "Leads & Clients",
-      icon: "solar:users-group-two-rounded-linear",
-      href: "/dashboard/leads",
+      label: "Transaksi",
+      icon: "solar:hand-money-linear",
+      href: "/dashboard/transaksi",
     },
     { 
       label: "Agents", 
