@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Icon } from "@iconify/react";
 import type { ListingRow } from "./PilihListingView";
 import { Badge } from "./ui";
@@ -83,6 +83,7 @@ export default function ListingList({
   onLoadMore?: () => void;
 }) {
   const [sort, setSort] = useState<SortKey>("TERBARU");
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const sorted = useMemo(() => {
     const arr = [...rows];
@@ -110,6 +111,19 @@ export default function ListingList({
     return arr;
   }, [rows, sort]);
 
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    // ✅ trigger saat tinggal ~320px lagi dari bawah
+    const threshold = 320;
+    const remain = el.scrollHeight - el.scrollTop - el.clientHeight;
+
+    if (remain < threshold) {
+      if (!loading && hasMore && onLoadMore) onLoadMore();
+    }
+  };
+
   return (
     <div
       className={cx(
@@ -119,9 +133,6 @@ export default function ListingList({
         "flex flex-col"
       )}
     >
-      {/* ✨ Futuristic top glow */}
-      <div className="pointer-events-none absolute hidden" />
-
       {/* Header */}
       <div className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-950/75 backdrop-blur-xl">
         <div className="flex items-start justify-between gap-3 px-4 py-3">
@@ -133,7 +144,8 @@ export default function ListingList({
               </span>
             </div>
             <p className="mt-0.5 text-xs text-zinc-400">
-              Klik listing untuk lihat detail di kanan.
+              <span className="lg:hidden">Tap listing untuk buka detail.</span>
+              <span className="hidden lg:inline">Klik listing untuk lihat detail di kanan.</span>
             </p>
           </div>
 
@@ -157,7 +169,11 @@ export default function ListingList({
       </div>
 
       {/* Content (scroll area) */}
-      <div className="flex-1 overflow-y-auto p-3 pb-[max(4rem,env(safe-area-inset-bottom))]">
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto p-3 pb-[max(4rem,env(safe-area-inset-bottom))]"
+      >
         {loading && rows.length === 0 ? (
           <div className="space-y-2">
             {Array.from({ length: 10 }).map((_, i) => (
@@ -200,7 +216,6 @@ export default function ListingList({
                   )}
                 >
                   <div className="flex items-start gap-3">
-                    {/* Thumb */}
                     <div
                       className={cx(
                         "relative h-16 w-16 overflow-hidden rounded-3xl border bg-zinc-900/40",
@@ -234,7 +249,10 @@ export default function ListingList({
                         <Icon icon="solar:map-point-linear" className="mt-0.5 text-base text-emerald-300/90" />
                         <div className="min-w-0">
                           <div className="whitespace-normal break-words leading-snug">{loc}</div>
-                          <div className="mt-0.5 text-[11px] text-zinc-500">Klik untuk lihat detail</div>
+                          <div className="mt-0.5 text-[11px] text-zinc-500">
+                            <span className="lg:hidden">Tap untuk buka detail</span>
+                            <span className="hidden lg:inline">Klik untuk lihat detail</span>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -247,33 +265,18 @@ export default function ListingList({
               );
             })}
 
-            <div className="pt-2 text-[11px] text-zinc-500">
-              Total tampil: <span className="text-zinc-300">{rows.length}</span>
-            </div>
-
-            {/* Load more inside scroll area (nice for non-technical users) */}
-            {(hasMore || loading) && (
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={() => onLoadMore?.()}
-                  disabled={loading || !hasMore || !onLoadMore}
-                  className={cx(
-                    "w-full rounded-2xl border px-4 py-3 text-sm font-semibold transition",
-                    "border-zinc-800 bg-zinc-950/40 text-zinc-100",
-                    "hover:bg-zinc-900/40",
-                    "disabled:opacity-50 disabled:hover:bg-zinc-950/40"
-                  )}
-                >
-                  {loading ? "Memuat..." : hasMore ? "Muat lagi" : "Sudah semua"}
-                </button>
+            {/* ✅ indikator load otomatis */}
+            {hasMore ? (
+              <div className="pt-2 text-center text-[11px] text-zinc-500">
+                {loading ? "Memuat data berikutnya…" : "Scroll terus untuk memuat lagi"}
               </div>
+            ) : (
+              <div className="pt-2 text-center text-[11px] text-zinc-500">Sudah semua.</div>
             )}
           </div>
         )}
       </div>
 
-      {/* Footer gradient so bottom content never feels cut */}
       <div className="pointer-events-none h-8 bg-gradient-to-t from-zinc-950/80 to-transparent" />
     </div>
   );

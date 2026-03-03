@@ -1,0 +1,124 @@
+/* =========================================================
+   CLOSE PAGE: HIDE GLOBAL HEADER / FOOTER / CHAT WIDGET
+   Works when root layout renders header/footer/chat outside children
+   ========================================================= */
+
+/* Header */
+body:has(.hide-header-footer) header {
+    display: none !important;
+  }
+  
+  /* Footer */
+  body:has(.hide-header-footer) footer {
+    display: none !important;
+  }
+  
+  /* Remove spacing from main */
+  body:has(.hide-header-footer) main {
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+  }
+  
+  /* In case header/footer are nested in common wrappers */
+  body:has(.hide-header-footer) > div > div > header,
+  body:has(.hide-header-footer) > div > div > footer {
+    display: none !important;
+  }
+  
+  /* =========================================================
+     HIDE CHAT WIDGETS (vendor + generic)
+     ========================================================= */
+  
+  /* ---- Vendor: Crisp ---- */
+  body:has(.hide-header-footer) .crisp-client,
+  body:has(.hide-header-footer) #crisp-chatbox {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+  
+  /* ---- Vendor: Tawk.to ---- */
+  body:has(.hide-header-footer) #tawkchat-container,
+  body:has(.hide-header-footer) .tawk-min-container,
+  body:has(.hide-header-footer) iframe[src*="tawk.to" i] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+  
+  /* ---- Vendor: Intercom ---- */
+  body:has(.hide-header-footer) #intercom-container,
+  body:has(.hide-header-footer) .intercom-lightweight-app,
+  body:has(.hide-header-footer) iframe[name^="intercom-" i] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+  
+  /* ---- Vendor: Zendesk ---- */
+  body:has(.hide-header-footer) #webWidget,
+  body:has(.hide-header-footer) iframe[id*="webWidget" i],
+  body:has(.hide-header-footer) iframe[src*="zendesk" i] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+  
+  /* ---- Vendor: Freshchat ---- */
+  body:has(.hide-header-footer) #fc_frame,
+  body:has(.hide-header-footer) iframe[id*="freshchat" i],
+  body:has(.hide-header-footer) iframe[src*="freshchat" i] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+  
+  /* ---- Vendor: Drift ---- */
+  body:has(.hide-header-footer) .drift-frame-controller,
+  body:has(.hide-header-footer) iframe[src*="drift" i] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+  
+  /* ---- Generic "chat" naming ---- */
+  body:has(.hide-header-footer) .chat-widget,
+  body:has(.hide-header-footer) #chat-widget,
+  body:has(.hide-header-footer) [data-chat-widget],
+  body:has(.hide-header-footer) [id*="chat" i],
+  body:has(.hide-header-footer) [class*="chat" i],
+  body:has(.hide-header-footer) [aria-label*="chat" i],
+  body:has(.hide-header-footer) [aria-label*="live chat" i] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+  
+  /* ---- Generic iframe launcher / bubble (sering dipakai chat) ---- */
+  body:has(.hide-header-footer) iframe[id*="chat" i],
+  body:has(.hide-header-footer) iframe[src*="chat" i],
+  body:has(.hide-header-footer) iframe[style*="position: fixed" i],
+  body:has(.hide-header-footer) iframe[style*="bottom" i] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+  
+  /* ---- LAST RESORT (keras): hide semua elemen fixed di kanan-bawah yang biasa jadi bubble chat ---- */
+  /* Aman karena hanya aktif di /closing, tapi kalau kamu punya tombol fixed lain di kanan bawah, itu ikut hilang. */
+  body:has(.hide-header-footer) * {
+    /* kosong; ini cuma pembatas */
+  }
+  
+  body:has(.hide-header-footer) *:where([style*="position: fixed" i]) {
+    /* jangan dipukul rata semua fixed; kita filter kanan bawah */
+  }
+  
+  body:has(.hide-header-footer) *:where([style*="position: fixed" i][style*="bottom" i][style*="right" i]),
+  body:has(.hide-header-footer) *:where([class*="launcher" i]),
+  body:has(.hide-header-footer) *:where([id*="launcher" i]),
+  body:has(.hide-header-footer) *:where([class*="widget" i][style*="fixed" i]) {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
