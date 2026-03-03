@@ -1,4 +1,4 @@
-// app/dashboard/transaksi/page.tsx
+// src/app/dashboard/transaksi/page.tsx
 import TransaksiPageClient from "./components/TransaksiPageClient";
 import prisma from "@/lib/prisma";
 
@@ -27,7 +27,6 @@ type ListingClientDTO = {
   luas_tanah: number | null;
   luas_bangunan: number | null;
 
-  // legacy fallback (kalau komponen lama masih pakai)
   luas: number;
 
   imageUrl: string;
@@ -42,7 +41,6 @@ const toFiniteNumber = (v: unknown): number => {
   if (typeof v === "number") return Number.isFinite(v) ? v : 0;
   if (typeof v === "bigint") return Number(v);
 
-  // Prisma Decimal / object with toString()
   if (typeof v === "object" && v !== null && "toString" in v) {
     const n = Number(String((v as any).toString()));
     return Number.isFinite(n) ? n : 0;
@@ -123,7 +121,7 @@ const toProxyImg = (url: string) => {
 
 async function getInitial(): Promise<ListingClientDTO[]> {
   const rows = await prisma.listing.findMany({
-    take: 20,
+    take: 50, // ✅ lebih banyak supaya “terlihat global”
     orderBy: { tanggal_diupdate: "desc" },
     select: {
       id_property: true,
@@ -160,13 +158,13 @@ async function getInitial(): Promise<ListingClientDTO[]> {
   return rows.map((r) => {
     const jenis = String(r.jenis_transaksi);
     const luasTanah = toFiniteNullableNumber(r.luas_tanah);
-    const luasBangunan =
-      jenis === "LELANG" ? null : toFiniteNullableNumber(r.luas_bangunan);
+    const luasBangunan = jenis === "LELANG" ? null : toFiniteNullableNumber(r.luas_bangunan);
 
     const rawImg = extractFirstImageUrl(r.gambar);
     const imageUrl = toProxyImg(rawImg);
 
-    const kota = r.kota ?? null;
+    const tanggal_lelang =
+      jenis === "LELANG" && r.tanggal_lelang ? new Date(r.tanggal_lelang).toISOString() : null;
 
     return {
       id: String(r.id_property),
@@ -180,11 +178,11 @@ async function getInitial(): Promise<ListingClientDTO[]> {
       harga_promo: toFiniteNullableNumber(r.harga_promo),
       nilai_limit_lelang: toFiniteNullableNumber(r.nilai_limit_lelang),
 
-      tanggal_lelang: r.tanggal_lelang ? new Date(r.tanggal_lelang).toISOString() : null,
+      tanggal_lelang,
 
       alamat_lengkap: r.alamat_lengkap ?? null,
       provinsi: r.provinsi ?? null,
-      kota,
+      kota: r.kota ?? null,
       kecamatan: r.kecamatan ?? null,
       kelurahan: r.kelurahan ?? null,
 

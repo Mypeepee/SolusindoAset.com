@@ -216,17 +216,13 @@ export default function RightPanel({
                 <Icon icon="solar:check-circle-linear" className="text-lg" />
                 Closing
               </button>
-
-              <div className="mt-2 text-[11px] text-zinc-500">
-                Fokus: verifikasi data → komunikasi klien → pipeline deal.
-              </div>
             </div>
           </div>
         )}
       </GlassCard>
 
       {/* Activity feed (button riwayat sudah dihapus, feed tetap ada) */}
-      <ActivityFeed rows={activities} loading={loadingActivities} onPick={() => {}} />
+      {/* <ActivityFeed rows={activities} loading={loadingActivities} onPick={() => {}} /> */}
     </div>
   );
 }

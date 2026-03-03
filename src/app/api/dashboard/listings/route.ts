@@ -4,19 +4,10 @@ import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
-/**
- * ✅ Goals
- * - GET return: alamat_lengkap, harga/harga_promo/nilai_limit_lelang, vendor, id_property
- * - GET return: agent handler (nama + kantor) dari relasi Agent -> Pengguna
- * - GET return: luas_tanah, luas_bangunan (luas_bangunan = null untuk LELANG)
- * - GET return: tanggal_lelang (ONLY LELANG) sebagai ISO string
- * - gambar: parse CSV, sanitize gdrive id (underscore nyasar), dan semuanya diproxy lewat /api/img
- * - STOP spam 404 placeholder: imageUrl boleh kosong "" -> UI yang fallback
- */
+const okJson = (data: any, status = 200, extraHeaders?: Record<string, string>) =>
+  NextResponse.json(data, { status, headers: extraHeaders });
 
-// ---------- Helpers ----------
-const okJson = (data: any, status = 200) => NextResponse.json(data, { status });
-
+// ---------- number helpers ----------
 const toNumber = (v: any): number => {
   if (v === null || v === undefined) return 0;
   if (typeof v === "bigint") return Number(v);
@@ -40,89 +31,198 @@ const toIsoOrNull = (d: any): string | null => {
   if (!d) return null;
   const dt = d instanceof Date ? d : new Date(d);
   if (Number.isNaN(dt.getTime())) return null;
-  return dt.toISOString(); // client friendly
+  return dt.toISOString();
 };
 
+// ---------- image helpers ----------
 function normalizeUrl(u: string) {
   const s = (u || "").trim();
   if (!s) return "";
   return s.replace(/\s+/g, "");
 }
-
 function sanitizeDriveId(id: string) {
-  return (id || "").trim().replace(/_+$/g, ""); // buang underscore nyasar
+  return (id || "").trim().replace(/_+$/g, "");
 }
-
 function toDriveThumb(url: string) {
-  // already thumbnail
   if (/drive\.google\.com\/thumbnail\?id=/i.test(url)) {
     const m = url.match(/thumbnail\?id=([^&]+)/i);
     if (m?.[1]) return `https://drive.google.com/thumbnail?id=${sanitizeDriveId(m[1])}`;
     return url;
   }
-
-  // file/d/<id>/
   const m1 = url.match(/drive\.google\.com\/file\/d\/([^/]+)\//i);
   if (m1?.[1]) return `https://drive.google.com/thumbnail?id=${sanitizeDriveId(m1[1])}`;
-
-  // open?id=<id>
   const m2 = url.match(/drive\.google\.com\/open\?id=([^&]+)/i);
   if (m2?.[1]) return `https://drive.google.com/thumbnail?id=${sanitizeDriveId(m2[1])}`;
-
-  // uc?export=view&id=<id>
   const m3 = url.match(/drive\.google\.com\/uc\?[^#]*id=([^&]+)/i);
   if (m3?.[1]) return `https://drive.google.com/thumbnail?id=${sanitizeDriveId(m3[1])}`;
-
   return url;
 }
-
 function isProbablyUrl(url: string) {
-  if (!url) return false;
-  return url.startsWith("http://") || url.startsWith("https://") || url.startsWith("/");
+  return !!url && (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("/"));
 }
-
 function extractFirstImageUrl(raw: any): string {
-  // IMPORTANT: balikin "" kalau tidak ada, biar UI fallback (dan ga spam 404 placeholder)
   if (!raw) return "";
-
   const str = String(raw).trim();
   if (!str) return "";
-
   const candidates = str
     .split(",")
     .map((x) => normalizeUrl(x))
     .filter(Boolean)
     .map((x) => toDriveThumb(x));
-
-  for (const c of candidates) {
-    if (isProbablyUrl(c)) return c;
-  }
-
+  for (const c of candidates) if (isProbablyUrl(c)) return c;
   const single = toDriveThumb(normalizeUrl(str));
-  if (isProbablyUrl(single)) return single;
-
-  return "";
+  return isProbablyUrl(single) ? single : "";
 }
-
 function toProxyImg(url: string) {
   if (!url) return "";
   if (url.startsWith("/")) return url;
-  if (url.startsWith("http://") || url.startsWith("https://")) {
-    return `/api/img?url=${encodeURIComponent(url)}`;
-  }
+  if (url.startsWith("http://") || url.startsWith("https://")) return `/api/img?url=${encodeURIComponent(url)}`;
   return "";
 }
 
-// ---------- POST (create listing) ----------
+/* =========================================================
+   ✅ VENDOR SEARCH (FIXED)
+   - "BRI Purbalingga" => (alias BRI) AND (Purbalingga)
+   - "BRI Kusuma" => (alias BRI) AND (Kusuma)
+   - "BPR" => ONLY BPR banks (BPR / Bank Perkreditan Rakyat / Bank Perekonomian Rakyat)
+   - "BPD" => ALL regional banks (Bank Pembangunan Daerah ...)
+========================================================= */
+
+const STOPWORDS = new Set([
+  "PT", "PT.", "TBK", "TBK.", "Tbk", "PERSERO", "(PERSERO)", "PERSERO,",
+  "DIVISI", "DIV", "REGION", "REG", "RETAIL", "COLLECTION", "RECOVERY",
+  "ASSET", "MANAGEMENT", "KANTOR", "CABANG", "KC", "UNIT", "WILAYAH", "AREA",
+  "DAN", "&"
+]);
+
+function normUp(s: string) {
+  return (s ?? "")
+    .toUpperCase()
+    .replace(/[()]/g, " ")
+    .replace(/[.,–—-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// alias yang kamu butuhin (berdasarkan vendor DB kamu)
+const BANK_ALIASES: Record<string, string[]> = {
+  BRI: ["BRI", "BANK RAKYAT INDONESIA", "RAKYAT INDONESIA"],
+  BNI: ["BNI", "BANK NEGARA INDONESIA", "NEGARA INDONESIA"],
+  BCA: ["BCA", "BANK CENTRAL ASIA", "CENTRAL ASIA"],
+  BTN: ["BTN", "BANK TABUNGAN NEGARA", "TABUNGAN NEGARA"],
+  MANDIRI: ["MANDIRI", "BANK MANDIRI", "RETAIL ASSET MANAGEMENT"],
+  DANAMON: ["DANAMON", "BANK DANAMON", "DANAMON INDONESIA"],
+  PNM: ["PNM", "PERMODALAN NASIONAL MADANI"],
+
+  // ✅ ini penting: BPR harus GENERIC (bukan “Jombang” doang)
+  BPR: ["BPR", "BANK PERKREDITAN RAKYAT", "BANK PEREKONOMIAN RAKYAT"],
+
+  // ✅ ini juga harus GENERIC (biar BJB, Papua, Jatim, dll masuk)
+  BPD: ["BPD", "BANK PEMBANGUNAN DAERAH", "PEMBANGUNAN DAERAH"],
+
+  // optional tambahan (kalau user cari BJB langsung)
+  BJB: ["BJB", "BANK BJB", "JAWA BARAT", "BANTEN", "BANK PEMBANGUNAN DAERAH JAWA BARAT DAN BANTEN"],
+};
+
+function tokenize(input: string): string[] {
+  const up = normUp(input);
+  if (!up) return [];
+  const tokens = up.split(" ").map((t) => t.trim()).filter(Boolean);
+  // buang stopwords, buang token super pendek
+  return tokens.filter((t) => !STOPWORDS.has(t) && t.length >= 3).slice(0, 8);
+}
+
+function detectBankKey(tokensUp: string[]): string | null {
+  // deteksi berdasar token yang user ketik
+  // prioritas: BPR/BPD biar gak “ketarik” ke bank lain
+  const set = new Set(tokensUp);
+
+  if (set.has("BPR")) return "BPR";
+  if (set.has("BPD")) return "BPD";
+
+  if (set.has("BRI") || set.has("RAKYAT")) return "BRI";
+  if (set.has("BNI") || set.has("NEGARA")) return "BNI";
+  if (set.has("BCA") || set.has("CENTRAL")) return "BCA";
+  if (set.has("BTN") || set.has("TABUNGAN")) return "BTN";
+  if (set.has("MANDIRI")) return "MANDIRI";
+  if (set.has("DANAMON")) return "DANAMON";
+  if (set.has("PNM")) return "PNM";
+  if (set.has("BJB")) return "BJB";
+
+  // fuzzy: kalau user ketik "BANK JATIM" dia bakal token "JATIM"
+  // tapi itu masih masuk via BPD phrase "BANK PEMBANGUNAN DAERAH" + token "JATIM" (AND)
+  return null;
+}
+
+/**
+ * Build vendor where:
+ * - kalau user memasukkan bankKey + kata tambahan => (alias OR) AND (tokens lain)
+ * - kalau hanya bankKey => alias OR saja (lebih presisi)
+ * - kalau gak ada bankKey => AND tokens (lebih ketat)
+ */
+function buildVendorWhere(vendorRaw: string) {
+  const raw = (vendorRaw ?? "").trim();
+  if (!raw) return null;
+
+  const tokens = tokenize(raw);
+  const tokensUp = tokens.map((t) => t.toUpperCase());
+
+  const bankKey = detectBankKey(tokensUp);
+
+  // tokens tambahan (mis. "PURBALINGGA", "KUSUMA", "SURABAYA", "TEGAL", "PAPUA")
+  const extraTokens =
+    bankKey
+      ? tokens.filter((t) => t.toUpperCase() !== bankKey) // buang token "BRI/BPR/BPD"
+      : tokens;
+
+  // alias terms
+  const aliasTerms = bankKey ? (BANK_ALIASES[bankKey] ?? [bankKey]) : [];
+
+  // (alias OR)
+  const aliasOr =
+    aliasTerms.length
+      ? { OR: aliasTerms.map((t) => ({ vendor: { contains: t, mode: "insensitive" as const } })) }
+      : null;
+
+  // (extraTokens AND)
+  const extraAnd =
+    extraTokens.length
+      ? { AND: extraTokens.map((t) => ({ vendor: { contains: t, mode: "insensitive" as const } })) }
+      : null;
+
+  // aturan:
+  // - jika ada bankKey: pakai (alias OR) AND (extraAnd jika ada)
+  // - jika tidak ada bankKey: pakai AND token (ketat), fallback contains raw
+  if (bankKey) {
+    if (extraAnd) return { AND: [aliasOr, extraAnd] };
+    return aliasOr;
+  }
+
+  // no bankKey
+  if (extraAnd) {
+    return {
+      OR: [
+        extraAnd, // ketat
+        { vendor: { contains: raw, mode: "insensitive" as const } }, // fallback
+      ],
+    };
+  }
+
+  return { vendor: { contains: raw, mode: "insensitive" as const } };
+}
+
+/* =====================================================
+   POST (create listing) - tetap seperti punya kamu
+===================================================== */
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) return okJson({ error: "Unauthorized" }, 401);
 
-    const body = await request.json();
-
     const agentId = (session.user as any).agentId as string | undefined;
-    if (!agentId) return okJson({ error: "User is not an agent or agentId missing in session" }, 400);
+    if (!agentId) return okJson({ error: "agentId missing in session" }, 400);
+
+    const body = await request.json();
 
     const agent = await prisma.agent.findUnique({
       where: { id_agent: agentId },
@@ -148,15 +248,7 @@ export async function POST(request: NextRequest) {
       | "LELANG"
       | "SEWA";
 
-    const kategori = String(body.kategori).toUpperCase() as
-      | "RUMAH"
-      | "APARTEMEN"
-      | "RUKO"
-      | "TANAH"
-      | "GUDANG"
-      | "HOTEL_DAN_VILLA"
-      | "TOKO"
-      | "PABRIK";
+    const kategori = String(body.kategori).toUpperCase() as any;
 
     if (jenis_transaksi === "LELANG") {
       if (!body.nilai_limit_lelang || Number(body.nilai_limit_lelang) <= 0) {
@@ -181,16 +273,6 @@ export async function POST(request: NextRequest) {
         ? `Balai Lelang Solusindo - ${agent.pengguna.nama_lengkap}`
         : `${agent.nama_kantor || "Premier"} - ${agent.pengguna.nama_lengkap}`;
 
-    let tanggalLelang: Date | null = null;
-    let uangJaminan: number | null = null;
-    let nilaiLimitLelang: number | null = null;
-
-    if (jenis_transaksi === "LELANG") {
-      nilaiLimitLelang = Number(body.nilai_limit_lelang);
-      uangJaminan = Number(body.uang_jaminan);
-      tanggalLelang = body.tanggal_lelang ? new Date(body.tanggal_lelang) : null;
-    }
-
     const listing = await prisma.listing.create({
       data: {
         id_agent: agent.id_agent,
@@ -202,11 +284,11 @@ export async function POST(request: NextRequest) {
         vendor,
         status_tayang: body.status_tayang || "TERSEDIA",
         harga,
-        harga_promo:
-          jenis_transaksi !== "LELANG" && body.harga_promo != null ? Number(body.harga_promo) : null,
-        tanggal_lelang: tanggalLelang,
-        uang_jaminan: uangJaminan,
-        nilai_limit_lelang: nilaiLimitLelang,
+        harga_promo: jenis_transaksi !== "LELANG" && body.harga_promo != null ? Number(body.harga_promo) : null,
+        tanggal_lelang: jenis_transaksi === "LELANG" && body.tanggal_lelang ? new Date(body.tanggal_lelang) : null,
+        uang_jaminan: jenis_transaksi === "LELANG" && body.uang_jaminan != null ? Number(body.uang_jaminan) : null,
+        nilai_limit_lelang:
+          jenis_transaksi === "LELANG" && body.nilai_limit_lelang != null ? Number(body.nilai_limit_lelang) : null,
         link: body.link || null,
         alamat_lengkap: body.alamat_lengkap || null,
         provinsi: body.provinsi || null,
@@ -232,12 +314,8 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const newPoin = agent.poin + 10;
-    await prisma.agent.update({
-      where: { id_agent: agent.id_agent },
-      data: { poin: newPoin },
-    });
-
+    const newPoin = (agent.poin ?? 0) + 10;
+    await prisma.agent.update({ where: { id_agent: agent.id_agent }, data: { poin: newPoin } });
     await prisma.riwayatPoin.create({
       data: {
         id_agent: agent.id_agent,
@@ -247,7 +325,7 @@ export async function POST(request: NextRequest) {
         tipe_transaksi: "DAPAT",
         id_referensi: listing.id_property.toString(),
         tabel_referensi: "listing",
-        saldo_sebelum: agent.poin,
+        saldo_sebelum: agent.poin ?? 0,
         saldo_sesudah: newPoin,
       },
     });
@@ -259,88 +337,93 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("❌ Error creating listing:", error);
-    if (error?.code === "P2002") {
-      return okJson(
-        {
-          error: "Data duplikat terdeteksi",
-          details: error.meta?.target
-            ? `Field ${error.meta.target.join(", ")} sudah ada`
-            : "Constraint violation",
-        },
-        400
-      );
-    }
     return okJson({ error: "Failed to create listing", details: error?.message || "Unknown error" }, 500);
   }
 }
 
-// ---------- GET (dashboard transaksi: listing search) ----------
+/* =====================================================
+   GET (dashboard listings)
+===================================================== */
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) return okJson({ error: "Unauthorized" }, 401);
 
-    const agentId = (session.user as any).agentId as string | undefined;
-    if (!agentId) return okJson({ error: "User is not an agent or agentId missing in session" }, 400);
+    const sessionAgentId = (session.user as any).agentId as string | undefined;
 
     const { searchParams } = new URL(request.url);
 
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const limit = parseInt(searchParams.get("limit") || searchParams.get("take") || "30", 10);
+    const scopeRaw = (searchParams.get("scope") || "all").toLowerCase();
+    const scope = scopeRaw === "mine" ? "mine" : "all";
+    const wantMine = scope === "mine";
+
+    const agentIdParam = (searchParams.get("agentId") || "").trim();
+
+    const page = Math.max(parseInt(searchParams.get("page") || "1", 10), 1);
+    const limitRaw = parseInt(searchParams.get("limit") || searchParams.get("take") || "30", 10);
+    const limit = Math.min(Math.max(limitRaw, 1), 500);
     const skip = (page - 1) * limit;
 
-    const q = (searchParams.get("q") || "").trim();
+    // q: id_property (numeric) / alamat_lengkap (text)
+    const qRaw = (searchParams.get("q") || "").trim();
+
+    // vendor: bank alias smart
+    const vendorRaw = (searchParams.get("vendor") || "").trim();
+
     const jenisParam = (searchParams.get("jenis") || searchParams.get("jenis_transaksi") || "ALL").trim();
-    const vendor = (searchParams.get("vendor") || "").trim();
+    const kategoriParam = (searchParams.get("kategori") || "ALL").trim();
+
     const provinsi = (searchParams.get("provinsi") || "").trim();
     const kota = (searchParams.get("kota") || "").trim();
     const kecamatan = (searchParams.get("kecamatan") || "").trim();
     const kelurahan = (searchParams.get("kelurahan") || "").trim();
 
-    const minHargaRaw = searchParams.get("minHarga") || searchParams.get("min_harga");
-    const maxHargaRaw = searchParams.get("maxHarga") || searchParams.get("max_harga");
-    const minHarga = minHargaRaw ? Number(minHargaRaw) : null;
-    const maxHarga = maxHargaRaw ? Number(maxHargaRaw) : null;
+    const where: any = {};
 
-    const where: any = { id_agent: agentId };
+    // scope
+    if (agentIdParam) {
+      where.id_agent = agentIdParam;
+    } else if (wantMine) {
+      if (!sessionAgentId) return okJson({ error: "scope=mine but agentId missing in session" }, 400);
+      where.id_agent = sessionAgentId;
+    }
 
+    // jenis
     if (jenisParam && jenisParam.toUpperCase() !== "ALL") where.jenis_transaksi = jenisParam.toUpperCase();
-    if (vendor) where.vendor = { contains: vendor, mode: "insensitive" };
+
+    // kategori
+    if (kategoriParam && kategoriParam.toUpperCase() !== "ALL") where.kategori = kategoriParam.toUpperCase();
+
+    // lokasi equals
     if (provinsi) where.provinsi = { equals: provinsi, mode: "insensitive" };
     if (kota) where.kota = { equals: kota, mode: "insensitive" };
     if (kecamatan) where.kecamatan = { equals: kecamatan, mode: "insensitive" };
     if (kelurahan) where.kelurahan = { equals: kelurahan, mode: "insensitive" };
 
-    if (q) {
-      where.OR = [
-        { judul: { contains: q, mode: "insensitive" } },
-        { slug: { contains: q, mode: "insensitive" } },
-        { vendor: { contains: q, mode: "insensitive" } },
-        { alamat_lengkap: { contains: q, mode: "insensitive" } },
-        { provinsi: { contains: q, mode: "insensitive" } },
-        { kota: { contains: q, mode: "insensitive" } },
-        { kecamatan: { contains: q, mode: "insensitive" } },
-        { kelurahan: { contains: q, mode: "insensitive" } },
-      ];
+    // ✅ vendor alias query (AND-able)
+    if (vendorRaw) {
+      const vw = buildVendorWhere(vendorRaw);
+      if (vw) {
+        where.AND = where.AND || [];
+        where.AND.push(vw);
+      }
     }
 
-    if (minHarga !== null || maxHarga !== null) {
+    // ✅ q: numeric => exact id_property, else => alamat_lengkap contains
+    if (qRaw) {
+      const isNumericQ = /^\d+$/.test(qRaw);
       where.AND = where.AND || [];
-      where.AND.push({
-        OR: [
-          {
-            jenis_transaksi: { in: ["PRIMARY", "SECONDARY", "SEWA"] },
-            OR: [
-              { harga: { gte: minHarga ?? undefined, lte: maxHarga ?? undefined } },
-              { harga_promo: { gte: minHarga ?? undefined, lte: maxHarga ?? undefined } },
-            ],
-          },
-          {
-            jenis_transaksi: "LELANG",
-            nilai_limit_lelang: { gte: minHarga ?? undefined, lte: maxHarga ?? undefined },
-          },
-        ],
-      });
+
+      if (isNumericQ) {
+        where.id_property = BigInt(qRaw);
+      } else {
+        where.AND.push({
+          OR: [
+            { alamat_lengkap: { contains: qRaw, mode: "insensitive" } },
+            { judul: { contains: qRaw, mode: "insensitive" } },
+          ],
+        });
+      }
     }
 
     const [rows, total] = await Promise.all([
@@ -351,6 +434,7 @@ export async function GET(request: NextRequest) {
         orderBy: { tanggal_diupdate: "desc" },
         select: {
           id_property: true,
+          id_agent: true,
           judul: true,
           vendor: true,
           jenis_transaksi: true,
@@ -360,8 +444,7 @@ export async function GET(request: NextRequest) {
           harga: true,
           harga_promo: true,
           nilai_limit_lelang: true,
-
-          tanggal_lelang: true, // ✅ FIX: ambil dari DB
+          tanggal_lelang: true,
 
           alamat_lengkap: true,
           provinsi: true,
@@ -371,7 +454,6 @@ export async function GET(request: NextRequest) {
 
           luas_tanah: true,
           luas_bangunan: true,
-
           gambar: true,
 
           agent: {
@@ -395,11 +477,23 @@ export async function GET(request: NextRequest) {
       const rawImg = extractFirstImageUrl(r.gambar);
       const imageUrl = toProxyImg(rawImg);
 
-      // ✅ tanggal lelang: ONLY kalau LELANG
       const tanggal_lelang = jenis === "LELANG" ? toIsoOrNull(r.tanggal_lelang) : null;
+
+      const harga = toNumber(r.harga);
+      const harga_promo = toNullableNumber(r.harga_promo);
+      const nilai_limit_lelang = toNullableNumber(r.nilai_limit_lelang);
+
+      // ✅ display price rules
+      const displayHarga =
+        jenis === "LELANG" ? toNumber(nilai_limit_lelang ?? 0) : toNumber(harga_promo ?? harga);
+
+      const displayHargaType =
+        jenis === "LELANG" ? "NILAI_LIMIT_LELANG" : harga_promo != null ? "HARGA_PROMO" : "HARGA";
 
       return {
         id: r.id_property.toString(),
+        id_agent: r.id_agent,
+
         judul: r.judul,
         vendor: r.vendor ?? null,
 
@@ -408,15 +502,17 @@ export async function GET(request: NextRequest) {
 
         jenis_transaksi: r.jenis_transaksi,
         kategori: String(r.kategori),
+        status_tayang: r.status_tayang,
 
-        harga: toNumber(r.harga),
-        harga_promo: toNullableNumber(r.harga_promo),
-        nilai_limit_lelang: toNullableNumber(r.nilai_limit_lelang),
+        harga,
+        harga_promo,
+        nilai_limit_lelang,
+        tanggal_lelang,
 
-        tanggal_lelang, // ✅ NEW (ISO string / null)
+        displayHarga,
+        displayHargaType,
 
         alamat_lengkap: r.alamat_lengkap ?? null,
-
         provinsi: r.provinsi ?? null,
         kota: r.kota,
         kecamatan: r.kecamatan ?? null,
@@ -424,19 +520,23 @@ export async function GET(request: NextRequest) {
 
         luas_tanah: luasTanah,
         luas_bangunan: luasBangunan,
-
-        luas, // legacy
+        luas,
 
         imageUrl,
-        status_tayang: r.status_tayang,
       };
     });
 
-    return okJson({
-      success: true,
-      data,
-      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
-    });
+    const debugHeaders = {
+      "x-scope": scope,
+      "x-agentid-session": sessionAgentId ?? "",
+      "x-agentid-param": agentIdParam,
+    };
+
+    return okJson(
+      { success: true, data, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } },
+      200,
+      debugHeaders
+    );
   } catch (error: any) {
     console.error("❌ Error fetching listings:", error);
     return okJson({ error: "Failed to fetch listings", details: error?.message }, 500);

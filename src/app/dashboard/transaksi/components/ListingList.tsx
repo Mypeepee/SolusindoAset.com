@@ -13,7 +13,6 @@ function safeText(s?: string | null) {
   return (s ?? "").trim();
 }
 
-// ✅ No request, no 404, no flicker
 const FALLBACK_IMG =
   "data:image/svg+xml;utf8," +
   encodeURIComponent(`
@@ -31,15 +30,14 @@ const FALLBACK_IMG =
 `);
 
 function buildLocation(item: ListingRow) {
-  // ✅ prioritas alamat_lengkap (yang kamu mau)
-  const full = safeText(item.alamat_lengkap);
+  const full = safeText((item as any).alamat_lengkap);
   if (full) return full;
 
-  const parts = [item.kelurahan, item.kecamatan, item.kota, item.provinsi]
+  const parts = [(item as any).kelurahan, (item as any).kecamatan, (item as any).kota, (item as any).provinsi]
     .map((x) => safeText(x))
     .filter(Boolean);
 
-  return parts.join(", ") || safeText(item.kota) || "-";
+  return parts.join(", ") || safeText((item as any).kota) || "-";
 }
 
 function sortPrice(item: ListingRow) {
@@ -74,11 +72,15 @@ export default function ListingList({
   loading,
   selectedId,
   onSelect,
+  hasMore = false,
+  onLoadMore,
 }: {
   rows: ListingRow[];
   loading: boolean;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
 }) {
   const [sort, setSort] = useState<SortKey>("TERBARU");
 
@@ -109,9 +111,19 @@ export default function ListingList({
   }, [rows, sort]);
 
   return (
-    <div className="h-[calc(100vh-220px)] overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950/40 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
+    <div
+      className={cx(
+        "h-[calc(100vh-220px)] overflow-hidden rounded-3xl border",
+        "border-zinc-800 bg-zinc-950/35",
+        "shadow-[0_0_0_1px_rgba(0,0,0,0.25)]",
+        "flex flex-col"
+      )}
+    >
+      {/* ✨ Futuristic top glow */}
+      <div className="pointer-events-none absolute hidden" />
+
       {/* Header */}
-      <div className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-950/70 backdrop-blur-xl">
+      <div className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-950/75 backdrop-blur-xl">
         <div className="flex items-start justify-between gap-3 px-4 py-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -121,7 +133,7 @@ export default function ListingList({
               </span>
             </div>
             <p className="mt-0.5 text-xs text-zinc-400">
-              Klik listing untuk melihat detail di panel kanan.
+              Klik listing untuk lihat detail di kanan.
             </p>
           </div>
 
@@ -140,16 +152,13 @@ export default function ListingList({
                 ))}
               </select>
             </div>
-            {/* <div className="mt-1 text-[11px] text-zinc-500">
-              Urutkan: <span className="text-zinc-300">{SORT_LABEL[sort]}</span>
-            </div> */}
           </div>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="h-full overflow-y-auto p-3">
-        {loading ? (
+      {/* Content (scroll area) */}
+      <div className="flex-1 overflow-y-auto p-3 pb-[max(4rem,env(safe-area-inset-bottom))]">
+        {loading && rows.length === 0 ? (
           <div className="space-y-2">
             {Array.from({ length: 10 }).map((_, i) => (
               <div key={i} className="rounded-3xl border border-zinc-800 bg-zinc-950/30 p-3">
@@ -191,7 +200,7 @@ export default function ListingList({
                   )}
                 >
                   <div className="flex items-start gap-3">
-                    {/* BIG THUMB */}
+                    {/* Thumb */}
                     <div
                       className={cx(
                         "relative h-16 w-16 overflow-hidden rounded-3xl border bg-zinc-900/40",
@@ -200,8 +209,8 @@ export default function ListingList({
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={item.imageUrl || FALLBACK_IMG}
-                        alt={item.judul}
+                        src={(item as any).imageUrl || FALLBACK_IMG}
+                        alt={(item as any).judul}
                         className="h-full w-full object-cover"
                         loading="lazy"
                         referrerPolicy="no-referrer"
@@ -212,7 +221,7 @@ export default function ListingList({
                           img.src = FALLBACK_IMG;
                         }}
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/35 via-transparent to-transparent" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/40 via-transparent to-transparent" />
                     </div>
 
                     <div className="min-w-0 flex-1">
@@ -221,21 +230,15 @@ export default function ListingList({
                         <Badge jenis={item.jenis_transaksi} />
                       </div>
 
-                      {/* Location: WRAP, NO OVERFLOW */}
                       <div className="mt-2 flex items-start gap-2 text-sm text-zinc-200">
                         <Icon icon="solar:map-point-linear" className="mt-0.5 text-base text-emerald-300/90" />
                         <div className="min-w-0">
-                          <div className="whitespace-normal break-words leading-snug">
-                            {loc}
-                          </div>
-                          <div className="mt-0.5 text-[11px] text-zinc-500">
-                            Klik untuk melihat detail
-                          </div>
+                          <div className="whitespace-normal break-words leading-snug">{loc}</div>
+                          <div className="mt-0.5 text-[11px] text-zinc-500">Klik untuk lihat detail</div>
                         </div>
                       </div>
                     </div>
 
-                    {/* Chevron */}
                     <div className="mt-1 shrink-0 text-zinc-500 transition group-hover:text-zinc-300">
                       <Icon icon="solar:alt-arrow-right-linear" className="text-lg" />
                     </div>
@@ -245,11 +248,33 @@ export default function ListingList({
             })}
 
             <div className="pt-2 text-[11px] text-zinc-500">
-              Total listing: <span className="text-zinc-300">{rows.length}</span>
+              Total tampil: <span className="text-zinc-300">{rows.length}</span>
             </div>
+
+            {/* Load more inside scroll area (nice for non-technical users) */}
+            {(hasMore || loading) && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => onLoadMore?.()}
+                  disabled={loading || !hasMore || !onLoadMore}
+                  className={cx(
+                    "w-full rounded-2xl border px-4 py-3 text-sm font-semibold transition",
+                    "border-zinc-800 bg-zinc-950/40 text-zinc-100",
+                    "hover:bg-zinc-900/40",
+                    "disabled:opacity-50 disabled:hover:bg-zinc-950/40"
+                  )}
+                >
+                  {loading ? "Memuat..." : hasMore ? "Muat lagi" : "Sudah semua"}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      {/* Footer gradient so bottom content never feels cut */}
+      <div className="pointer-events-none h-8 bg-gradient-to-t from-zinc-950/80 to-transparent" />
     </div>
   );
 }

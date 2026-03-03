@@ -1,5 +1,8 @@
+import type { Metadata } from "next";
 import { DM_Sans } from "next/font/google";
+
 import "./globals.css";
+
 import Header from "@/components/Layout/Header";
 import FooterWrapper from "@/components/Layout/Footer/FooterWrapper";
 
@@ -7,9 +10,7 @@ import { ThemeProvider } from "next-themes";
 import ScrollToTop from "@/components/ScrollToTop";
 import Aoscompo from "@/utils/aos";
 
-import type { Metadata } from "next";
-
-import ChatWidgetWrapper from "@/components/Chat/ChatWidgetWrapper"; // ✅ ganti
+import ChatWidgetWrapper from "@/components/Chat/ChatWidgetWrapper";
 import { ChatProvider } from "@/context/ChatContext";
 import NextAuthProvider from "@/providers/NextAuthProvider";
 import { Toaster } from "sonner";
@@ -17,29 +18,26 @@ import LoadingBar from "@/components/LoadingBar";
 
 import "@/lib/cron";
 
-const font = DM_Sans({ subsets: ["latin"] });
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  display: "swap",
+  // optional: kalau suatu saat mau pakai tailwind font variable
+  variable: "--font-dm-sans",
+});
 
 export const metadata: Metadata = {
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
-  ),
-  title:
-    "Premier Asset - Satu Aplikasi untuk Semua Kebutuhan Properti Anda",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"),
+  title: "Premier Asset - Satu Aplikasi untuk Semua Kebutuhan Properti Anda",
   description:
     "Platform terintegrasi untuk jual beli properti Primary, Secondary, dan Aset Lelang. Temukan investasi properti terbaik dan aman bersama Premier Asset.",
-  icons: {
-    icon: "/images/logo/logopremier.svg",
-  },
+  icons: { icon: "/images/logo/logopremier.svg" },
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="id" suppressHydrationWarning>
-      <body className={font.className}>
+      {/* kalau kamu pakai tailwind dan ingin variable font: tambahkan dmSans.variable di className html */}
+      <body className={dmSans.className}>
         <LoadingBar />
 
         <ThemeProvider attribute="class" enableSystem defaultTheme="system">
@@ -52,8 +50,6 @@ export default function RootLayout({
               </Aoscompo>
 
               <ScrollToTop />
-
-              {/* ✅ Chat auto hide di /dashboard */}
               <ChatWidgetWrapper />
 
               <Toaster

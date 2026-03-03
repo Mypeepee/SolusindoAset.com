@@ -7,9 +7,8 @@ import RightPanel from "./RightPanel";
 import { toast } from "sonner";
 
 export type ListingRow = {
-  id: string; // id_property string
+  id: string;
   judul: string;
-
   vendor: string | null;
 
   agent_nama: string | null;
@@ -22,6 +21,8 @@ export type ListingRow = {
   harga_promo: number | null;
   nilai_limit_lelang: number | null;
 
+  tanggal_lelang?: string | null;
+
   alamat_lengkap: string | null;
   provinsi: string | null;
   kota: string;
@@ -31,7 +32,8 @@ export type ListingRow = {
   luas_tanah: number | null;
   luas_bangunan: number | null;
 
-  imageUrl: string; // raw url dari API (sudah first image)
+  imageUrl: string;
+  status_tayang?: string;
 };
 
 export type ActivityRow = {
@@ -46,7 +48,6 @@ export type ActivityRow = {
   title: string;
 };
 
-/** Debounce primitive (string) -> paling stabil untuk dependency effect */
 function useDebouncedValue<T>(value: T, delay = 350) {
   const [v, setV] = useState(value);
   useEffect(() => {
@@ -54,15 +55,6 @@ function useDebouncedValue<T>(value: T, delay = 350) {
     return () => clearTimeout(t);
   }, [value, delay]);
   return v;
-}
-
-function proxifyImage(url: string) {
-  const u = (url || "").trim();
-  if (!u) return "/images/listing/placeholder.jpg";
-  if (u.startsWith("http://") || u.startsWith("https://")) {
-    return `/api/img?url=${encodeURIComponent(u)}`;
-  }
-  return u; // local / relative
 }
 
 function safeJsonParse(text: string) {
@@ -73,25 +65,20 @@ function safeJsonParse(text: string) {
   }
 }
 
-/** Build query string from filter state (only include non-empty values) */
-function buildListingQuery(filters: ListingFilterState, take = 30) {
+function buildListingQuery(filters: ListingFilterState) {
   const sp = new URLSearchParams();
-
   for (const [k, v] of Object.entries(filters)) {
     if (v === null || v === undefined) continue;
-
-    // semua filter kamu string/enum -> aman
     const s = String(v).trim();
     if (!s) continue;
-
     sp.set(k, s);
   }
-
-  sp.set("take", String(take));
   return sp.toString();
 }
 
 export default function PilihListingView() {
+  const TAKE = 30;
+
   const [filters, setFilters] = useState<ListingFilterState>({
     q: "",
     jenis: "ALL",
@@ -104,86 +91,83 @@ export default function PilihListingView() {
     kelurahan: "",
   });
 
-  /**
-   * ✅ Kunci stabil:
-   * - ubah filters -> queryString (memo)
-   * - debounce queryString (primitive)
-   * - effect fetch bergantung ke debouncedQuery (primitive)
-   */
-  const queryString = useMemo(() => buildListingQuery(filters, 30), [filters]);
+  // query primitive -> stable
+  const queryString = useMemo(() => buildListingQuery(filters), [filters]);
   const debouncedQuery = useDebouncedValue(queryString, 350);
 
+  // pagination state
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+
   const [listings, setListings] = useState<ListingRow[]>([]);
-  const [activities, setActivities] = useState<ActivityRow[]>([]);
   const [loadingListings, setLoadingListings] = useState(false);
+
+  const [activities, setActivities] = useState<ActivityRow[]>([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
-
-  // prevent race conditions
-  const listingsReqId = useRef(0);
 
   const selectedListing = useMemo(() => {
     if (!selectedId) return null;
     return listings.find((x) => x.id === selectedId) ?? null;
   }, [selectedId, listings]);
 
-  // =========================
-  // ✅ Fetch listings (stable)
-  // =========================
+  // sentinel to auto-load when reaching bottom
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
+  // reset pagination when filters change
+  useEffect(() => {
+    setPage(1);
+    setHasMore(true);
+    setSelectedId(null);
+    setListings([]);
+  }, [debouncedQuery]);
+
+  // fetch listings (append)
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
-    const reqId = ++listingsReqId.current;
 
     async function run() {
-      setLoadingListings(true);
+      // stop if no more
+      if (!hasMore && page !== 1) return;
 
+      setLoadingListings(true);
       try {
-        const res = await fetch(`/api/dashboard/listings?${debouncedQuery}`, {
-          cache: "no-store",
-          signal: controller.signal,
-        });
+        const url = `/api/dashboard/listings?${debouncedQuery}&page=${page}&take=${TAKE}`;
+        const res = await fetch(url, { cache: "no-store", signal: controller.signal });
 
         const text = await res.text();
         const json = safeJsonParse(text);
 
-        if (!res.ok) {
-          const msg =
-            json?.error ||
-            json?.details ||
-            (typeof text === "string" ? text.slice(0, 160) : "") ||
-            "Failed fetch listings";
-          throw new Error(msg);
-        }
+        if (!res.ok) throw new Error(json?.error || json?.details || text || "Failed fetch listings");
 
-        // ignore stale response
-        if (!active || reqId !== listingsReqId.current) return;
+        const rows = (json?.data ?? []) as ListingRow[];
 
-        const rowsRaw = (json?.data ?? []) as ListingRow[];
+        if (!active) return;
 
-        // normalize images so list & detail consistent
-        const rows: ListingRow[] = rowsRaw.map((x) => ({
-          ...x,
-          id: String(x.id), // harden
-          imageUrl: proxifyImage(x.imageUrl),
-        }));
+        setListings((prev) => {
+          // page 1 -> replace
+          const next = page === 1 ? rows : [...prev, ...rows];
 
-        setListings(rows);
+          // dedupe by id
+          const map = new Map<string, ListingRow>();
+          for (const r of next) map.set(String(r.id), { ...r, id: String(r.id) });
+          return Array.from(map.values());
+        });
 
-        // ✅ smart auto-select (functional update avoids stale closure)
+        // hasMore based on returned rows length
+        setHasMore(rows.length === TAKE);
+
+        // select first if none
         setSelectedId((prev) => {
-          if (prev && rows.some((r) => r.id === prev)) return prev;
-          return rows.length ? rows[0].id : null;
+          if (prev && (page === 1 ? rows : listings).some((r) => r.id === prev)) return prev;
+          const first = (page === 1 ? rows : null)?.[0];
+          return first ? first.id : prev; // keep if already selected
         });
       } catch (e: any) {
         if (controller.signal.aborted) return;
-
-        if (active) {
-          toast.error("Gagal memuat listing", { description: e?.message });
-          setListings([]); // reset supaya UI gak nahan data lama
-          setSelectedId(null);
-        }
+        if (active) toast.error("Gagal memuat listing", { description: e?.message });
       } finally {
         if (active) setLoadingListings(false);
       }
@@ -194,11 +178,30 @@ export default function PilihListingView() {
       active = false;
       controller.abort();
     };
-  }, [debouncedQuery]);
+    // IMPORTANT: do NOT depend on "listings" here, to avoid loops
+  }, [debouncedQuery, page, hasMore]);
 
-  // =========================
-  // ✅ Fetch activities (once)
-  // =========================
+  // auto-load next page when sentinel visible
+  useEffect(() => {
+    const el = loadMoreRef.current;
+    if (!el) return;
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (!first?.isIntersecting) return;
+        if (loadingListings) return;
+        if (!hasMore) return;
+        setPage((p) => p + 1);
+      },
+      { root: null, rootMargin: "600px", threshold: 0 }
+    );
+
+    io.observe(el);
+    return () => io.disconnect();
+  }, [loadingListings, hasMore]);
+
+  // activities (once)
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
@@ -214,14 +217,7 @@ export default function PilihListingView() {
         const text = await res.text();
         const json = safeJsonParse(text);
 
-        if (!res.ok) {
-          const msg =
-            json?.error ||
-            json?.details ||
-            (typeof text === "string" ? text.slice(0, 160) : "") ||
-            "Failed fetch activities";
-          throw new Error(msg);
-        }
+        if (!res.ok) throw new Error(json?.error || json?.details || text || "Failed fetch activities");
 
         if (active) setActivities((json?.data ?? []) as ActivityRow[]);
       } catch (e: any) {
@@ -239,48 +235,52 @@ export default function PilihListingView() {
     };
   }, []);
 
+  // ✅ layout: filter bar full width on top, list left, detail right
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-      {/* LEFT (1/3): filters + list */}
-      <aside className="space-y-4 lg:col-span-4">
-        <div className="space-y-4 lg:sticky lg:top-20">
-          <ListingFilters
-            value={filters}
-            onChange={setFilters}
-            total={listings.length}
-            loading={loadingListings}
-          />
+    <div className="space-y-4">
+      {/* Top Filter Bar (full width look) */}
+      <div className="rounded-3xl border border-zinc-800 bg-zinc-950/40 backdrop-blur-xl px-4 py-4">
+        <ListingFilters
+          value={filters}
+          onChange={setFilters}
+          total={listings.length}
+          loading={loadingListings && page === 1}
+        />
+      </div>
 
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <div className="lg:col-span-4 space-y-3">
           <ListingList
             rows={listings}
-            loading={loadingListings}
+            loading={loadingListings && page === 1}
             selectedId={selectedId}
             onSelect={setSelectedId}
           />
+          {/* sentinel: do not remove */}
+          <div ref={loadMoreRef} className="h-1 w-full" />
+          {loadingListings && page > 1 && (
+            <div className="text-center text-xs text-zinc-400">Memuat data berikutnya…</div>
+          )}
+          {!hasMore && listings.length > 0 && (
+            <div className="text-center text-xs text-zinc-500">Sudah semua.</div>
+          )}
         </div>
-      </aside>
 
-      {/* RIGHT (2/3): detail + activity */}
-      <main className="space-y-4 lg:col-span-8">
-        <RightPanel
-          selectedListing={selectedListing}
-          activities={activities}
-          loadingActivities={loadingActivities}
-          onPickActivity={(listingId) => setSelectedId(listingId)}
-          onClosing={(id) =>
-            toast.success("Masuk flow closing", {
-              description: `Listing ${id} siap diproses.`,
-            })
-          }
-          onClear={() => setSelectedId(null)}
-        />
-
-        <div className="hidden rounded-2xl border border-zinc-800 bg-zinc-950/30 px-4 py-3 text-xs text-zinc-400 lg:block">
-          Tip: gunakan <span className="font-semibold text-zinc-200">Search</span> untuk alamat/vendor,
-          dan <span className="font-semibold text-emerald-300">Sort</span> untuk cari listing paling murah /
-          prioritas lelang.
+        <div className="lg:col-span-8">
+          <RightPanel
+            selectedListing={selectedListing}
+            activities={activities}
+            loadingActivities={loadingActivities}
+            onPickActivity={(listingId) => setSelectedId(listingId)}
+            onClosing={(id) =>
+              toast.success("Masuk flow closing", {
+                description: `Listing ${id} siap diproses.`,
+              })
+            }
+            onClear={() => setSelectedId(null)}
+          />
         </div>
-      </main>
+      </div>
     </div>
   );
 }

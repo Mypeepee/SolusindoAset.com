@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: false, // matikan Strict Mode di dev
-  turbopack: false,       // optional, pakai webpack klasik
+  reactStrictMode: false,
 
   images: {
     remotePatterns: [
@@ -41,7 +40,7 @@ const nextConfig = {
       {
         protocol: "https",
         hostname: "drive.google.com",
-        pathname: "/uc**", // lebih luas sedikit agar mencakup /uc?...
+        pathname: "/uc**",
       },
 
       // Unsplash
