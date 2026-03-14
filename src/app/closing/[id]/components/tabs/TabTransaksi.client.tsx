@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Listing } from "../../page";
 import Money from "../ui/Money";
 import { Icon } from "@iconify/react";
@@ -9,6 +9,33 @@ import { Icon } from "@iconify/react";
   Types
 ========================================= */
 export type SkemaPenjualan = "PERSENTASE" | "SELISIH";
+
+type PersistedState = {
+  step: 1 | 2 | 3;
+  deal: number;
+  bidding: number;
+  komisiStr: string;
+
+  balikNamaMode: "AUTO" | "MANUAL";
+  balikNama: number;
+  eksekusi: number;
+
+  includeBalikNama: boolean;
+  includeEksekusi: boolean;
+
+  cobroke: number;
+
+  selisihKotor: number;
+  selisihSebelumRoyalty: number;
+  royaltyFee: number;
+  selisihFinal: number;
+};
+
+type Props = {
+  listing: Listing;
+  skemaPenjualan: SkemaPenjualan;
+  onNextToPembagian?: () => void;
+};
 
 /* =========================================
   Utils: formatting & parsing
@@ -67,29 +94,9 @@ function pct2(v: number) {
 }
 
 function autoBalikNama(base: number) {
-  // 8.5% + 7jt
   if (!base || base <= 0) return 0;
   return Math.round(base * 0.085) + 7_000_000;
 }
-
-/* =========================================
-  Persistence (localStorage)
-========================================= */
-type PersistedState = {
-  step: 1 | 2 | 3;
-  deal: number;
-  bidding: number;
-  komisiStr: string;
-
-  balikNamaMode: "AUTO" | "MANUAL";
-  balikNama: number;
-  eksekusi: number;
-
-  includeBalikNama: boolean;
-  includeEksekusi: boolean;
-
-  cobroke: number;
-};
 
 function storageKey(listing: Listing) {
   return `closing:transaksi:${String(
@@ -98,13 +105,13 @@ function storageKey(listing: Listing) {
 }
 
 /* =========================================
-  UI building blocks (premium / futuristic)
+  UI building blocks
 ========================================= */
 function ShellCard({
   children,
   className = "",
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   className?: string;
 }) {
   return (
@@ -116,7 +123,6 @@ function ShellCard({
         className,
       ].join(" ")}
     >
-      {/* subtle grid + sheen */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute inset-0 opacity-[0.18] [background-image:linear-gradient(to_right,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.06)_1px,transparent_1px)] [background-size:32px_32px]" />
         <div className="absolute -top-24 -left-24 h-64 w-64 rounded-full bg-white/5 blur-3xl" />
@@ -186,7 +192,6 @@ function Stepper({ step }: { step: 1 | 2 | 3 }) {
         })}
       </div>
 
-      {/* progress bar */}
       <div className="mt-4 h-2 rounded-full bg-white/5 border border-white/10 overflow-hidden">
         <div
           className={[
@@ -199,7 +204,7 @@ function Stepper({ step }: { step: 1 | 2 | 3 }) {
   );
 }
 
-function Label({ children }: { children: React.ReactNode }) {
+function Label({ children }: { children: ReactNode }) {
   return (
     <div className="mb-1 text-[12px] font-semibold text-zinc-200">
       {children}
@@ -207,7 +212,7 @@ function Label({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Hint({ children }: { children: React.ReactNode }) {
+function Hint({ children }: { children: ReactNode }) {
   return <div className="mt-1 text-[11px] text-zinc-500">{children}</div>;
 }
 
@@ -348,7 +353,7 @@ function Toggle({
   );
 }
 
-function Warning({ children }: { children: React.ReactNode }) {
+function Warning({ children }: { children: ReactNode }) {
   return (
     <div className="mt-3 rounded-2xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
       <div className="flex items-start gap-2">
@@ -368,18 +373,16 @@ function Warning({ children }: { children: React.ReactNode }) {
 export default function TabTransaksi({
   listing,
   skemaPenjualan,
-}: {
-  listing: Listing;
-  skemaPenjualan: SkemaPenjualan;
-}) {
+  onNextToPembagian,
+}: Props) {
   const isLelang = listing.jenis_transaksi === "LELANG";
   const isSelisih = isLelang && skemaPenjualan === "SELISIH";
   const isPersen = isLelang && skemaPenjualan === "PERSENTASE";
 
-  const limit = n(listing.nilai_limit_lelang);
-
-  // ---------- local state (persisted) ----------
+  const limit = n((listing as any).nilai_limit_lelang);
   const key = storageKey(listing);
+
+  const [hydrated, setHydrated] = useState(false);
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
@@ -396,80 +399,46 @@ export default function TabTransaksi({
 
   const [cobroke, setCobroke] = useState(0);
 
-  // ---------- hydrate from localStorage ----------
   useEffect(() => {
+    setHydrated(false);
+
     try {
       const raw = localStorage.getItem(key);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as PersistedState;
+      if (raw) {
+        const parsed = JSON.parse(raw) as PersistedState;
 
-      if (parsed?.step) setStep(parsed.step);
-      setDeal(n(parsed.deal));
-      setBidding(n(parsed.bidding));
-      setKomisiStr(typeof parsed.komisiStr === "string" ? parsed.komisiStr : "2,5");
+        if (parsed?.step) setStep(parsed.step);
+        setDeal(n(parsed.deal));
+        setBidding(n(parsed.bidding));
+        setKomisiStr(typeof parsed.komisiStr === "string" ? parsed.komisiStr : "2,5");
 
-      setBalikNamaMode(parsed.balikNamaMode === "MANUAL" ? "MANUAL" : "AUTO");
-      setBalikNama(n(parsed.balikNama));
-      setEksekusi(n(parsed.eksekusi));
+        setBalikNamaMode(parsed.balikNamaMode === "MANUAL" ? "MANUAL" : "AUTO");
+        setBalikNama(n(parsed.balikNama));
+        setEksekusi(n(parsed.eksekusi));
 
-      setIncludeBalikNama(!!parsed.includeBalikNama);
-      setIncludeEksekusi(!!parsed.includeEksekusi);
+        setIncludeBalikNama(!!parsed.includeBalikNama);
+        setIncludeEksekusi(!!parsed.includeEksekusi);
 
-      setCobroke(n(parsed.cobroke));
+        setCobroke(n(parsed.cobroke));
+      }
     } catch {
       // ignore
+    } finally {
+      setHydrated(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  // ---------- persist to localStorage ----------
-  useEffect(() => {
-    const payload: PersistedState = {
-      step,
-      deal,
-      bidding,
-      komisiStr,
-      balikNamaMode,
-      balikNama,
-      eksekusi,
-      includeBalikNama,
-      includeEksekusi,
-      cobroke,
-    };
-
-    const t = window.setTimeout(() => {
-      try {
-        localStorage.setItem(key, JSON.stringify(payload));
-      } catch {
-        // ignore
-      }
-    }, 120);
-
-    return () => window.clearTimeout(t);
-  }, [
-    key,
-    step,
-    deal,
-    bidding,
-    komisiStr,
-    balikNamaMode,
-    balikNama,
-    eksekusi,
-    includeBalikNama,
-    includeEksekusi,
-    cobroke,
-  ]);
-
-  // ---------- auto balik nama ----------
   const baseBalikNama = useMemo(
     () => (isSelisih ? deal : bidding),
     [isSelisih, deal, bidding]
   );
+
   useEffect(() => {
-    if (balikNamaMode === "AUTO") setBalikNama(autoBalikNama(baseBalikNama));
+    if (balikNamaMode === "AUTO") {
+      setBalikNama(autoBalikNama(baseBalikNama));
+    }
   }, [balikNamaMode, baseBalikNama]);
 
-  // ---------- computed ----------
   const komisiPct = useMemo(() => percentToNumber(komisiStr), [komisiStr]);
 
   const biayaIncluded = useMemo(() => {
@@ -477,7 +446,6 @@ export default function TabTransaksi({
     return (includeBalikNama ? nonNeg(balikNama) : 0) + (includeEksekusi ? nonNeg(eksekusi) : 0);
   }, [isSelisih, includeBalikNama, includeEksekusi, balikNama, eksekusi]);
 
-  // VALIDATION: deal/bidding must not be < limit (lelang)
   const warnDealBelowLimit = isSelisih && limit > 0 && deal > 0 && deal < limit;
   const warnBidBelowLimit = isLelang && limit > 0 && bidding > 0 && bidding < limit;
 
@@ -498,10 +466,9 @@ export default function TabTransaksi({
   const selisihSebelumRoyalty = useMemo(() => {
     if (!isLelang) return 0;
     if (isSelisih) return nonNeg(selisihKotor - biayaIncluded);
-    return selisihKotor; // persentase: toggle biaya tidak pengaruh
+    return selisihKotor;
   }, [isLelang, isSelisih, selisihKotor, biayaIncluded]);
 
-  // Royalty fee: selisih_bersih * 3% * 10% = 0.003
   const royaltyFee = useMemo(() => {
     return Math.round(nonNeg(selisihSebelumRoyalty) * 0.003);
   }, [selisihSebelumRoyalty]);
@@ -510,12 +477,10 @@ export default function TabTransaksi({
     return nonNeg(selisihSebelumRoyalty - royaltyFee - nonNeg(cobroke));
   }, [selisihSebelumRoyalty, royaltyFee, cobroke]);
 
-  // ✅ FINAL REVISION: Komisi Agent = 40% dari Selisih Final
   const komisiAgent = useMemo(() => {
     return Math.round(nonNeg(selisihFinal) * 0.4);
   }, [selisihFinal]);
 
-  // Pendapatan bersih kantor = 39.2% dari selisih final
   const pendapatanBersihKantor = useMemo(() => {
     return Math.round(nonNeg(selisihFinal) * 0.392);
   }, [selisihFinal]);
@@ -527,20 +492,69 @@ export default function TabTransaksi({
     return (pembanding - limit) / limit;
   }, [isLelang, isSelisih, deal, bidding, limit]);
 
+  useEffect(() => {
+    if (!hydrated) return;
+
+    const payload: PersistedState = {
+      step,
+      deal,
+      bidding,
+      komisiStr,
+      balikNamaMode,
+      balikNama,
+      eksekusi,
+      includeBalikNama,
+      includeEksekusi,
+      cobroke,
+      selisihKotor,
+      selisihSebelumRoyalty,
+      royaltyFee,
+      selisihFinal,
+    };
+
+    try {
+      localStorage.setItem(key, JSON.stringify(payload));
+
+      window.dispatchEvent(
+        new CustomEvent("closing:transaksi-updated", {
+          detail: {
+            key,
+            payload,
+          },
+        })
+      );
+    } catch {
+      // ignore
+    }
+  }, [
+    hydrated,
+    key,
+    step,
+    deal,
+    bidding,
+    komisiStr,
+    balikNamaMode,
+    balikNama,
+    eksekusi,
+    includeBalikNama,
+    includeEksekusi,
+    cobroke,
+    selisihKotor,
+    selisihSebelumRoyalty,
+    royaltyFee,
+    selisihFinal,
+  ]);
+
   const next = () => setStep((s) => (s === 1 ? 2 : s === 2 ? 3 : 3));
   const back = () => setStep((s) => (s === 3 ? 2 : s === 2 ? 1 : 1));
 
   const disableNext = step === 1 && !step1Valid;
 
-  // Autofocus first field each step
   const refFirst = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     refFirst.current?.focus?.();
   }, [step]);
 
-  /* =========================================
-    Breakdown UI
-  ========================================= */
   const Breakdown = () => {
     const parts: Array<{
       label: string;
@@ -640,12 +654,10 @@ export default function TabTransaksi({
 
   return (
     <div className="grid gap-6 lg:grid-cols-12">
-      {/* LEFT: Wizard */}
       <div className="lg:col-span-7 order-1">
         <ShellCard>
           <Stepper step={step} />
 
-          {/* STEP 1 */}
           {step === 1 ? (
             <div className="space-y-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -717,11 +729,13 @@ export default function TabTransaksi({
                 <div>
                   <Label>Komisi (%)</Label>
                   <PercentInput value={komisiStr} onChange={setKomisiStr} />
-                  <Hint>Disimpan untuk data transaksi (contoh: 2,5). Komisi agent real-time mengikuti 40% selisih final.</Hint>
+                  <Hint>
+                    Disimpan untuk data transaksi (contoh: 2,5). Komisi agent real-time
+                    mengikuti 40% selisih final.
+                  </Hint>
                 </div>
               ) : null}
 
-              {/* Mobile nav (sticky bottom) */}
               <div className="mt-6 sm:mt-8 flex items-center justify-between gap-3">
                 <button
                   type="button"
@@ -750,7 +764,6 @@ export default function TabTransaksi({
             </div>
           ) : null}
 
-          {/* STEP 2 */}
           {step === 2 ? (
             <div className="space-y-5">
               <div className="flex items-center justify-between gap-3">
@@ -844,7 +857,6 @@ export default function TabTransaksi({
             </div>
           ) : null}
 
-          {/* STEP 3 */}
           {step === 3 ? (
             <div className="space-y-5">
               <div>
@@ -856,7 +868,7 @@ export default function TabTransaksi({
 
               <div className="grid gap-5 sm:grid-cols-2">
                 <div className="rounded-3xl border border-white/10 bg-black/25 p-4">
-                  <div className="text-[12px] uppercase tracking-[0.14em] text-zinc-400">
+                  <div className="text-[11px] uppercase tracking-[0.14em] text-zinc-400">
                     Royalty Fee
                   </div>
                   <div className="mt-2 text-xl font-semibold text-sky-200">
@@ -889,12 +901,12 @@ export default function TabTransaksi({
                 <button
                   type="button"
                   onClick={() => {
-                    // submit nanti sambung API
+                    onNextToPembagian?.();
                   }}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-500/12 px-5 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/16 transition"
+                  className="inline-flex items-center gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-500/12 px-5 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-500/16 transition"
                 >
-                  Simpan Transaksi
-                  <Icon icon="solar:diskette-linear" className="text-lg" />
+                  Detail Pembagian
+                  <Icon icon="solar:arrow-right-linear" className="text-lg" />
                 </button>
               </div>
             </div>
@@ -902,7 +914,6 @@ export default function TabTransaksi({
         </ShellCard>
       </div>
 
-      {/* RIGHT: Summary Panel */}
       <div className="lg:col-span-5 order-2">
         <div className="lg:sticky lg:top-4 space-y-6">
           <ShellCard className="p-0">
@@ -947,7 +958,6 @@ export default function TabTransaksi({
                   </div>
                 </div>
 
-                {/* ✅ Komisi Agent: 40% selisih final */}
                 <div className="rounded-3xl border border-white/10 bg-black/25 p-4">
                   <div className="text-[11px] uppercase tracking-[0.14em] text-zinc-400">
                     Komisi Agent
@@ -973,7 +983,7 @@ export default function TabTransaksi({
                 </div>
               </div>
 
-              {(warnDealBelowLimit || warnBidBelowLimit) ? (
+              {warnDealBelowLimit || warnBidBelowLimit ? (
                 <div className="mt-5 rounded-3xl border border-amber-400/20 bg-amber-500/10 p-4">
                   <div className="flex items-start gap-2">
                     <Icon

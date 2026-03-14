@@ -19,21 +19,41 @@ export default function ClosingTabs({
   listing: Listing;
   agent: Agent | null;
   leader: TeamLeader | null;
-  skemaPenjualan: SkemaPenjualan; // ✅ dari ClosingShell
+  skemaPenjualan: SkemaPenjualan;
 }) {
   const [step, setStep] = useState<StepKey>("TRANSAKSI");
 
   const content = useMemo(() => {
-    if (step === "TRANSAKSI")
-      return <TabTransaksi listing={listing} skemaPenjualan={skemaPenjualan} />;
-    if (step === "PROPERTY") return <TabProperty listing={listing} />;
-    if (step === "AGENT") return <TabAgent agent={agent} leader={leader} />;
-    return <TabPembagian listing={listing} agent={agent} />;
+    if (step === "TRANSAKSI") {
+      return (
+        <TabTransaksi
+          listing={listing}
+          skemaPenjualan={skemaPenjualan}
+          onNextToPembagian={() => setStep("BAGI")}
+        />
+      );
+    }
+
+    if (step === "PROPERTY") {
+      return <TabProperty listing={listing} />;
+    }
+
+    if (step === "AGENT") {
+      return <TabAgent agent={agent} leader={leader} />;
+    }
+
+    return (
+      <TabPembagian
+        listing={listing}
+        agent={agent}
+        skemaPenjualan={skemaPenjualan}
+        teamLeaderName={(leader as any)?.nama ?? ""}
+      />
+    );
   }, [step, listing, agent, leader, skemaPenjualan]);
 
   return (
     <div className="space-y-4">
-      {/* tab header kamu bebas, ini minimal */}
       <div className="flex flex-wrap gap-2">
         <button
           onClick={() => setStep("TRANSAKSI")}
