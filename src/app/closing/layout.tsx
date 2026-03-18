@@ -7,7 +7,7 @@ export default function ClosingLayout({
   children: ReactNode;
 }) {
   return (
-    <div className="hide-header-footer min-h-screen bg-black">
+    <div className="hide-header-footer min-h-screen bg-black pt-14 sm:pt-16 md:pt-12 lg:pt-0">
       {children}
     </div>
   );
