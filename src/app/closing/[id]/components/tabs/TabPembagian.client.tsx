@@ -458,8 +458,7 @@ function isCopicCode(code: string) {
 }
 
 function isPercentLockedCode(code: string) {
-  const upper = code.trim().toUpperCase();
-  return isCopicCode(upper) || upper === "FEE_TL";
+  return isCopicCode(code) || code.trim().toUpperCase() === "FEE_TL";
 }
 
 function isDeleteLockedCode(code: string) {
@@ -631,7 +630,8 @@ function applyLockedRowRules(
   rows: SplitRow[],
   closingAgentId: string,
   teamLeaderAgentId: string,
-  copicDefs: CopicDefinition[]
+  copicDefs: CopicDefinition[],
+  templateAssignments: Record<string, string>
 ): SplitRow[] {
   const copicMap = new Map(
     copicDefs.map((item) => [item.code.trim().toUpperCase(), item])
@@ -640,13 +640,11 @@ function applyLockedRowRules(
   return rows.map((row) => {
     const upper = row.code.trim().toUpperCase();
 
-    if (upper === "LISTER" || upper === "THC") {
-      if (row.agentId === closingAgentId) return row;
+    if (upper === "THC") {
       return { ...row, agentId: closingAgentId || "" };
     }
 
     if (upper === "FEE_TL") {
-      if (row.agentId === teamLeaderAgentId) return row;
       return { ...row, agentId: teamLeaderAgentId || "" };
     }
 
@@ -661,8 +659,41 @@ function applyLockedRowRules(
       };
     }
 
+    const assignedId = templateAssignments[upper] || "";
+    if (assignedId) {
+      return { ...row, agentId: assignedId };
+    }
+
     return row;
   });
+}
+
+function getDefaultAssignedAgentIdByCode(
+  code: string,
+  templateAssignments: Record<string, string>,
+  closingAgentId: string,
+  teamLeaderAgentId: string,
+  copicDefs: CopicDefinition[]
+) {
+  const upper = code.trim().toUpperCase();
+
+  if (upper === "THC") return closingAgentId || "";
+  if (upper === "FEE_TL") return teamLeaderAgentId || "";
+
+  if (isCopicCode(upper)) {
+    const found = copicDefs.find(
+      (item) => item.code.trim().toUpperCase() === upper
+    );
+    return found?.agentId ?? "";
+  }
+
+  return templateAssignments[upper] || "";
+}
+
+function getPercentDisplayForRow(row: CalculatedRow) {
+  return isPercentLockedCode(row.code)
+    ? row.effectivePercent
+    : row.effectivePercent;
 }
 
 /* =========================================
@@ -708,30 +739,29 @@ function calculateRows(rows: SplitRow[], selisihFinal: number): CalculatedRow[] 
 
   if (feeTlIndex >= 0) {
     const targetFeeTl = Math.round(Math.min(base * FEE_TL_RATE, FEE_TL_MAX));
-    const availablePool =
-      (serviceIndex >= 0 ? Math.max(0, result[serviceIndex].nominal) : 0) +
-      (rewardIndex >= 0 ? Math.max(0, result[rewardIndex].nominal) : 0) +
-      (promoIndex >= 0 ? Math.max(0, result[promoIndex].nominal) : 0);
 
-    const actualFeeTl = Math.min(targetFeeTl, availablePool);
-    let remaining = actualFeeTl;
+    let remaining = targetFeeTl;
+    let actualFeeTl = 0;
 
     if (serviceIndex >= 0 && remaining > 0) {
-      const cut = Math.min(result[serviceIndex].nominal, remaining);
+      const cut = Math.min(Math.max(0, result[serviceIndex].nominal), remaining);
       result[serviceIndex].nominal -= cut;
       remaining -= cut;
+      actualFeeTl += cut;
     }
 
     if (rewardIndex >= 0 && remaining > 0) {
-      const cut = Math.min(result[rewardIndex].nominal, remaining);
+      const cut = Math.min(Math.max(0, result[rewardIndex].nominal), remaining);
       result[rewardIndex].nominal -= cut;
       remaining -= cut;
+      actualFeeTl += cut;
     }
 
     if (promoIndex >= 0 && remaining > 0) {
-      const cut = Math.min(result[promoIndex].nominal, remaining);
+      const cut = Math.min(Math.max(0, result[promoIndex].nominal), remaining);
       result[promoIndex].nominal -= cut;
       remaining -= cut;
+      actualFeeTl += cut;
     }
 
     result[feeTlIndex].nominal = actualFeeTl;
@@ -773,17 +803,11 @@ const DEFAULT_TEMPLATE: Array<{
   code: string;
   label: string;
   percent: number;
-  defaultAgent?: "CLOSING_AGENT" | "TEAM_LEADER" | "";
 }> = [
   { code: "UP1", label: "Upline 1", percent: 0.4 },
   { code: "UP2", label: "Upline 2", percent: 0.3 },
   { code: "UP3", label: "Upline 3", percent: 0.2 },
-  {
-    code: "LISTER",
-    label: "Lister",
-    percent: 1,
-    defaultAgent: "CLOSING_AGENT",
-  },
+  { code: "LISTER", label: "Lister", percent: 1 },
   { code: "COPIC", label: "CO PIC", percent: 0.25 },
   { code: "CONS", label: "Consultant", percent: 0.85 },
   { code: "REWARD", label: "Reward Fund", percent: 3 },
@@ -794,19 +818,9 @@ const DEFAULT_TEMPLATE: Array<{
   { code: "PIC3", label: "PIC 3", percent: 4 },
   { code: "PIC4", label: "PIC 4", percent: 4 },
   { code: "PIC5", label: "PIC 5", percent: 4 },
-  {
-    code: "THC",
-    label: "THC",
-    percent: 40,
-    defaultAgent: "CLOSING_AGENT",
-  },
+  { code: "THC", label: "THC", percent: 40 },
   { code: "SERVICE", label: "Service Fund", percent: 10 },
-  {
-    code: "FEE_TL",
-    label: "Fee Team Leader",
-    percent: 0,
-    defaultAgent: "TEAM_LEADER",
-  },
+  { code: "FEE_TL", label: "Fee Team Leader", percent: 0 },
   { code: "PRINC_FEE", label: "Principal Fee", percent: 3 },
   { code: "INV_SHARE", label: "Investor Sharing", percent: 9.52 },
   { code: "MGMT_FUND1", label: "Management Fund 1", percent: 2.97 },
@@ -814,25 +828,17 @@ const DEFAULT_TEMPLATE: Array<{
   { code: "EMP_INC", label: "Employee Incentive", percent: 1.53 },
 ];
 
-function buildDefaultRows(
-  closingAgentId: string,
-  teamLeaderAgentId: string
-): SplitRow[] {
+function buildDefaultRows(): SplitRow[] {
   return DEFAULT_TEMPLATE.map((item) => ({
     id: uid(item.code.toLowerCase()),
     code: item.code,
     label: item.label,
     percent: item.percent,
-    agentId:
-      item.defaultAgent === "CLOSING_AGENT"
-        ? closingAgentId
-        : item.defaultAgent === "TEAM_LEADER"
-        ? teamLeaderAgentId
-        : "",
+    agentId: "",
   }));
 }
 
-const LOCKED_AGENT_CODES = new Set(["LISTER", "THC", "FEE_TL"]);
+const LOCKED_AGENT_CODES = new Set(["THC", "FEE_TL"]);
 
 /* =========================================
   Main
@@ -1183,16 +1189,50 @@ export default function TabPembagian({
     );
   }, [baseAgentCatalog, copicSyntheticAgents]);
 
+  const templateAssignments = useMemo<Record<string, string>>(() => {
+    const byName = (name: string) => findAgentIdByName(agentCatalog, name);
+
+    return {
+      LISTER: byName("Jason Christopher Liendo"),
+      EMP_INC: byName("Jason Christopher Liendo"),
+      INV_SHARE: byName("Jason Christopher Liendo"),
+      MGMT_FUND2: byName("Jason Christopher Liendo"),
+
+      CONS: byName("Stella"),
+      PIC4: byName("Stella"),
+
+      REWARD: byName("Lie Ming"),
+      INV_FUND: byName("Lie Ming"),
+      PROMO_FUND: byName("Lie Ming"),
+      MGMT_FUND1: byName("Lie Ming"),
+      PIC1: byName("Lie Ming"),
+      SERVICE: byName("Lie Ming"),
+
+      PIC2: byName("Grace Kumalasutji"),
+      PRINC_FEE: byName("Grace Kumalasutji"),
+
+      PIC3: byName("Shintya Resty Rahayu"),
+
+      PIC5: byName("Agnesia"),
+    };
+  }, [agentCatalog]);
+
   const defaultRows = useMemo(() => {
-    const baseDefaults = buildDefaultRows(closingAgentId, teamLeaderAgentId);
+    const baseDefaults = buildDefaultRows();
     const withCopic = buildRowsWithDynamicCopic(baseDefaults, copicDefinitions);
     return applyLockedRowRules(
       withCopic,
       closingAgentId,
       teamLeaderAgentId,
-      copicDefinitions
+      copicDefinitions,
+      templateAssignments
     );
-  }, [closingAgentId, teamLeaderAgentId, copicDefinitions]);
+  }, [
+    closingAgentId,
+    teamLeaderAgentId,
+    copicDefinitions,
+    templateAssignments,
+  ]);
 
   useEffect(() => {
     setLoadedTransaksi(false);
@@ -1217,7 +1257,7 @@ export default function TabPembagian({
       const normalized = raw
         ? normalizeStoredRows(
             JSON.parse(raw),
-            buildDefaultRows(closingAgentId, teamLeaderAgentId),
+            buildDefaultRows(),
             agentCatalog,
             copicDefinitions
           )
@@ -1228,7 +1268,8 @@ export default function TabPembagian({
           normalized,
           closingAgentId,
           teamLeaderAgentId,
-          copicDefinitions
+          copicDefinitions,
+          templateAssignments
         )
       );
     } catch {
@@ -1243,6 +1284,7 @@ export default function TabPembagian({
     copicDefinitions,
     closingAgentId,
     teamLeaderAgentId,
+    templateAssignments,
   ]);
 
   useEffect(() => {
@@ -1289,7 +1331,8 @@ export default function TabPembagian({
         buildRowsWithDynamicCopic(prev, copicDefinitions),
         closingAgentId,
         teamLeaderAgentId,
-        copicDefinitions
+        copicDefinitions,
+        templateAssignments
       );
 
       const same =
@@ -1313,26 +1356,20 @@ export default function TabPembagian({
     copicDefinitions,
     closingAgentId,
     teamLeaderAgentId,
+    templateAssignments,
   ]);
 
   const getLockedAgentIdByCode = useCallback(
     (code: string) => {
-      const upper = code.trim().toUpperCase();
-      if (upper === "LISTER" || upper === "THC") {
-        return closingAgentId || "";
-      }
-      if (upper === "FEE_TL") {
-        return teamLeaderAgentId || "";
-      }
-      if (isCopicCode(upper)) {
-        const def = copicDefinitions.find(
-          (item) => item.code.trim().toUpperCase() === upper
-        );
-        return def?.agentId ?? "";
-      }
-      return "";
+      return getDefaultAssignedAgentIdByCode(
+        code,
+        templateAssignments,
+        closingAgentId,
+        teamLeaderAgentId,
+        copicDefinitions
+      );
     },
-    [closingAgentId, teamLeaderAgentId, copicDefinitions]
+    [templateAssignments, closingAgentId, teamLeaderAgentId, copicDefinitions]
   );
 
   const isLockedAgentCode = useCallback((code: string) => {
@@ -1356,6 +1393,12 @@ export default function TabPembagian({
     () => calculateRows(rows, selisihFinal),
     [rows, selisihFinal]
   );
+
+  const calculatedMap = useMemo(() => {
+    const map = new Map<string, CalculatedRow>();
+    for (const row of rowsCalculated) map.set(row.id, row);
+    return map;
+  }, [rowsCalculated]);
 
   const totalPercent = useMemo(() => {
     return Number(
@@ -1560,7 +1603,10 @@ export default function TabPembagian({
                   </div>
 
                   <div className="divide-y divide-zinc-900/90">
-                    {rowsCalculated.map((row) => {
+                    {rows.map((row) => {
+                      const calc = calculatedMap.get(row.id);
+                      if (!calc) return null;
+
                       const agentLocked = isLockedAgentCode(row.code);
                       const percentLocked = isPercentLockedCode(row.code);
                       const deleteLocked = isDeleteLockedCode(row.code);
@@ -1569,6 +1615,8 @@ export default function TabPembagian({
                           item.code.trim().toUpperCase() ===
                           row.code.trim().toUpperCase()
                       );
+
+                      const shownPercent = getPercentDisplayForRow(calc);
 
                       return (
                         <div
@@ -1606,7 +1654,7 @@ export default function TabPembagian({
 
                             <MobileField label="Porsi (%)">
                               <PercentField
-                                value={row.percent}
+                                value={shownPercent}
                                 onChange={(value) =>
                                   updateRow(row.id, { percent: value })
                                 }
@@ -1616,7 +1664,7 @@ export default function TabPembagian({
 
                             <MobileField label="Nominal">
                               <ValueField>
-                                <Money value={row.nominal} />
+                                <Money value={calc.nominal} />
                               </ValueField>
                             </MobileField>
 
@@ -1645,7 +1693,7 @@ export default function TabPembagian({
 
                           <div className="hidden md:block">
                             <PercentField
-                              value={row.percent}
+                              value={shownPercent}
                               onChange={(value) =>
                                 updateRow(row.id, { percent: value })
                               }
@@ -1655,7 +1703,7 @@ export default function TabPembagian({
 
                           <div className="hidden md:block">
                             <ValueField>
-                              <Money value={row.nominal} />
+                              <Money value={calc.nominal} />
                             </ValueField>
                           </div>
 
