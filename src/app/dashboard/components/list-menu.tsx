@@ -14,8 +14,8 @@ export interface MenuItem {
       href: "/dashboard/listings",
     },
     {
-      label: "HRM",
-      icon: "solar:user-hand-up-linear",
+      label: "Agents", 
+      icon: "solar:user-id-linear", 
       href: "/dashboard/human-resource-management",
     },
     {
@@ -24,13 +24,13 @@ export interface MenuItem {
       href: "/dashboard/transaksi",
     },
     { 
-      label: "Agents", 
-      icon: "solar:user-id-linear", 
-      href: "/dashboard/agents" 
+      label: "Project", 
+      icon: "solar:presentation-graph-linear", 
+      href: "/dashboard/project" 
     },
     {
       label: "Analytics",
-      icon: "solar:chart-square-linear",
+      icon: "solar:chart-2-linear",
       href: "/dashboard/analytics",
     },
     {
