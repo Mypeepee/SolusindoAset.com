@@ -11,6 +11,15 @@ import type {
     status_pembayaran_project_enum,
   } from "./types";
   
+  function toSafeNumber(value?: number | string | null) {
+    const numeric = Number(value ?? 0);
+    return Number.isFinite(numeric) ? numeric : 0;
+  }
+  
+  function toNonNegativeNumber(value?: number | string | null) {
+    return Math.max(0, toSafeNumber(value));
+  }
+  
   export function formatCurrency(value?: number | null) {
     const numeric = Number(value ?? 0);
   
@@ -184,13 +193,13 @@ import type {
   export function getBiayaBalikNamaBreakdown(
     acquisitionBase: number
   ): BiayaBalikNamaBreakdown {
-    const base = Number(acquisitionBase || 0);
+    const base = toNonNegativeNumber(acquisitionBase);
   
-    const bea_lelang = base * 0.02;
-    const bphtb = base * 0.05;
-    const ppn_lelang = base * 0.011;
-    const roya = base * 0.001;
-    const balik_nama = base * 0.002;
+    const bea_lelang = base * 0.02; // 2%
+    const bphtb = base * 0.05; // 5%
+    const ppn_lelang = base * 0.011; // 1.1%
+    const balik_nama = base * 0.001; // 0.1%
+    const roya = 75000; // flat
   
     return {
       bea_lelang,
@@ -198,7 +207,7 @@ import type {
       ppn_lelang,
       roya,
       balik_nama,
-      total: bea_lelang + bphtb + ppn_lelang + roya + balik_nama,
+      total: bea_lelang + bphtb + ppn_lelang + balik_nama + roya,
     };
   }
   
@@ -210,47 +219,55 @@ import type {
       | "spare_bidding"
       | "biaya_balik_nama"
       | "biaya_eksekusi"
+      | "biaya_renov"
       | "target_pendanaan"
     >
   ): AcquisitionFinancials {
-    const nilaiLimitLelang = Number(form.nilai_limit_lelang || 0);
-    const hargaPembelian = Number(form.harga_pembelian || 0);
+    const nilaiLimitLelang = toNonNegativeNumber(form.nilai_limit_lelang);
+    const hargaPembelianInput = toNonNegativeNumber(form.harga_pembelian);
   
     const acquisition_base =
-      nilaiLimitLelang > 0 ? nilaiLimitLelang : hargaPembelian;
+      nilaiLimitLelang > 0 ? nilaiLimitLelang : hargaPembelianInput;
   
     const acquisition_base_label =
-      nilaiLimitLelang > 0 ? "Nilai Limit Lelang" : "Harga Pembelian";
+      nilaiLimitLelang > 0 ? "Nilai Limit Lelang" : "Harga Dasar Property";
   
-    const spare_bidding = Number(form.spare_bidding || 0);
-    const biaya_eksekusi = Number(form.biaya_eksekusi || 0);
-    const target_pendanaan = Number(form.target_pendanaan || 0);
+    const biaya_balik_nama_base =
+      nilaiLimitLelang > 0 ? nilaiLimitLelang : acquisition_base;
   
-    const auto_breakdown = getBiayaBalikNamaBreakdown(acquisition_base);
-    const manualBiayaBalikNama = Number(form.biaya_balik_nama || 0);
+    const biaya_balik_nama_base_label =
+      nilaiLimitLelang > 0 ? "Nilai Limit Lelang" : acquisition_base_label;
   
-    const biaya_balik_nama_total =
-      manualBiayaBalikNama > 0 ? manualBiayaBalikNama : auto_breakdown.total;
+    const spare_bidding = toNonNegativeNumber(form.spare_bidding);
+    const biaya_eksekusi = toNonNegativeNumber(form.biaya_eksekusi);
+    const biaya_renov = toNonNegativeNumber(form.biaya_renov);
+    const target_pendanaan = toNonNegativeNumber(form.target_pendanaan);
   
-    const biaya_balik_nama = {
-      ...auto_breakdown,
-      total: biaya_balik_nama_total,
-    };
+    const biaya_balik_nama = getBiayaBalikNamaBreakdown(
+      biaya_balik_nama_base
+    );
+  
+    const harga_menang_lelang = acquisition_base + spare_bidding;
   
     const total_biaya_akuisisi =
       acquisition_base +
       spare_bidding +
       biaya_balik_nama.total +
-      biaya_eksekusi;
+      biaya_eksekusi +
+      biaya_renov;
   
     const dana_cadangan = target_pendanaan - total_biaya_akuisisi;
   
     return {
       acquisition_base_label,
       acquisition_base,
+      biaya_balik_nama_base_label,
+      biaya_balik_nama_base,
+      harga_menang_lelang,
       spare_bidding,
       biaya_balik_nama,
       biaya_eksekusi,
+      biaya_renov,
       total_biaya_akuisisi,
       dana_cadangan,
       target_pendanaan,
@@ -353,6 +370,10 @@ import type {
             0
           );
   
+    const estimasi_harga_jual = toNonNegativeNumber(form.estimasi_harga_jual);
+    const estimasi_profit_bersih =
+      estimasi_harga_jual - financials.total_biaya_akuisisi;
+  
     return {
       id_listing: String(form.id_listing ?? "").trim(),
   
@@ -365,10 +386,10 @@ import type {
       gambar_thumbnail: normalizeImageUrl(form.gambar_thumbnail),
   
       tanggal_pembelian: form.tanggal_pembelian,
-      harga_pembelian: Number(form.harga_pembelian || 0),
-      estimasi_harga_jual: Number(form.estimasi_harga_jual || 0),
-      estimasi_profit_bersih: Number(form.estimasi_profit_bersih || 0),
-      target_pendanaan: Number(form.target_pendanaan || 0),
+      harga_pembelian: Number(financials.total_biaya_akuisisi || 0),
+      estimasi_harga_jual,
+      estimasi_profit_bersih: Number(estimasi_profit_bersih || 0),
+      target_pendanaan: Number(financials.target_pendanaan || 0),
       total_pendanaan: Number(derivedTotalPendanaan || 0),
   
       jenis_pendanaan: form.jenis_pendanaan,
@@ -382,11 +403,11 @@ import type {
       deskripsi_project: form.deskripsi_project.trim(),
       dibuat_oleh: String(form.dibuat_oleh || "").trim(),
   
-      nilai_limit_lelang: Number(form.nilai_limit_lelang || 0),
-      spare_bidding: Number(form.spare_bidding || 0),
+      nilai_limit_lelang: Number(financials.acquisition_base || 0),
+      spare_bidding: Number(financials.spare_bidding || 0),
       biaya_balik_nama: Number(financials.biaya_balik_nama.total || 0),
-      biaya_eksekusi: Number(form.biaya_eksekusi || 0),
-      biaya_renov: Number(form.biaya_renov || 0),
+      biaya_eksekusi: Number(financials.biaya_eksekusi || 0),
+      biaya_renov: Number(financials.biaya_renov || 0),
       total_biaya_akuisisi: Number(financials.total_biaya_akuisisi || 0),
       dana_cadangan: Number(financials.dana_cadangan || 0),
   

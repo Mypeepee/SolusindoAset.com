@@ -1,7 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Building2, MapPinned, Ruler, ShieldCheck } from "lucide-react";
+import { useMemo, useState, useEffect } from "react";
+import {
+  Building2,
+  MapPinned,
+  Ruler,
+  ShieldCheck,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import type {
   CreateProjectFormValues,
   ListingOption,
@@ -20,6 +28,7 @@ type Props = {
   hargaPembelianComputed: number;
   profitComputed: number;
   roiPercent: number;
+  onTanggalPembelianChange?: (value: string | null) => void;
 };
 
 function formatArea(value?: number | null) {
@@ -52,10 +61,231 @@ function getPrimaryImage(
   );
 }
 
+function parseISODate(value?: string | null) {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+}
+
+function formatISODate(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function isSameDay(a: Date, b: Date) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function addMonths(date: Date, months: number) {
+  return new Date(date.getFullYear(), date.getMonth() + months, 1);
+}
+
+function getMonthCells(viewDate: Date) {
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+
+  const firstDayOfMonth = new Date(year, month, 1);
+  const startOffset = firstDayOfMonth.getDay();
+  const startDate = new Date(year, month, 1 - startOffset);
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(startDate);
+    date.setDate(startDate.getDate() + index);
+
+    return {
+      date,
+      inMonth: date.getMonth() === month,
+      isToday: isSameDay(date, new Date()),
+    };
+  });
+}
+
+function formatLongDate(
+  value?: string | null,
+  placeholder = "Pilih tanggal pembelian"
+) {
+  const parsed = parseISODate(value);
+  if (!parsed) return placeholder;
+
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(parsed);
+}
+
+type InlineFancyDatePickerProps = {
+  value?: string | null;
+  onChange?: (value: string | null) => void;
+};
+
+function InlineFancyDatePicker({
+  value,
+  onChange,
+}: InlineFancyDatePickerProps) {
+  const selectedDate = parseISODate(value);
+  const [viewDate, setViewDate] = useState<Date>(selectedDate ?? new Date());
+
+  useEffect(() => {
+    if (selectedDate) {
+      setViewDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
+    }
+  }, [value]);
+
+  const cells = useMemo(() => getMonthCells(viewDate), [viewDate]);
+
+  const monthLabel = new Intl.DateTimeFormat("id-ID", {
+    month: "long",
+    year: "numeric",
+  }).format(viewDate);
+
+  const weekdayLabels = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+
+  function applyDate(date: Date) {
+    onChange?.(formatISODate(date));
+  }
+
+  return (
+    <div className="rounded-[22px] border border-white/10 bg-black/10 p-3">
+      <div className="rounded-[24px] border border-white/10 bg-[#09111d]/95 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.28)] backdrop-blur-2xl">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] text-white">
+              <CalendarDays className="h-5 w-5" />
+            </div>
+
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-white">
+                Tanggal pembelian project
+              </p>
+              <p className="mt-1 truncate text-xs text-slate-400">
+                {formatLongDate(value)}
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-200">
+            Inline
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => setViewDate((prev) => addMonths(prev, -1))}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-slate-300 transition hover:border-white/15 hover:bg-white/[0.06]"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+
+          <p className="text-sm font-semibold capitalize text-white">
+            {monthLabel}
+          </p>
+
+          <button
+            type="button"
+            onClick={() => setViewDate((prev) => addMonths(prev, 1))}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-slate-300 transition hover:border-white/15 hover:bg-white/[0.06]"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="mt-4 grid grid-cols-7 gap-2">
+          {weekdayLabels.map((day) => (
+            <div
+              key={day}
+              className="flex h-9 items-center justify-center text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500"
+            >
+              {day}
+            </div>
+          ))}
+
+          {cells.map((cell) => {
+            const selected = selectedDate ? isSameDay(cell.date, selectedDate) : false;
+
+            return (
+              <button
+                key={cell.date.toISOString()}
+                type="button"
+                onClick={() => applyDate(cell.date)}
+                className={`flex h-11 items-center justify-center rounded-2xl text-sm font-semibold transition ${
+                  selected
+                    ? "border border-emerald-400/20 bg-emerald-500/15 text-emerald-200 shadow-[0_0_0_1px_rgba(16,185,129,0.06),0_10px_24px_rgba(16,185,129,0.10)]"
+                    : cell.inMonth
+                    ? "border border-white/8 bg-white/[0.03] text-white hover:border-white/15 hover:bg-white/[0.05]"
+                    : "border border-transparent bg-transparent text-slate-600 hover:bg-white/[0.03]"
+                }`}
+              >
+                {cell.date.getDate()}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          <button
+            type="button"
+            onClick={() => applyDate(new Date())}
+            className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm font-semibold text-white transition hover:border-white/15 hover:bg-white/[0.06]"
+          >
+            Hari ini
+          </button>
+          <button
+            type="button"
+            onClick={() => applyDate(addDays(new Date(), 7))}
+            className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm font-semibold text-white transition hover:border-white/15 hover:bg-white/[0.06]"
+          >
+            +7 hari
+          </button>
+          <button
+            type="button"
+            onClick={() => applyDate(addDays(new Date(), 14))}
+            className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm font-semibold text-white transition hover:border-white/15 hover:bg-white/[0.06]"
+          >
+            +14 hari
+          </button>
+        </div>
+
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-[20px] border border-white/8 bg-black/20 px-4 py-3">
+          <div>
+            <p className="text-xs text-slate-500">Tanggal terpilih</p>
+            <p className="mt-1 text-sm font-semibold text-white">
+              {formatLongDate(value)}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onChange?.(null)}
+            className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-white/15 hover:bg-white/[0.06]"
+          >
+            Hapus
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SummaryPanel({
   selectedListing,
   form,
   theme,
+  onTanggalPembelianChange,
 }: Props) {
   const ThemeIcon = theme.icon;
   const [imageFailed, setImageFailed] = useState(false);
@@ -238,6 +468,11 @@ export default function SummaryPanel({
                 })}
               </div>
             </div>
+
+            <InlineFancyDatePicker
+              value={form.tanggal_pembelian}
+              onChange={onTanggalPembelianChange}
+            />
           </div>
         </div>
       </section>

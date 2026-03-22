@@ -194,13 +194,21 @@ export default function AddProjectModal({
     const issues: string[] = [];
 
     if (!form.id_listing) issues.push("Pilih property terlebih dahulu.");
+    if (!form.tanggal_pembelian) {
+      issues.push("Tanggal pembelian project wajib dipilih.");
+    }
     if (trimmedTitle.length <= 4) issues.push("Judul project minimal 5 karakter.");
     if (trimmedDescription.length <= 10) {
       issues.push("Deskripsi project minimal 11 karakter.");
     }
 
     return issues;
-  }, [form.id_listing, trimmedTitle, trimmedDescription]);
+  }, [
+    form.id_listing,
+    form.tanggal_pembelian,
+    trimmedTitle,
+    trimmedDescription,
+  ]);
 
   const stepOneValid = stepOneIssues.length === 0;
 
@@ -497,6 +505,9 @@ export default function AddProjectModal({
                       hargaPembelianComputed={hargaPembelianComputed}
                       profitComputed={profitComputed}
                       roiPercent={roiPercent}
+                      onTanggalPembelianChange={(value) =>
+                        updateField("tanggal_pembelian", value)
+                      }
                     />
                   </div>
                 ) : null}
@@ -509,7 +520,8 @@ export default function AddProjectModal({
                   {step === 1 ? (
                     <>
                       <div>
-                        Pilih property, isi judul project, dan deskripsi project.
+                        Pilih property, isi judul project, tanggal pembelian, dan
+                        deskripsi project.
                       </div>
 
                       <div className="space-y-1">
@@ -521,6 +533,16 @@ export default function AddProjectModal({
                             }
                           >
                             {form.id_listing ? "siap" : "belum"}
+                          </span>
+                          , tanggal pembelian{" "}
+                          <span
+                            className={
+                              form.tanggal_pembelian
+                                ? "text-emerald-300"
+                                : "text-rose-300"
+                            }
+                          >
+                            {form.tanggal_pembelian ? "siap" : "belum"}
                           </span>
                           , judul{" "}
                           <span

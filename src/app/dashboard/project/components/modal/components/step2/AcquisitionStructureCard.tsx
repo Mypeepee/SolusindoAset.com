@@ -13,6 +13,7 @@ import Field from "../common/Field";
 import {
   formatCurrency,
   formatNumberDots,
+  getBiayaBalikNamaBreakdown,
   parseFormattedNumber,
 } from "../../utils";
 
@@ -72,24 +73,42 @@ export default function AcquisitionStructureCard({
   isLelang,
   listingBasisValue,
   sourceLabel,
-  biayaBalikNamaComputed,
+  biayaBalikNamaComputed: _biayaBalikNamaComputed,
   updateField,
   inputClassName,
 }: Props) {
   const premiumInputClassName = getInputClassName(inputClassName);
 
-  const hargaMenangLelang =
-    Number(form.nilai_limit_lelang || 0) + Number(form.spare_bidding || 0);
+  const nilaiLimitLelang = Number(form.nilai_limit_lelang || 0);
+  const spareBidding = Number(form.spare_bidding || 0);
 
-  const biayaBeaLelang = hargaMenangLelang * 0.02;
-  const biayaBphtb = hargaMenangLelang * 0.05;
-  const biayaPpnLelang = hargaMenangLelang * 0.011;
-  const biayaRoya = hargaMenangLelang * 0.002;
-  const biayaBalikNamaAdmin = hargaMenangLelang * 0.001;
+  const hargaMenangLelang = nilaiLimitLelang + spareBidding;
+
+  // IMPORTANT:
+  // biaya balik nama dihitung dari nilai_limit_lelang saja
+  // BUKAN dari hargaMenangLelang
+  const biayaBalikNamaBreakdown =
+    getBiayaBalikNamaBreakdown(nilaiLimitLelang);
+
+  const biayaBeaLelang = Number(biayaBalikNamaBreakdown.bea_lelang || 0);
+  const biayaBphtb = Number(biayaBalikNamaBreakdown.bphtb || 0);
+  const biayaPpnLelang = Number(biayaBalikNamaBreakdown.ppn_lelang || 0);
+  const biayaBalikNamaAdmin = Number(
+    biayaBalikNamaBreakdown.balik_nama || 0
+  );
+  const biayaRoya = Number(biayaBalikNamaBreakdown.roya || 0);
+
+  const biayaBalikNamaFinal =
+    biayaBeaLelang +
+    biayaBphtb +
+    biayaPpnLelang +
+    biayaBalikNamaAdmin +
+    biayaRoya;
 
   const totalAkuisisiProperty =
-    hargaMenangLelang +
-    Number(form.biaya_balik_nama || 0) +
+    nilaiLimitLelang +
+    spareBidding +
+    biayaBalikNamaFinal +
     Number(form.biaya_eksekusi || 0) +
     Number(form.biaya_renov || 0);
 
@@ -196,11 +215,11 @@ export default function AcquisitionStructureCard({
               <Field
                 label="Biaya Balik Nama"
                 icon={ShieldCheck}
-                helper="Otomatis dihitung 8,5% dari harga menang."
+                helper="Otomatis dihitung dari nilai limit lelang: 8,2% + roya Rp75.000."
               >
                 <input
                   type="text"
-                  value={formatCurrency(biayaBalikNamaComputed)}
+                  value={formatCurrency(biayaBalikNamaFinal)}
                   readOnly
                   className={`${premiumInputClassName} cursor-not-allowed opacity-95`}
                 />
@@ -270,7 +289,7 @@ export default function AcquisitionStructureCard({
               <SummaryRow
                 icon={Wallet}
                 label="Harga Menang Lelang"
-                helper="Nilai property + spare bidding"
+                helper="Nilai limit lelang + spare bidding"
                 value={formatCurrency(hargaMenangLelang)}
               />
 
@@ -286,13 +305,13 @@ export default function AcquisitionStructureCard({
                         Biaya Balik Nama
                       </p>
                       <p className="mt-1 text-sm text-slate-400">
-                        8,5% dari harga menang lelang
+                        Dihitung dari nilai limit lelang saja: 8,2% + roya flat Rp75.000
                       </p>
                     </div>
                   </div>
 
                   <p className="shrink-0 text-lg font-bold text-white">
-                    {formatCurrency(form.biaya_balik_nama)}
+                    {formatCurrency(biayaBalikNamaFinal)}
                   </p>
                 </div>
 
@@ -326,7 +345,7 @@ export default function AcquisitionStructureCard({
 
                   <div className="rounded-[14px] border border-white/8 bg-white/[0.02] px-3 py-2.5">
                     <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
-                      Roya 0,2%
+                      Roya Flat
                     </p>
                     <p className="mt-1 text-sm font-semibold text-white">
                       {formatCurrency(biayaRoya)}
@@ -354,7 +373,7 @@ export default function AcquisitionStructureCard({
                     Total Akuisisi Property
                   </p>
                   <p className="mt-1 max-w-2xl text-sm leading-6 text-emerald-100/80">
-                    Harga menang lelang + biaya balik nama + biaya eksekusi +
+                    Nilai limit lelang + spare bidding + biaya balik nama + biaya eksekusi +
                     biaya renov.
                   </p>
                 </div>
@@ -370,21 +389,21 @@ export default function AcquisitionStructureCard({
                 <span className="text-slate-300">
                   <span className="text-slate-500">Property</span>{" "}
                   <span className="font-semibold text-white">
-                    {formatCurrency(form.nilai_limit_lelang)}
+                    {formatCurrency(nilaiLimitLelang)}
                   </span>
                 </span>
 
                 <span className="text-slate-300">
                   <span className="text-slate-500">Spare</span>{" "}
                   <span className="font-semibold text-white">
-                    {formatCurrency(form.spare_bidding)}
+                    {formatCurrency(spareBidding)}
                   </span>
                 </span>
 
                 <span className="text-slate-300">
                   <span className="text-slate-500">Balik Nama</span>{" "}
                   <span className="font-semibold text-white">
-                    {formatCurrency(form.biaya_balik_nama)}
+                    {formatCurrency(biayaBalikNamaFinal)}
                   </span>
                 </span>
 

@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Globe2,
@@ -13,7 +12,6 @@ import {
   Search,
   Trash2,
   Users,
-  Wallet,
 } from "lucide-react";
 
 import type {
@@ -28,7 +26,7 @@ import {
   createEmptyInvestorAllocation,
   formatCurrency,
   formatNumberDots,
-  getProjectAcquisitionFinancials,
+  getBiayaBalikNamaBreakdown,
   normalizeImageUrl,
   parseFormattedNumber,
 } from "../../utils";
@@ -227,30 +225,14 @@ type FancyDatePickerProps = {
 };
 
 function FancyDatePicker({ value, onChange }: FancyDatePickerProps) {
-  const rootRef = useRef<HTMLDivElement | null>(null);
   const selectedDate = parseISODate(value);
-  const [open, setOpen] = useState(false);
-  const [viewDate, setViewDate] = useState<Date>(
-    selectedDate ?? new Date()
-  );
+  const [viewDate, setViewDate] = useState<Date>(selectedDate ?? new Date());
 
   useEffect(() => {
     if (selectedDate) {
       setViewDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
     }
-  }, [value]);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (!rootRef.current) return;
-      if (!rootRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [value, selectedDate]);
 
   const cells = useMemo(() => getMonthCells(viewDate), [viewDate]);
 
@@ -263,19 +245,12 @@ function FancyDatePicker({ value, onChange }: FancyDatePickerProps) {
 
   function applyDate(date: Date) {
     onChange(formatISODate(date));
-    setOpen(false);
   }
 
   return (
-    <div ref={rootRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className={`flex h-16 w-full items-center justify-between rounded-[24px] border border-white/10 bg-white/[0.04] px-4 text-left transition hover:border-white/15 hover:bg-white/[0.055] ${
-          open ? "border-white/20 bg-white/[0.06]" : ""
-        }`}
-      >
-        <div className="flex min-w-0 items-center gap-3">
+    <div className="rounded-[28px] border border-white/10 bg-[#09111d]/95 p-4 shadow-[0_32px_80px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] text-white">
             <CalendarDays className="h-5 w-5" />
           </div>
@@ -290,111 +265,105 @@ function FancyDatePicker({ value, onChange }: FancyDatePickerProps) {
           </div>
         </div>
 
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 text-slate-400 transition ${
-            open ? "rotate-180" : ""
-          }`}
-        />
-      </button>
-
-      {open ? (
-        <div className="absolute left-0 right-0 z-40 mt-3 rounded-[28px] border border-white/10 bg-[#09111d]/95 p-4 shadow-[0_32px_80px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
-          <div className="flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={() => setViewDate((prev) => addMonths(prev, -1))}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-slate-300 transition hover:border-white/15 hover:bg-white/[0.06]"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-
-            <p className="text-sm font-semibold capitalize text-white">
-              {monthLabel}
-            </p>
-
-            <button
-              type="button"
-              onClick={() => setViewDate((prev) => addMonths(prev, 1))}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-slate-300 transition hover:border-white/15 hover:bg-white/[0.06]"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-
-          <div className="mt-4 grid grid-cols-7 gap-2">
-            {weekdayLabels.map((day) => (
-              <div
-                key={day}
-                className="flex h-9 items-center justify-center text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500"
-              >
-                {day}
-              </div>
-            ))}
-
-            {cells.map((cell) => {
-              const selected = selectedDate ? isSameDay(cell.date, selectedDate) : false;
-
-              return (
-                <button
-                  key={cell.date.toISOString()}
-                  type="button"
-                  onClick={() => applyDate(cell.date)}
-                  className={`flex h-11 items-center justify-center rounded-2xl text-sm font-semibold transition ${
-                    selected
-                      ? "border border-emerald-400/20 bg-emerald-500/15 text-emerald-200"
-                      : cell.inMonth
-                      ? "border border-white/8 bg-white/[0.03] text-white hover:border-white/15 hover:bg-white/[0.05]"
-                      : "border border-transparent bg-transparent text-slate-600 hover:bg-white/[0.03]"
-                  }`}
-                >
-                  {cell.date.getDate()}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-4 grid gap-2 sm:grid-cols-3">
-            <button
-              type="button"
-              onClick={() => applyDate(new Date())}
-              className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm font-semibold text-white transition hover:border-white/15 hover:bg-white/[0.06]"
-            >
-              Hari ini
-            </button>
-            <button
-              type="button"
-              onClick={() => applyDate(addDays(new Date(), 7))}
-              className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm font-semibold text-white transition hover:border-white/15 hover:bg-white/[0.06]"
-            >
-              +7 hari
-            </button>
-            <button
-              type="button"
-              onClick={() => applyDate(addDays(new Date(), 14))}
-              className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm font-semibold text-white transition hover:border-white/15 hover:bg-white/[0.06]"
-            >
-              +14 hari
-            </button>
-          </div>
-
-          <div className="mt-3 flex items-center justify-between gap-3 rounded-[20px] border border-white/8 bg-black/20 px-4 py-3">
-            <div>
-              <p className="text-xs text-slate-500">Tanggal terpilih</p>
-              <p className="mt-1 text-sm font-semibold text-white">
-                {formatLongDate(value)}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => onChange(null)}
-              className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-white/15 hover:bg-white/[0.06]"
-            >
-              Hapus
-            </button>
-          </div>
+        <div className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-200">
+          Inline
         </div>
-      ) : null}
+      </div>
+
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => setViewDate((prev) => addMonths(prev, -1))}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-slate-300 transition hover:border-white/15 hover:bg-white/[0.06]"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+
+        <p className="text-sm font-semibold capitalize text-white">
+          {monthLabel}
+        </p>
+
+        <button
+          type="button"
+          onClick={() => setViewDate((prev) => addMonths(prev, 1))}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-slate-300 transition hover:border-white/15 hover:bg-white/[0.06]"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="mt-4 grid grid-cols-7 gap-2">
+        {weekdayLabels.map((day) => (
+          <div
+            key={day}
+            className="flex h-9 items-center justify-center text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500"
+          >
+            {day}
+          </div>
+        ))}
+
+        {cells.map((cell) => {
+          const selected = selectedDate ? isSameDay(cell.date, selectedDate) : false;
+
+          return (
+            <button
+              key={cell.date.toISOString()}
+              type="button"
+              onClick={() => applyDate(cell.date)}
+              className={`flex h-11 items-center justify-center rounded-2xl text-sm font-semibold transition ${
+                selected
+                  ? "border border-emerald-400/20 bg-emerald-500/15 text-emerald-200"
+                  : cell.inMonth
+                  ? "border border-white/8 bg-white/[0.03] text-white hover:border-white/15 hover:bg-white/[0.05]"
+                  : "border border-transparent bg-transparent text-slate-600 hover:bg-white/[0.03]"
+              }`}
+            >
+              {cell.date.getDate()}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+        <button
+          type="button"
+          onClick={() => applyDate(new Date())}
+          className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm font-semibold text-white transition hover:border-white/15 hover:bg-white/[0.06]"
+        >
+          Hari ini
+        </button>
+        <button
+          type="button"
+          onClick={() => applyDate(addDays(new Date(), 7))}
+          className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm font-semibold text-white transition hover:border-white/15 hover:bg-white/[0.06]"
+        >
+          +7 hari
+        </button>
+        <button
+          type="button"
+          onClick={() => applyDate(addDays(new Date(), 14))}
+          className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm font-semibold text-white transition hover:border-white/15 hover:bg-white/[0.06]"
+        >
+          +14 hari
+        </button>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between gap-3 rounded-[20px] border border-white/8 bg-black/20 px-4 py-3">
+        <div>
+          <p className="text-xs text-slate-500">Tanggal terpilih</p>
+          <p className="mt-1 text-sm font-semibold text-white">
+            {formatLongDate(value)}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-white/15 hover:bg-white/[0.06]"
+        >
+          Hapus
+        </button>
+      </div>
     </div>
   );
 }
@@ -522,9 +491,9 @@ function InvestorCombobox({
           )}
         </div>
 
-        <ChevronDown
+        <ChevronRight
           className={`h-4 w-4 shrink-0 text-slate-400 transition ${
-            open ? "rotate-180" : ""
+            open ? "rotate-90" : ""
           }`}
         />
       </button>
@@ -632,23 +601,54 @@ export default function FundingInvestorStep({
     [allocations]
   );
 
-  const financials = useMemo(
-    () =>
-      getProjectAcquisitionFinancials({
-        harga_pembelian: form.harga_pembelian,
-        nilai_limit_lelang: form.nilai_limit_lelang,
-        spare_bidding: form.spare_bidding,
-        biaya_eksekusi: form.biaya_eksekusi,
-        target_pendanaan: form.target_pendanaan,
-      }),
-    [
-      form.harga_pembelian,
-      form.nilai_limit_lelang,
-      form.spare_bidding,
-      form.biaya_eksekusi,
-      form.target_pendanaan,
-    ]
-  );
+  const financials = useMemo(() => {
+    const acquisitionBase = Number(form.nilai_limit_lelang || 0);
+    const spareBidding = Number(form.spare_bidding || 0);
+    const biayaEksekusi = Number(form.biaya_eksekusi || 0);
+    const biayaRenov = Number(form.biaya_renov || 0);
+    const targetPendanaan = Number(form.target_pendanaan || 0);
+
+    const biayaBalikNama = getBiayaBalikNamaBreakdown(acquisitionBase);
+
+    const totalBiayaBalikNama =
+      Number(biayaBalikNama.bea_lelang || 0) +
+      Number(biayaBalikNama.bphtb || 0) +
+      Number(biayaBalikNama.ppn_lelang || 0) +
+      Number(biayaBalikNama.balik_nama || 0) +
+      Number(biayaBalikNama.roya || 0);
+
+    const totalBiayaAkuisisi =
+      acquisitionBase +
+      spareBidding +
+      totalBiayaBalikNama +
+      biayaEksekusi +
+      biayaRenov;
+
+    return {
+      acquisition_base_label: "Nilai Limit Lelang",
+      acquisition_base: acquisitionBase,
+      spare_bidding: spareBidding,
+      biaya_balik_nama: {
+        bea_lelang: Number(biayaBalikNama.bea_lelang || 0),
+        bphtb: Number(biayaBalikNama.bphtb || 0),
+        ppn_lelang: Number(biayaBalikNama.ppn_lelang || 0),
+        balik_nama: Number(biayaBalikNama.balik_nama || 0),
+        roya: Number(biayaBalikNama.roya || 0),
+        total: totalBiayaBalikNama,
+      },
+      biaya_eksekusi: biayaEksekusi,
+      biaya_renov: biayaRenov,
+      total_biaya_akuisisi: totalBiayaAkuisisi,
+      target_pendanaan: targetPendanaan,
+      dana_cadangan: targetPendanaan - totalBiayaAkuisisi,
+    };
+  }, [
+    form.nilai_limit_lelang,
+    form.spare_bidding,
+    form.biaya_eksekusi,
+    form.biaya_renov,
+    form.target_pendanaan,
+  ]);
 
   const totalAllocated = useMemo(
     () =>
@@ -857,7 +857,7 @@ export default function FundingInvestorStep({
               <BreakdownRow
                 label={financials.acquisition_base_label}
                 value={financials.acquisition_base}
-                note="Nilai dasar properti yang dipakai sebagai basis akuisisi."
+                note="Nilai limit lelang sebagai basis utama perhitungan balik nama."
               />
 
               <BreakdownRow
@@ -873,7 +873,7 @@ export default function FundingInvestorStep({
                       Biaya Balik Nama
                     </p>
                     <p className="mt-1 text-xs leading-5 text-slate-500">
-                      Dihitung otomatis dari basis akuisisi.
+                      Dihitung otomatis dari nilai limit lelang saja, tidak termasuk spare bidding.
                     </p>
                   </div>
 
@@ -900,12 +900,12 @@ export default function FundingInvestorStep({
                   />
                   <MiniFee
                     label="Roya"
-                    percent="0.1%"
+                    percent="Rp 75 rb"
                     value={financials.biaya_balik_nama.roya}
                   />
                   <MiniFee
                     label="Balik Nama"
-                    percent="0.2%"
+                    percent="0.1%"
                     value={financials.biaya_balik_nama.balik_nama}
                   />
                 </div>
@@ -915,6 +915,12 @@ export default function FundingInvestorStep({
                 label="Biaya Eksekusi"
                 value={financials.biaya_eksekusi}
                 note="Biaya operasional untuk eksekusi pengosongan / penanganan lapangan."
+              />
+
+              <BreakdownRow
+                label="Biaya Renovasi"
+                value={financials.biaya_renov}
+                note="Biaya renovasi properti yang diinput dari step sebelumnya."
               />
 
               <BreakdownRow

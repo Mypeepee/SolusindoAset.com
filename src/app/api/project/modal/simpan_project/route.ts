@@ -94,13 +94,6 @@ function toDecimal(value: number | string | null | undefined) {
   return new Prisma.Decimal(String(Number(value || 0)));
 }
 
-function toNullableDate(value?: string | null) {
-  if (!value) return null;
-
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
 function toSafeString(value?: string | null) {
   return String(value ?? "").trim();
 }
@@ -108,6 +101,10 @@ function toSafeString(value?: string | null) {
 function toSafeNumber(value?: number | string | null) {
   const numeric = Number(value ?? 0);
   return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function toNonNegativeNumber(value?: number | string | null) {
+  return Math.max(0, toSafeNumber(value));
 }
 
 function parseBigIntId(value?: string | null) {
@@ -123,14 +120,96 @@ function parseBigIntId(value?: string | null) {
   }
 }
 
-function getBiayaBalikNamaBreakdown(acquisitionBase: number) {
-  const base = toSafeNumber(acquisitionBase);
+function parsePlainDate(value?: string | null) {
+  const trimmed = toSafeString(value);
+  if (!trimmed) return null;
 
-  const bea_lelang = base * 0.02;
-  const bphtb = base * 0.05;
-  const ppn_lelang = base * 0.011;
-  const roya = base * 0.001;
-  const balik_nama = base * 0.002;
+  const isoDateMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoDateMatch) {
+    const year = Number(isoDateMatch[1]);
+    const month = Number(isoDateMatch[2]);
+    const day = Number(isoDateMatch[3]);
+
+    const date = new Date(year, month - 1, day);
+
+    if (
+      date.getFullYear() === year &&
+      date.getMonth() === month - 1 &&
+      date.getDate() === day
+    ) {
+      return date;
+    }
+
+    return null;
+  }
+
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function toNullableDate(value?: string | null) {
+  return parsePlainDate(value);
+}
+
+function addMonthsPreserveDay(baseDate: Date, monthsToAdd: number) {
+  const safeMonths = Math.max(0, Math.trunc(monthsToAdd));
+  const baseDay = baseDate.getDate();
+
+  const targetMonthStart = new Date(
+    baseDate.getFullYear(),
+    baseDate.getMonth() + safeMonths,
+    1
+  );
+
+  const lastDayOfTargetMonth = new Date(
+    targetMonthStart.getFullYear(),
+    targetMonthStart.getMonth() + 1,
+    0
+  ).getDate();
+
+  return new Date(
+    targetMonthStart.getFullYear(),
+    targetMonthStart.getMonth(),
+    Math.min(baseDay, lastDayOfTargetMonth)
+  );
+}
+
+function getDerivedProjectDates(body: CreateProjectPayload) {
+  const tanggal_pembelian = toNullableDate(body.tanggal_pembelian);
+  const estimasi_bulan = Math.max(
+    0,
+    Math.trunc(toSafeNumber(body.estimasi_bulan))
+  );
+
+  const mulai_tanggal = tanggal_pembelian
+    ? new Date(
+        tanggal_pembelian.getFullYear(),
+        tanggal_pembelian.getMonth(),
+        tanggal_pembelian.getDate()
+      )
+    : null;
+
+  const estimasi_selesai =
+    tanggal_pembelian && estimasi_bulan >= 0
+      ? addMonthsPreserveDay(tanggal_pembelian, estimasi_bulan)
+      : null;
+
+  return {
+    tanggal_pembelian,
+    mulai_tanggal,
+    estimasi_selesai,
+    estimasi_bulan,
+  };
+}
+
+function getBiayaBalikNamaBreakdown(acquisitionBase: number) {
+  const base = toNonNegativeNumber(acquisitionBase);
+
+  const bea_lelang = base * 0.02; // 2%
+  const bphtb = base * 0.05; // 5%
+  const ppn_lelang = base * 0.011; // 1.1%
+  const balik_nama = base * 0.001; // 0.1%
+  const roya = 75000; // flat
 
   return {
     bea_lelang,
@@ -138,37 +217,47 @@ function getBiayaBalikNamaBreakdown(acquisitionBase: number) {
     ppn_lelang,
     roya,
     balik_nama,
-    total: bea_lelang + bphtb + ppn_lelang + roya + balik_nama,
+    total: bea_lelang + bphtb + ppn_lelang + balik_nama + roya,
   };
 }
 
 function getProjectAcquisitionFinancials(body: CreateProjectPayload) {
-  const nilaiLimitLelang = toSafeNumber(body.nilai_limit_lelang);
-  const hargaPembelian = toSafeNumber(body.harga_pembelian);
+  const nilaiLimitLelang = toNonNegativeNumber(body.nilai_limit_lelang);
+  const hargaPembelianInput = toNonNegativeNumber(body.harga_pembelian);
 
   const acquisition_base =
-    nilaiLimitLelang > 0 ? nilaiLimitLelang : hargaPembelian;
+    nilaiLimitLelang > 0 ? nilaiLimitLelang : hargaPembelianInput;
 
-  const spare_bidding = toSafeNumber(body.spare_bidding);
-  const biaya_eksekusi = toSafeNumber(body.biaya_eksekusi);
-  const target_pendanaan = toSafeNumber(body.target_pendanaan);
+  const spare_bidding = toNonNegativeNumber(body.spare_bidding);
+  const biaya_eksekusi = toNonNegativeNumber(body.biaya_eksekusi);
+  const biaya_renov = toNonNegativeNumber(body.biaya_renov);
+  const target_pendanaan = toNonNegativeNumber(body.target_pendanaan);
 
-  const autoBreakdown = getBiayaBalikNamaBreakdown(acquisition_base);
-  const manualBiayaBalikNama = toSafeNumber(body.biaya_balik_nama);
+  // IMPORTANT:
+  // biaya balik nama selalu dihitung dari nilai_limit_lelang
+  // kalau nilai_limit_lelang kosong, fallback ke acquisition_base
+  const biaya_balik_nama_base =
+    nilaiLimitLelang > 0 ? nilaiLimitLelang : acquisition_base;
 
-  const biaya_balik_nama_total =
-    manualBiayaBalikNama > 0 ? manualBiayaBalikNama : autoBreakdown.total;
+  const autoBreakdown = getBiayaBalikNamaBreakdown(biaya_balik_nama_base);
+  const biaya_balik_nama_total = autoBreakdown.total;
 
   const total_biaya_akuisisi =
-    acquisition_base + spare_bidding + biaya_balik_nama_total + biaya_eksekusi;
+    acquisition_base +
+    spare_bidding +
+    biaya_balik_nama_total +
+    biaya_eksekusi +
+    biaya_renov;
 
   const dana_cadangan = target_pendanaan - total_biaya_akuisisi;
 
   return {
     acquisition_base,
     spare_bidding,
+    biaya_balik_nama_base,
     biaya_balik_nama_total,
     biaya_eksekusi,
+    biaya_renov,
     total_biaya_akuisisi,
     dana_cadangan,
     target_pendanaan,
@@ -247,12 +336,11 @@ export async function POST(request: Request) {
     const idListingRaw = toSafeString(body.id_listing);
     const namaProject = toSafeString(body.nama_project);
 
-    // Prioritaskan agentId dari NextAuth, bukan dari frontend
     const sessionAgentId = toSafeString(session?.user?.agentId);
     const bodyDibuatOleh = toSafeString(body.dibuat_oleh);
     const dibuatOleh = sessionAgentId || bodyDibuatOleh;
 
-    const jenisPendanaan =
+    const jenisPendanaan: JenisPendanaan =
       body.jenis_pendanaan === "tertutup" ? "tertutup" : "terbuka";
 
     const statusProject = (body.status ??
@@ -318,6 +406,47 @@ export async function POST(request: Request) {
     const cmaEntries = normalizeCmaEntries(body.cma_entries ?? []);
     const financials = getProjectAcquisitionFinancials(body);
 
+    const derivedDates = getDerivedProjectDates(body);
+    const pendanaanDitutupPada =
+      jenisPendanaan === "terbuka"
+        ? toNullableDate(body.pendanaan_ditutup_pada)
+        : null;
+
+    if (!derivedDates.tanggal_pembelian) {
+      return NextResponse.json<CreateProjectSubmitResponse>(
+        {
+          success: false,
+          message: "Tanggal pembelian wajib dipilih.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (jenisPendanaan === "terbuka" && !pendanaanDitutupPada) {
+      return NextResponse.json<CreateProjectSubmitResponse>(
+        {
+          success: false,
+          message:
+            "Tanggal penutupan pendanaan wajib dipilih untuk pendanaan terbuka.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const targetPendanaan = toNonNegativeNumber(body.target_pendanaan);
+    const totalPendanaanInput = toNonNegativeNumber(body.total_pendanaan);
+    const totalPendanaanDerived =
+      totalPendanaanInput > 0
+        ? totalPendanaanInput
+        : investorAllocations.reduce(
+            (sum, item) => sum + toNonNegativeNumber(item.nominal_komitmen),
+            0
+          );
+
+    const estimasiHargaJual = toNonNegativeNumber(body.estimasi_harga_jual);
+    const estimasiProfitBersih =
+      estimasiHargaJual - financials.total_biaya_akuisisi;
+
     const project = await prisma.$transaction(async (tx) => {
       const [listing, agent] = await Promise.all([
         tx.listing.findUnique({
@@ -349,30 +478,31 @@ export async function POST(request: Request) {
           kelurahan: toSafeString(body.kelurahan) || null,
           gambar_thumbnail: toSafeString(body.gambar_thumbnail) || null,
 
-          tanggal_pembelian: toNullableDate(body.tanggal_pembelian),
+          tanggal_pembelian: derivedDates.tanggal_pembelian,
 
-          harga_pembelian: toDecimal(body.harga_pembelian),
-          estimasi_harga_jual: toDecimal(body.estimasi_harga_jual),
-          estimasi_profit_bersih: toDecimal(body.estimasi_profit_bersih),
-          target_pendanaan: toDecimal(body.target_pendanaan),
-          total_pendanaan: toDecimal(body.total_pendanaan),
+          // disamakan: harga_pembelian = total biaya akuisisi final
+          harga_pembelian: toDecimal(financials.total_biaya_akuisisi),
+          estimasi_harga_jual: toDecimal(estimasiHargaJual),
+          estimasi_profit_bersih: toDecimal(estimasiProfitBersih),
+          target_pendanaan: toDecimal(targetPendanaan),
+          total_pendanaan: toDecimal(totalPendanaanDerived),
 
           jenis_pendanaan: jenisPendanaan,
           status: statusProject,
 
-          mulai_tanggal: toNullableDate(body.mulai_tanggal),
-          estimasi_selesai: toNullableDate(body.estimasi_selesai),
-          estimasi_bulan: Math.max(0, Math.trunc(toSafeNumber(body.estimasi_bulan))),
-          pendanaan_ditutup_pada: toNullableDate(body.pendanaan_ditutup_pada),
+          mulai_tanggal: derivedDates.mulai_tanggal,
+          estimasi_selesai: derivedDates.estimasi_selesai,
+          estimasi_bulan: derivedDates.estimasi_bulan,
+          pendanaan_ditutup_pada: pendanaanDitutupPada,
 
           deskripsi_project: toSafeString(body.deskripsi_project) || null,
           dibuat_oleh: dibuatOleh,
 
-          nilai_limit_lelang: toDecimal(body.nilai_limit_lelang),
-          spare_bidding: toDecimal(body.spare_bidding),
+          nilai_limit_lelang: toDecimal(financials.acquisition_base),
+          spare_bidding: toDecimal(financials.spare_bidding),
           biaya_balik_nama: toDecimal(financials.biaya_balik_nama_total),
-          biaya_eksekusi: toDecimal(body.biaya_eksekusi),
-          biaya_renov: toDecimal(body.biaya_renov),
+          biaya_eksekusi: toDecimal(financials.biaya_eksekusi),
+          biaya_renov: toDecimal(financials.biaya_renov),
           total_biaya_akuisisi: toDecimal(financials.total_biaya_akuisisi),
           dana_cadangan: toDecimal(financials.dana_cadangan),
 

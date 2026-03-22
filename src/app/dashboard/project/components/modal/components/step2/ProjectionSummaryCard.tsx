@@ -13,6 +13,7 @@ import {
   formatCurrency,
   formatNumberDots,
   formatPercent,
+  getBiayaBalikNamaBreakdown,
   parseFormattedNumber,
 } from "../../utils";
 
@@ -137,9 +138,9 @@ export default function ProjectionSummaryCard({
   updateField,
   inputClassName,
   theme,
-  hargaPembelianComputed,
-  profitComputed,
-  roiPercent,
+  hargaPembelianComputed: _hargaPembelianComputed,
+  profitComputed: _profitComputed,
+  roiPercent: _roiPercent,
   avgHargaPerMeter,
   suggestedSellPrice,
 }: Props) {
@@ -147,11 +148,36 @@ export default function ProjectionSummaryCard({
 
   const estimasiBulan = Number(form.estimasi_bulan || 0);
   const targetPendanaan = Number(form.target_pendanaan || 0);
+  const estimasiHargaJual = Number(form.estimasi_harga_jual || 0);
 
-  const pendanaanSpreadNominal = targetPendanaan - hargaPembelianComputed;
+  const hargaMenangLelang =
+    Number(form.nilai_limit_lelang || 0) + Number(form.spare_bidding || 0);
+
+  const biayaBalikNamaBreakdown =
+    getBiayaBalikNamaBreakdown(hargaMenangLelang);
+
+  const biayaBalikNamaFinal =
+    Number(biayaBalikNamaBreakdown.bea_lelang || 0) +
+    Number(biayaBalikNamaBreakdown.bphtb || 0) +
+    Number(biayaBalikNamaBreakdown.ppn_lelang || 0) +
+    Number(biayaBalikNamaBreakdown.balik_nama || 0) +
+    Number(biayaBalikNamaBreakdown.roya || 0);
+
+  const hargaPembelianFinal =
+    hargaMenangLelang +
+    biayaBalikNamaFinal +
+    Number(form.biaya_eksekusi || 0) +
+    Number(form.biaya_renov || 0);
+
+  const profitFinal = estimasiHargaJual - hargaPembelianFinal;
+
+  const roiPercentFinal =
+    hargaPembelianFinal > 0 ? (profitFinal / hargaPembelianFinal) * 100 : 0;
+
+  const pendanaanSpreadNominal = targetPendanaan - hargaPembelianFinal;
   const pendanaanSpreadPercent =
-    hargaPembelianComputed > 0
-      ? (pendanaanSpreadNominal / hargaPembelianComputed) * 100
+    hargaPembelianFinal > 0
+      ? (pendanaanSpreadNominal / hargaPembelianFinal) * 100
       : 0;
 
   const signalActive = suggestedSellPrice > 0 || avgHargaPerMeter > 0;
@@ -165,21 +191,21 @@ export default function ProjectionSummaryCard({
     estimasiBulan > 0 ? (rdpuNetAnnual * estimasiBulan) / 12 : 0;
 
   const depositoHorizonProfit =
-    hargaPembelianComputed > 0
-      ? hargaPembelianComputed * (depositoHorizonRoi / 100)
+    hargaPembelianFinal > 0
+      ? hargaPembelianFinal * (depositoHorizonRoi / 100)
       : 0;
 
   const rdpuHorizonProfit =
-    hargaPembelianComputed > 0
-      ? hargaPembelianComputed * (rdpuHorizonRoi / 100)
+    hargaPembelianFinal > 0
+      ? hargaPembelianFinal * (rdpuHorizonRoi / 100)
       : 0;
 
   const cmaProfit =
-    suggestedSellPrice > 0 ? suggestedSellPrice - hargaPembelianComputed : 0;
+    suggestedSellPrice > 0 ? suggestedSellPrice - hargaPembelianFinal : 0;
 
   const cmaRoi =
-    hargaPembelianComputed > 0 && suggestedSellPrice > 0
-      ? (cmaProfit / hargaPembelianComputed) * 100
+    hargaPembelianFinal > 0 && suggestedSellPrice > 0
+      ? (cmaProfit / hargaPembelianFinal) * 100
       : 0;
 
   return (
@@ -307,15 +333,15 @@ export default function ProjectionSummaryCard({
             <StatCard
               icon={Wallet}
               label="Total Akuisisi"
-              value={formatCurrency(hargaPembelianComputed)}
-              helper="Baseline perhitungan proyeksi"
+              value={formatCurrency(hargaPembelianFinal)}
+              helper="Harga menang + balik nama + eksekusi + renov"
             />
 
             <StatCard
               icon={Target}
               label="Spread Pendanaan"
               value={
-                hargaPembelianComputed > 0
+                hargaPembelianFinal > 0
                   ? formatPercent(pendanaanSpreadPercent)
                   : "-"
               }
@@ -328,19 +354,19 @@ export default function ProjectionSummaryCard({
             <StatCard
               icon={TrendingUp}
               label="Est. Profit"
-              value={formatCurrency(profitComputed)}
+              value={formatCurrency(profitFinal)}
               helper="Harga jual - total akuisisi"
-              valueClassName={getToneClass(profitComputed)}
+              valueClassName={getToneClass(profitFinal)}
             />
 
             <StatCard
               icon={Clock3}
               label="ROI & Pace"
-              value={formatPercent(roiPercent)}
+              value={formatPercent(roiPercentFinal)}
               helper={
                 estimasiBulan > 0
                   ? `${formatPercent(
-                      roiPercent / estimasiBulan
+                      roiPercentFinal / estimasiBulan
                     )} / bulan`
                   : "Isi estimasi bulan"
               }
@@ -376,7 +402,7 @@ export default function ProjectionSummaryCard({
               annualRateLabel="4,8% net / tahun"
               horizonProfit={depositoHorizonProfit}
               horizonRoi={depositoHorizonRoi}
-              deltaVsProject={profitComputed - depositoHorizonProfit}
+              deltaVsProject={profitFinal - depositoHorizonProfit}
             />
 
             <BenchmarkRow
@@ -385,7 +411,7 @@ export default function ProjectionSummaryCard({
               annualRateLabel="5,5% net / tahun"
               horizonProfit={rdpuHorizonProfit}
               horizonRoi={rdpuHorizonRoi}
-              deltaVsProject={profitComputed - rdpuHorizonProfit}
+              deltaVsProject={profitFinal - rdpuHorizonProfit}
             />
 
             {suggestedSellPrice > 0 ? (
@@ -395,7 +421,7 @@ export default function ProjectionSummaryCard({
                 annualRateLabel={`${formatCurrency(suggestedSellPrice)} exit`}
                 horizonProfit={cmaProfit}
                 horizonRoi={cmaRoi}
-                deltaVsProject={profitComputed - cmaProfit}
+                deltaVsProject={profitFinal - cmaProfit}
               />
             ) : (
               <div className="rounded-[20px] border border-dashed border-white/10 bg-white/[0.02] px-4 py-4">

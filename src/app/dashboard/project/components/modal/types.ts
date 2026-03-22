@@ -29,7 +29,7 @@ export type CmaEntry = {
 
 export type FundingInvestorAllocation = {
   id: string;
-  investor_id: string; // ini dipakai sebagai id_agent saat save ke DB
+  investor_id: string;
   nominal: number;
   investor_nama?: string;
   investor_label?: string;
@@ -95,9 +95,17 @@ export type BiayaBalikNamaBreakdown = {
 export type AcquisitionFinancials = {
   acquisition_base_label: string;
   acquisition_base: number;
+
+  biaya_balik_nama_base_label: string;
+  biaya_balik_nama_base: number;
+
+  harga_menang_lelang: number;
   spare_bidding: number;
+
   biaya_balik_nama: BiayaBalikNamaBreakdown;
   biaya_eksekusi: number;
+  biaya_renov: number;
+
   total_biaya_akuisisi: number;
   dana_cadangan: number;
   target_pendanaan: number;
