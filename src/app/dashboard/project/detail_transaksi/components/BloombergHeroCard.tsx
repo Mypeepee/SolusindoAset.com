@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import Link from "next/link";
 import type {
   NullableDate,
   ProjectDetailViewModel,
@@ -18,7 +18,7 @@ import {
   safeDivide,
   toNumber,
 } from "./utils";
-import { CalendarDays, Clock3, MapPin } from "lucide-react";
+import { ArrowLeft, CalendarDays, Clock3, MapPin } from "lucide-react";
 
 type Tone = "amber" | "emerald" | "cyan" | "fuchsia" | "rose" | "slate";
 
@@ -26,8 +26,8 @@ const TONE_STYLES: Record<
   Tone,
   {
     text: string;
+    border: string;
     softBg: string;
-    softBorder: string;
     glow: string;
     dot: string;
     progress: string;
@@ -36,57 +36,57 @@ const TONE_STYLES: Record<
 > = {
   amber: {
     text: "text-amber-200",
+    border: "border-amber-300/20",
     softBg: "bg-amber-400/10",
-    softBorder: "border-amber-300/20",
     glow: "bg-amber-300/18",
     dot: "bg-amber-300",
     progress: "from-amber-400 via-amber-300 to-lime-300",
-    line: "from-amber-300/80 via-amber-200/40 to-transparent",
+    line: "from-amber-300/80 via-amber-200/30 to-transparent",
   },
   emerald: {
     text: "text-emerald-200",
+    border: "border-emerald-300/20",
     softBg: "bg-emerald-400/10",
-    softBorder: "border-emerald-300/20",
     glow: "bg-emerald-300/18",
     dot: "bg-emerald-300",
     progress: "from-emerald-400 via-emerald-300 to-cyan-300",
-    line: "from-emerald-300/80 via-emerald-200/40 to-transparent",
+    line: "from-emerald-300/80 via-emerald-200/30 to-transparent",
   },
   cyan: {
     text: "text-cyan-200",
+    border: "border-cyan-300/20",
     softBg: "bg-cyan-400/10",
-    softBorder: "border-cyan-300/20",
     glow: "bg-cyan-300/18",
     dot: "bg-cyan-300",
-    progress: "from-cyan-400 via-sky-300 to-indigo-300",
-    line: "from-cyan-300/80 via-cyan-200/40 to-transparent",
+    progress: "from-sky-400 via-cyan-300 to-indigo-300",
+    line: "from-cyan-300/80 via-cyan-200/30 to-transparent",
   },
   fuchsia: {
     text: "text-fuchsia-200",
+    border: "border-fuchsia-300/20",
     softBg: "bg-fuchsia-400/10",
-    softBorder: "border-fuchsia-300/20",
     glow: "bg-fuchsia-300/18",
     dot: "bg-fuchsia-300",
     progress: "from-fuchsia-400 via-violet-300 to-pink-300",
-    line: "from-fuchsia-300/80 via-fuchsia-200/40 to-transparent",
+    line: "from-fuchsia-300/80 via-fuchsia-200/30 to-transparent",
   },
   rose: {
     text: "text-rose-200",
+    border: "border-rose-300/20",
     softBg: "bg-rose-400/10",
-    softBorder: "border-rose-300/20",
     glow: "bg-rose-300/18",
     dot: "bg-rose-300",
-    progress: "from-rose-400 via-orange-300 to-amber-300",
-    line: "from-rose-300/80 via-rose-200/40 to-transparent",
+    progress: "from-rose-400 via-rose-300 to-orange-300",
+    line: "from-rose-300/80 via-rose-200/30 to-transparent",
   },
   slate: {
     text: "text-slate-200",
+    border: "border-white/10",
     softBg: "bg-white/[0.06]",
-    softBorder: "border-white/10",
     glow: "bg-white/10",
     dot: "bg-slate-300",
     progress: "from-slate-300 via-slate-200 to-white",
-    line: "from-slate-300/80 via-slate-200/40 to-transparent",
+    line: "from-slate-300/80 via-slate-200/30 to-transparent",
   },
 };
 
@@ -190,6 +190,58 @@ function getTimelineMeta(
   };
 }
 
+function resolveBackHref(backHref?: string | null) {
+  const value = typeof backHref === "string" ? backHref.trim() : "";
+  return value.length > 0 ? value : "/dashboard/project";
+}
+
+function HeroTopBar({
+  backHref,
+  label,
+}: {
+  backHref?: string | null;
+  label: string;
+}) {
+  const href = resolveBackHref(backHref);
+
+  return (
+    <div className="absolute inset-x-0 top-0 z-20 flex items-start justify-between p-4 md:p-6 lg:p-7">
+      <Link
+        href={href}
+        className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-black/35 px-3 py-2 text-sm font-medium text-white backdrop-blur-2xl transition hover:border-white/20 hover:bg-black/45"
+      >
+        <span className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/[0.06]">
+          <ArrowLeft className="h-3.5 w-3.5" />
+        </span>
+        <span className="pr-1">Kembali</span>
+      </Link>
+
+      <div className="inline-flex items-center rounded-full bg-white/90 px-3.5 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-950 shadow-[0_10px_30px_rgba(255,255,255,0.12)] backdrop-blur-xl md:px-4 md:text-[11px]">
+        {label}
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: ProjectStatus }) {
+  const tone = STATUS_TONE[status];
+  const styles = TONE_STYLES[tone];
+
+  return (
+    <div
+      className={cn(
+        "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium backdrop-blur-xl",
+        styles.border,
+        styles.softBg,
+        styles.text
+      )}
+    >
+      <span className={cn("h-2.5 w-2.5 rounded-full", styles.dot)} />
+      {STATUS_LABEL[status]}
+    </div>
+  );
+}
+
 function ManagerChip({
   name,
   avatar,
@@ -216,7 +268,7 @@ function ManagerChip({
 
       <div className="leading-tight">
         <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">
-          Managed by
+          Dikelola oleh
         </p>
         <p className="mt-0.5 text-sm font-medium text-white">{name}</p>
       </div>
@@ -224,23 +276,21 @@ function ManagerChip({
   );
 }
 
-function StageRibbon({ status }: { status: ProjectStatus }) {
+function LifecycleRail({ status }: { status: ProjectStatus }) {
   const currentIndex = STATUS_ORDER.indexOf(status);
-  const currentTone = STATUS_TONE[status];
 
   if (status === "dibatalkan") {
     return (
-      <div className="mt-5 rounded-[22px] border border-rose-300/20 bg-rose-400/8 px-4 py-4">
+      <div className="mt-5">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-[11px] uppercase tracking-[0.24em] text-rose-200/80">
+          <span className="text-[11px] uppercase tracking-[0.24em] text-slate-500">
             Lifecycle
           </span>
           <span className="text-sm font-medium text-rose-200">
             Proyek dibatalkan
           </span>
         </div>
-
-        <div className="mt-4 h-1.5 rounded-full bg-white/10">
+        <div className="mt-3 h-1.5 rounded-full bg-white/10">
           <div className="h-full w-full rounded-full bg-gradient-to-r from-rose-400 via-rose-300 to-orange-300" />
         </div>
       </div>
@@ -248,17 +298,17 @@ function StageRibbon({ status }: { status: ProjectStatus }) {
   }
 
   return (
-    <div className="mt-5 rounded-[22px] border border-white/10 bg-black/20 px-4 py-4 backdrop-blur-md">
+    <div className="mt-5">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
+        <span className="text-[11px] uppercase tracking-[0.24em] text-slate-500">
           Lifecycle
         </span>
-        <span className={cn("text-sm font-medium", TONE_STYLES[currentTone].text)}>
+        <span className="text-sm font-medium text-white">
           Tahap {currentIndex + 1} / {STATUS_ORDER.length}
         </span>
       </div>
 
-      <div className="mt-4 grid grid-cols-7 gap-1.5">
+      <div className="mt-3 grid grid-cols-7 gap-1.5">
         {STATUS_ORDER.map((item, index) => {
           const isDone = index < currentIndex;
           const isActive = index === currentIndex;
@@ -269,7 +319,7 @@ function StageRibbon({ status }: { status: ProjectStatus }) {
               className={cn(
                 "h-1.5 rounded-full transition-all duration-300",
                 isDone &&
-                  "bg-gradient-to-r from-emerald-400 to-cyan-300 opacity-90",
+                  "bg-gradient-to-r from-emerald-400 to-cyan-300 opacity-95",
                 isActive &&
                   "bg-white shadow-[0_0_18px_rgba(255,255,255,0.45)]",
                 !isDone && !isActive && "bg-white/10"
@@ -282,20 +332,21 @@ function StageRibbon({ status }: { status: ProjectStatus }) {
   );
 }
 
-function SpotlightCard({
-  status,
-  timelineHeadline,
-  deadlineLabel,
+function InfoPanel({
+  label,
+  value,
+  helper,
+  tone,
 }: {
-  status: ProjectStatus;
-  timelineHeadline: string;
-  deadlineLabel: string;
+  label: string;
+  value: string;
+  helper: string;
+  tone: Tone;
 }) {
-  const tone = STATUS_TONE[status];
   const styles = TONE_STYLES[tone];
 
   return (
-    <div className="relative overflow-hidden rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] p-5 backdrop-blur-2xl md:p-6">
+    <div className="relative min-w-0 overflow-hidden rounded-[22px] border border-white/10 bg-[linear-gradient(180deg,rgba(11,15,23,0.96),rgba(7,10,16,0.9))] p-4 backdrop-blur-xl sm:rounded-[26px] sm:p-5">
       <div
         className={cn(
           "absolute inset-x-0 top-0 h-px bg-gradient-to-r",
@@ -304,119 +355,111 @@ function SpotlightCard({
       />
       <div
         className={cn(
-          "absolute -right-10 -top-10 h-28 w-28 rounded-full blur-3xl",
+          "absolute -right-8 -top-8 h-24 w-24 rounded-full blur-3xl",
           styles.glow
         )}
       />
 
-      <div className="relative">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500">
-              Status saat ini
-            </p>
-            <div className="mt-3 flex items-center gap-3">
-              <span
-                className={cn("h-2.5 w-2.5 rounded-full", styles.dot)}
-              />
-              <h2
-                className={cn(
-                  "text-2xl font-semibold tracking-[-0.03em] md:text-3xl",
-                  styles.text
-                )}
-              >
-                {STATUS_LABEL[status]}
-              </h2>
-            </div>
-          </div>
-
-          <div className="text-right">
-            <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500">
-              Deadline
-            </p>
-            <p className="mt-2 text-base font-medium text-white md:text-lg">
-              {deadlineLabel}
-            </p>
-          </div>
+      <div className="relative min-w-0">
+        <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500 sm:text-[11px] sm:tracking-[0.24em]">
+          {label}
         </div>
 
-        <p className="mt-4 text-sm text-slate-300">{timelineHeadline}</p>
+        <div
+          className={cn(
+            "mt-3 break-words text-[26px] font-semibold leading-none tracking-[-0.04em] sm:mt-4 sm:text-3xl",
+            styles.text
+          )}
+        >
+          {value}
+        </div>
 
-        <StageRibbon status={status} />
+        <div className="mt-3 text-xs leading-5 text-slate-300 sm:text-sm sm:leading-6">
+          {helper}
+        </div>
       </div>
     </div>
   );
 }
 
-function MetricCard({
-  label,
-  value,
-  helper,
-  footnote,
-  tone,
-  progress,
-  icon,
+function FundingTerminal({
+  totalFunded,
+  fundingTarget,
+  fundingProgress,
+  remainingFunding,
 }: {
-  label: string;
-  value: string;
-  helper: string;
-  footnote?: string;
-  tone: Tone;
-  progress?: number;
-  icon?: ReactNode;
+  totalFunded: number;
+  fundingTarget: number;
+  fundingProgress: number;
+  remainingFunding: number;
 }) {
-  const styles = TONE_STYLES[tone];
+  const progressWidth = Math.max(6, Math.min(100, fundingProgress * 100));
 
   return (
-    <div className="group relative overflow-hidden rounded-[26px] border border-white/10 bg-[linear-gradient(180deg,rgba(9,13,21,0.82),rgba(7,9,14,0.72))] p-5 backdrop-blur-xl">
-      <div
-        className={cn(
-          "absolute inset-x-0 top-0 h-px bg-gradient-to-r",
-          styles.line
-        )}
-      />
-      <div
-        className={cn(
-          "absolute -right-10 -top-10 h-24 w-24 rounded-full blur-3xl",
-          styles.glow
-        )}
-      />
+    <div className="relative overflow-hidden rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(9,13,21,0.98),rgba(6,8,12,0.96))] p-5 md:p-6">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-sky-300/80 via-white/30 to-transparent" />
+      <div className="absolute -right-12 top-0 h-40 w-40 rounded-full bg-sky-300/12 blur-3xl" />
+      <div className="absolute -left-8 bottom-0 h-28 w-28 rounded-full bg-cyan-300/8 blur-3xl" />
 
       <div className="relative">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500">
-            {label}
-          </p>
-          {icon ? <div className="text-slate-500">{icon}</div> : null}
-        </div>
-
-        <div className="mt-4 text-[28px] font-semibold leading-none tracking-[-0.03em] text-white md:text-[32px]">
-          {value}
-        </div>
-
-        <div className="mt-3 text-sm text-slate-300">{helper}</div>
-
-        {footnote ? (
-          <div className="mt-1.5 text-xs uppercase tracking-[0.18em] text-slate-500">
-            {footnote}
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500">
+              Dana terhimpun
+            </p>
+            <div className="mt-4 text-[40px] font-semibold leading-none tracking-[-0.06em] text-white sm:text-[54px] xl:text-[62px]">
+              {compactIDR(totalFunded)}
+            </div>
+            <p className="mt-3 text-sm text-slate-300">
+              {formatPercent(fundingProgress)} dari target pendanaan
+            </p>
           </div>
-        ) : null}
 
-        {typeof progress === "number" ? (
-          <div className="mt-4">
-            <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-              <div
-                className={cn(
-                  "h-full rounded-full bg-gradient-to-r",
-                  styles.progress
-                )}
-                style={{
-                  width: `${Math.max(6, Math.min(100, progress * 100))}%`,
-                }}
-              />
+          <div className="rounded-[22px] border border-white/10 bg-white/[0.04] px-4 py-3 text-right">
+            <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">
+              Target
+            </p>
+            <p className="mt-2 text-lg font-medium text-white">
+              {compactIDR(fundingTarget)}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <div className="relative h-2.5 rounded-full bg-white/10">
+            <div
+              className="relative h-full rounded-full bg-gradient-to-r from-sky-400 via-cyan-300 to-indigo-300 shadow-[0_0_24px_rgba(56,189,248,0.25)]"
+              style={{ width: `${progressWidth}%` }}
+            >
+              <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2">
+                <div className="absolute inset-0 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-300/30 blur-md" />
+                <div className="absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-200/50 animate-ping" />
+                <div className="absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-[4px] bg-cyan-200/70" />
+                <div className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_14px_rgba(255,255,255,0.65)]" />
+              </div>
             </div>
           </div>
-        ) : null}
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <div className="rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-4">
+            <div className="text-[10px] uppercase tracking-[0.24em] text-slate-500">
+              Sisa kebutuhan
+            </div>
+            <div className="mt-2 text-xl font-semibold tracking-[-0.03em] text-white">
+              {remainingFunding > 0 ? compactIDR(remainingFunding) : "Terpenuhi"}
+            </div>
+          </div>
+
+          <div className="rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-4">
+            <div className="text-[10px] uppercase tracking-[0.24em] text-slate-500">
+              Kecepatan progres
+            </div>
+            <div className="mt-2 text-xl font-semibold tracking-[-0.03em] text-white">
+              {formatPercent(fundingProgress)}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -424,8 +467,12 @@ function MetricCard({
 
 export default function BloombergHeroCard({
   project,
+  backHref,
+  topBarLabel = "Detail transaksi",
 }: {
   project: ProjectDetailViewModel;
+  backHref?: string;
+  topBarLabel?: string;
 }) {
   const totalFunded = toNumber(project.totalFunded);
   const fundingTarget = toNumber(project.fundingTarget);
@@ -448,18 +495,22 @@ export default function BloombergHeroCard({
     project.estimatedMonths
   );
 
-  const managerName = project.createdByName?.trim() || project.createdById || "";
+  const managerName = project.createdByName?.trim() || "";
+  const shouldShowManager = Boolean(
+    managerName || project.createdByAvatar
+  );
+
   const fundingTypeLabel =
     project.fundingType === "terbuka"
       ? "Pendanaan terbuka"
       : "Pendanaan tertutup";
 
   return (
-    <section className="relative overflow-hidden rounded-[36px] border border-white/10 bg-[#070b11] shadow-[0_40px_120px_rgba(0,0,0,0.48)]">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.14),transparent_28%),radial-gradient(circle_at_top_right,rgba(168,85,247,0.12),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.12),transparent_22%)]" />
+    <section className="relative overflow-hidden rounded-[38px] border border-white/10 bg-[#06080d] shadow-[0_40px_120px_rgba(0,0,0,0.55)]">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.12),transparent_26%),radial-gradient(circle_at_top_right,rgba(168,85,247,0.12),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.1),transparent_22%)]" />
 
-      <div className="relative grid min-h-[720px] lg:min-h-[640px] lg:grid-cols-[1.2fr_0.9fr]">
-        <div className="relative min-h-[360px] lg:min-h-[640px]">
+      <div className="relative grid min-h-[760px] lg:min-h-[620px] lg:grid-cols-[1.08fr_0.92fr]">
+        <div className="relative min-h-[360px] lg:min-h-[620px]">
           {heroImage ? (
             <img
               src={heroImage}
@@ -471,43 +522,24 @@ export default function BloombergHeroCard({
             <div className="absolute inset-0 bg-[linear-gradient(135deg,#111827,#0b1220,#05070b)]" />
           )}
 
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(4,7,11,0.08)_0%,rgba(4,7,11,0.2)_22%,rgba(4,7,11,0.62)_70%,rgba(4,7,11,0.92)_100%)] lg:bg-[linear-gradient(90deg,rgba(4,7,11,0.12)_0%,rgba(4,7,11,0.18)_28%,rgba(4,7,11,0.48)_60%,rgba(4,7,11,0.82)_100%)]" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.16),transparent_24%),radial-gradient(circle_at_80%_10%,rgba(168,85,247,0.14),transparent_20%)]" />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(5,7,11,0.05)_0%,rgba(5,7,11,0.10)_26%,rgba(5,7,11,0.58)_72%,rgba(5,7,11,0.96)_100%)] lg:bg-[linear-gradient(180deg,rgba(5,7,11,0.01)_0%,rgba(5,7,11,0.03)_48%,rgba(5,7,11,0.18)_66%,rgba(5,7,11,0.96)_100%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_16%,rgba(56,189,248,0.18),transparent_22%),radial-gradient(circle_at_82%_10%,rgba(168,85,247,0.14),transparent_20%)]" />
 
-          <div className="relative flex h-full flex-col justify-end p-6 md:p-8 lg:p-10">
+          <HeroTopBar backHref={backHref} label={topBarLabel} />
+
+          <div className="relative flex h-full flex-col justify-end px-6 pb-6 pt-28 md:px-8 md:pb-8 md:pt-32 lg:p-10">
             <div className="max-w-3xl">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-4 py-2 backdrop-blur-xl">
-                <span
-                  className={cn(
-                    "h-2.5 w-2.5 rounded-full",
-                    TONE_STYLES[STATUS_TONE[project.status]].dot
-                  )}
-                />
-                <span
-                  className={cn(
-                    "text-sm font-medium",
-                    TONE_STYLES[STATUS_TONE[project.status]].text
-                  )}
-                >
-                  {STATUS_LABEL[project.status]}
-                </span>
-              </div>
-
-              <div className="mt-5 text-[11px] uppercase tracking-[0.34em] text-slate-400">
-                {fundingTypeLabel}
-              </div>
-
-              <h1 className="mt-3 max-w-4xl text-4xl font-semibold leading-[0.94] tracking-[-0.05em] text-white md:text-6xl xl:text-7xl">
+              <h1 className="max-w-4xl text-4xl font-semibold leading-[0.92] tracking-[-0.06em] text-white md:text-6xl xl:text-7xl">
                 {project.name}
               </h1>
 
               <p className="mt-5 max-w-2xl text-sm leading-7 text-slate-200/88 md:text-[15px]">
                 {project.description?.trim()
                   ? project.description
-                  : "Ringkasan utama proyek untuk menilai progres, timeline, dan potensi hasil investasi dalam satu tampilan yang tajam."}
+                  : "Aset dengan struktur pendanaan yang dirancang untuk memberi visibilitas tajam terhadap progres, timeline, dan potensi nilai exit."}
               </p>
 
-              <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3 text-sm text-slate-200/90">
+              <div className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-3 text-sm text-slate-200/90">
                 <span className="inline-flex items-center gap-2">
                   <MapPin className="h-4 w-4 text-slate-400" />
                   {project.address || locationFull || "Lokasi belum diisi"}
@@ -520,14 +552,14 @@ export default function BloombergHeroCard({
 
                 <span className="inline-flex items-center gap-2">
                   <Clock3 className="h-4 w-4 text-slate-400" />
-                  {timeline.subline}
+                  {fundingTypeLabel}
                 </span>
               </div>
 
-              {managerName ? (
-                <div className="mt-6">
+              {shouldShowManager ? (
+                <div className="mt-7">
                   <ManagerChip
-                    name={managerName}
+                    name={managerName || "Manager proyek"}
                     avatar={project.createdByAvatar}
                   />
                 </div>
@@ -536,58 +568,63 @@ export default function BloombergHeroCard({
           </div>
         </div>
 
-        <div className="relative border-t border-white/10 bg-[linear-gradient(180deg,rgba(7,10,16,0.92),rgba(4,6,10,0.98))] lg:border-l lg:border-t-0">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.08),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(168,85,247,0.08),transparent_26%)]" />
+        <div className="relative border-t border-white/10 bg-[linear-gradient(180deg,rgba(8,11,17,0.96),rgba(4,6,10,0.99))] lg:border-l lg:border-t-0">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.08),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(168,85,247,0.08),transparent_24%)]" />
 
           <div className="relative flex h-full flex-col p-5 md:p-7 lg:p-8">
-            <SpotlightCard
-              status={project.status}
-              timelineHeadline={timeline.headline}
-              deadlineLabel={timeline.deadlineLabel}
-            />
+            <div className="relative overflow-hidden rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-5 md:p-6 backdrop-blur-2xl">
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-white/70 via-white/20 to-transparent" />
+              <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-white/10 blur-3xl" />
 
-            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <MetricCard
-                label="Dana terhimpun"
-                value={compactIDR(totalFunded)}
-                helper={`${formatPercent(fundingProgress)} dari ${compactIDR(
-                  fundingTarget
-                )}`}
-                footnote={
-                  remainingFunding > 0
-                    ? `Sisa ${compactIDR(remainingFunding)}`
-                    : "Target terpenuhi"
-                }
-                tone="amber"
-                progress={fundingProgress}
+              <div className="relative">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <div className="text-[11px] uppercase tracking-[0.28em] text-slate-500">
+                      Live status
+                    </div>
+                    <div className="mt-4">
+                      <StatusBadge status={project.status} />
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <div className="text-[11px] uppercase tracking-[0.28em] text-slate-500">
+                      Timeline
+                    </div>
+                    <div className="mt-2 text-lg font-medium text-white">
+                      {timeline.headline}
+                    </div>
+                    <div className="mt-1 text-sm text-slate-400">
+                      {timeline.deadlineLabel}
+                    </div>
+                  </div>
+                </div>
+
+                <LifecycleRail status={project.status} />
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <FundingTerminal
+                totalFunded={totalFunded}
+                fundingTarget={fundingTarget}
+                fundingProgress={fundingProgress}
+                remainingFunding={remainingFunding}
               />
+            </div>
 
-              <MetricCard
-                label="Deadline target"
-                value={timeline.headline}
-                helper={timeline.subline}
-                footnote={
-                  project.estimatedMonths
-                    ? `${project.estimatedMonths} bulan tenor`
-                    : "Tenor belum diatur"
-                }
-                tone={timeline.tone}
-                progress={timeline.progress}
-              />
-
-              <MetricCard
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <InfoPanel
                 label="ROI proyeksi"
                 value={formatPercent(roi)}
-                helper="Terhadap target pendanaan"
-                footnote={`${formatMultiple(multiple)} equity multiple`}
+                helper={`${formatMultiple(multiple)} equity multiple`}
                 tone="emerald"
               />
 
-              <MetricCard
+              <InfoPanel
                 label="Pendapatan kotor"
                 value={compactIDR(estimatedSellPrice)}
                 helper="Estimasi nilai exit"
-                footnote="Sebelum biaya akhir"
                 tone="fuchsia"
               />
             </div>

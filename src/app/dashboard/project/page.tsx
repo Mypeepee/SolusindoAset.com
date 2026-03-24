@@ -23,6 +23,8 @@ export default function ProjectPage() {
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [projectError, setProjectError] = useState("");
 
+  const currentAgentId = (session?.user as any)?.agentId ?? null;
+
   const fetchProjects = useCallback(async () => {
     try {
       setLoadingProjects(true);
@@ -89,7 +91,7 @@ export default function ProjectPage() {
           estimasiProfit={totalEstimasiProfit}
           jumlahPropertyDidanai={jumlahPropertyDidanai}
           jabatan="AGENT"
-          createdById={(session?.user as any)?.agentId ?? undefined}
+          createdById={currentAgentId ?? undefined}
           onCreateProject={handleProjectCreated}
         />
 
@@ -113,9 +115,19 @@ export default function ProjectPage() {
               id="daftar-project"
               className="grid grid-cols-1 gap-5 lg:grid-cols-2"
             >
-              {campaigns.map((project) => (
-                <ProjectCampaignCard key={project.id} project={project} />
-              ))}
+              {campaigns.map((project) => {
+                const canManage =
+                  Boolean(currentAgentId) &&
+                  project.createdById === currentAgentId;
+
+                return (
+                  <ProjectCampaignCard
+                    key={project.id}
+                    project={project}
+                    adminMode={canManage}
+                  />
+                );
+              })}
             </div>
           )}
         </section>

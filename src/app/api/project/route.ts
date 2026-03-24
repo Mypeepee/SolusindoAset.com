@@ -19,6 +19,7 @@ type ProjectListItem = {
   investor: number;
   avatarInvestor: string[];
   estimasiSelesaiBulan?: number;
+  createdById?: string | null;
 };
 
 type ProjectListResponse = {
@@ -72,8 +73,19 @@ export async function GET() {
       where: {
         OR: [
           { jenis_pendanaan: "terbuka" },
+
           ...(agentId
             ? [
+                // project yang dibuat oleh agent yang sedang login
+                {
+                  pembuat: {
+                    is: {
+                      id_agent: agentId,
+                    },
+                  },
+                },
+
+                // project tertutup yang agent ini ikuti sebagai investor
                 {
                   jenis_pendanaan: "tertutup",
                   investorProject: {
@@ -101,6 +113,13 @@ export async function GET() {
         estimasi_profit_bersih: true,
         pendanaan_ditutup_pada: true,
         estimasi_bulan: true,
+
+        pembuat: {
+          select: {
+            id_agent: true,
+          },
+        },
+
         investorProject: {
           orderBy: {
             nominal_komitmen: "desc",
@@ -151,6 +170,7 @@ export async function GET() {
         investor: project.investorProject.length,
         avatarInvestor: sortedInvestorAvatars,
         estimasiSelesaiBulan: project.estimasi_bulan ?? 0,
+        createdById: project.pembuat?.id_agent ?? null,
       };
     });
 

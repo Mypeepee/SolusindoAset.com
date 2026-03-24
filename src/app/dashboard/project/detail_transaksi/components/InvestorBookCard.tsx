@@ -1,12 +1,60 @@
 import { Users2 } from "lucide-react";
 import type { ProjectDetailViewModel } from "./types";
-import { formatIDR, formatPercent, toNumber } from "./utils";
 import {
-  EmptyState,
-  InvestorAvatar,
-  PaymentStatusPill,
-  SectionCard,
-} from "./shared";
+  formatIDR,
+  formatPercent,
+  getInitials,
+  normalizeImage,
+  toNumber,
+} from "./utils";
+import { EmptyState, PaymentStatusPill, SectionCard } from "./shared";
+
+function normalizeOwnership(value: unknown) {
+  const numeric = toNumber(value);
+  if (!numeric) return null;
+
+  return numeric > 1 ? numeric / 100 : numeric;
+}
+
+function InvestorIdentity({
+  name,
+  avatar,
+  note,
+}: {
+  name: string;
+  avatar?: string | null;
+  note?: string | null;
+}) {
+  const src = normalizeImage(avatar);
+  const displayName = name?.trim() || "Investor";
+  const helper = note?.trim() || "";
+
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      {src ? (
+        <img
+          src={src}
+          alt={displayName}
+          className="h-12 w-12 shrink-0 rounded-full border border-white/10 object-cover"
+          referrerPolicy="no-referrer"
+        />
+      ) : (
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-lg font-semibold text-white">
+          {getInitials(displayName)}
+        </div>
+      )}
+
+      <div className="min-w-0">
+        <div className="truncate text-[15px] font-semibold text-white">
+          {displayName}
+        </div>
+        {helper ? (
+          <div className="truncate text-xs text-slate-500">{helper}</div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 export default function InvestorBookCard({
   project,
@@ -14,7 +62,7 @@ export default function InvestorBookCard({
   project: ProjectDetailViewModel;
 }) {
   const investors = [...project.investors].sort(
-    (a, b) => toNumber(b.paid) - toNumber(a.paid)
+    (a, b) => toNumber(b.committed) - toNumber(a.committed)
   );
 
   return (
@@ -30,7 +78,7 @@ export default function InvestorBookCard({
     >
       {investors.length > 0 ? (
         <div className="overflow-hidden rounded-[24px] border border-white/10">
-          <div className="grid grid-cols-[1.5fr_1fr_1fr_0.8fr_0.9fr] gap-4 bg-white/[0.04] px-4 py-3 text-xs uppercase tracking-[0.22em] text-slate-500">
+          <div className="grid grid-cols-[minmax(0,1.7fr)_1.05fr_1fr_0.95fr_0.9fr] gap-4 bg-white/[0.04] px-5 py-3 text-xs uppercase tracking-[0.22em] text-slate-500">
             <div>Investor</div>
             <div>Komitmen</div>
             <div>Terbayar</div>
@@ -39,44 +87,40 @@ export default function InvestorBookCard({
           </div>
 
           <div className="divide-y divide-white/10">
-            {investors.map((item) => (
-              <div
-                key={item.id}
-                className="grid grid-cols-[1.5fr_1fr_1fr_0.8fr_0.9fr] gap-4 px-4 py-4 text-sm text-slate-200"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-3">
-                    <InvestorAvatar name={item.name} avatar={item.avatar} />
-                    <div className="min-w-0">
-                      <div className="truncate font-medium text-white">
-                        {item.name}
-                      </div>
-                      <div className="truncate text-xs text-slate-500">
-                        {item.note || "Investor tercatat di project"}
-                      </div>
-                    </div>
+            {investors.map((item) => {
+              const ownership = normalizeOwnership(item.ownership);
+
+              return (
+                <div
+                  key={item.id}
+                  className="grid grid-cols-[minmax(0,1.7fr)_1.05fr_1fr_0.95fr_0.9fr] gap-4 px-5 py-5 text-sm text-slate-200"
+                >
+                  <div className="min-w-0">
+                    <InvestorIdentity
+                      name={item.name}
+                      avatar={item.avatar}
+                      note={item.note}
+                    />
+                  </div>
+
+                  <div className="font-mono text-white">
+                    {formatIDR(toNumber(item.committed))}
+                  </div>
+
+                  <div className="font-mono text-emerald-300">
+                    {formatIDR(toNumber(item.paid))}
+                  </div>
+
+                  <div className="text-white">
+                    {ownership != null ? formatPercent(ownership) : "—"}
+                  </div>
+
+                  <div>
+                    <PaymentStatusPill status={item.status} />
                   </div>
                 </div>
-
-                <div className="font-mono">
-                  {formatIDR(toNumber(item.committed))}
-                </div>
-
-                <div className="font-mono text-emerald-300">
-                  {formatIDR(toNumber(item.paid))}
-                </div>
-
-                <div>
-                  {item.ownership != null
-                    ? formatPercent(toNumber(item.ownership))
-                    : "—"}
-                </div>
-
-                <div>
-                  <PaymentStatusPill status={item.status} />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ) : (

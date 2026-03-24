@@ -19,6 +19,7 @@ export type ProjectCampaign = {
   avatarInvestor?: string[];
   estimasiExit?: string;
   estimasiSelesaiBulan?: number;
+  createdById?: string | null;
 };
 
 function cn(...classes: Array<string | false | null | undefined>) {
@@ -504,6 +505,11 @@ export default function ProjectFundraisingCard({
   );
   const statusTone = getStatusTone(project.status);
 
+  const detailHref = `/dashboard/project/detail_transaksi/${encodeURIComponent(
+    project.id
+  )}`;
+  const manageFundHref = `${detailHref}/arus_kas`;
+
   return (
     <article className="group relative overflow-hidden rounded-[34px] border border-white/10 bg-[linear-gradient(180deg,#08111d_0%,#050a12_100%)] shadow-[0_28px_90px_rgba(0,0,0,0.42)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_34px_110px_rgba(0,0,0,0.5)]">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.12),transparent_24%),radial-gradient(circle_at_bottom_left,rgba(96,165,250,0.12),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.02)_0%,rgba(255,255,255,0)_22%)]" />
@@ -617,18 +623,19 @@ export default function ProjectFundraisingCard({
 
         <div className="mt-5 flex flex-col gap-3 sm:flex-row">
           <Link
-            href={`/dashboard/project/detail_transaksi/${encodeURIComponent(
-              project.id
-            )}`}
+            href={detailHref}
             className="flex-1 rounded-[20px] bg-[linear-gradient(135deg,#e7ffe9_0%,#a7f3d0_42%,#34d399_100%)] px-5 py-3.5 text-center text-sm font-semibold text-[#04110a] shadow-[0_18px_34px_rgba(52,211,153,0.28)] transition duration-200 hover:brightness-105 active:scale-[0.99]"
           >
             Lihat Detail
           </Link>
 
           {adminMode ? (
-            <button className="flex-1 rounded-[20px] border border-white/15 bg-white/[0.04] px-5 py-3.5 text-sm font-semibold text-white backdrop-blur-md transition duration-200 hover:bg-white/[0.07] active:scale-[0.99]">
+            <Link
+              href={manageFundHref}
+              className="flex-1 rounded-[20px] border border-white/15 bg-white/[0.04] px-5 py-3.5 text-center text-sm font-semibold text-white backdrop-blur-md transition duration-200 hover:bg-white/[0.07] active:scale-[0.99]"
+            >
               Manage Fund
-            </button>
+            </Link>
           ) : null}
         </div>
       </div>
