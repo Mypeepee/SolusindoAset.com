@@ -1,183 +1,191 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import type { DbCashflow, DbProject, ManageFundData, WalletKey } from "../types";
+import type {
+  DbCashflow,
+  ManageFundData,
+  WalletKey,
+  WalletSummary,
+} from "../types";
 
-function toNumber(value: unknown) {
-  const numeric = Number(value ?? 0);
+type ProjectFundSource = {
+  id_project: string;
+  nama_project: string;
+  nilai_limit_lelang: Prisma.Decimal | number | null;
+  spare_bidding: Prisma.Decimal | number | null;
+  biaya_balik_nama: Prisma.Decimal | number | null;
+  biaya_eksekusi: Prisma.Decimal | number | null;
+  biaya_renov: Prisma.Decimal | number | null;
+  dana_cadangan: Prisma.Decimal | number | null;
+};
+
+const WALLET_META: Array<{
+  key: WalletKey;
+  title: string;
+  getBudget: (project: ProjectFundSource) => number;
+}> = [
+  {
+    key: "utama",
+    title: "Dompet Utama",
+    getBudget: (project) =>
+      toNumber(project.nilai_limit_lelang) + toNumber(project.spare_bidding),
+  },
+  {
+    key: "dokumen",
+    title: "Dokumen",
+    getBudget: (project) => toNumber(project.biaya_balik_nama),
+  },
+  {
+    key: "eksekusi",
+    title: "Eksekusi",
+    getBudget: (project) => toNumber(project.biaya_eksekusi),
+  },
+  {
+    key: "renovasi",
+    title: "Renovasi",
+    getBudget: (project) => toNumber(project.biaya_renov),
+  },
+  {
+    key: "cadangan",
+    title: "Cadangan",
+    getBudget: (project) => toNumber(project.dana_cadangan),
+  },
+];
+
+function toNumber(value: Prisma.Decimal | number | null | undefined) {
+  const numeric =
+    value instanceof Prisma.Decimal ? value.toNumber() : Number(value ?? 0);
+
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
-function extractWalletKey(catatan?: string | null): WalletKey {
-  const text = String(catatan ?? "");
-  const match = text.match(/\[wallet:(utama|dokumen|eksekusi|renovasi|cadangan)\]/i);
-
-  if (!match) return "utama";
-
-  const key = match[1]?.toLowerCase();
-
+function normalizeWalletKey(value: unknown): WalletKey {
   if (
-    key === "utama" ||
-    key === "dokumen" ||
-    key === "eksekusi" ||
-    key === "renovasi" ||
-    key === "cadangan"
+    value === "utama" ||
+    value === "dokumen" ||
+    value === "eksekusi" ||
+    value === "renovasi" ||
+    value === "cadangan"
   ) {
-    return key;
+    return value;
   }
 
   return "utama";
 }
 
-function cleanCatatan(catatan?: string | null) {
-  if (!catatan) return "";
-  return catatan
-    .replace(/\[wallet:(utama|dokumen|eksekusi|renovasi|cadangan)\]/gi, "")
-    .trim();
-}
-
 export async function getProjectFundDetail(
   idProject: string
 ): Promise<ManageFundData | null> {
-  const [projectRows, cashflowRows] = await Promise.all([
-    prisma.$queryRaw<DbProject[]>`
-      SELECT
-        id_project,
-        nama_project,
-        status::text AS status,
-        target_pendanaan,
-        total_pendanaan,
-        total_biaya_akuisisi,
-        nilai_limit_lelang,
-        spare_bidding,
-        biaya_balik_nama,
-        biaya_eksekusi,
-        biaya_renov,
-        dana_cadangan,
-        estimasi_harga_jual,
-        estimasi_profit_bersih,
-        dibuat_tanggal
-      FROM public.project
-      WHERE id_project = ${idProject}
-      LIMIT 1
-    `,
-    prisma.$queryRaw<DbCashflow[]>`
-      SELECT
-        id_project_arus_kas,
-        id_project,
-        tanggal_transaksi,
-        jenis_transaksi::text AS jenis_transaksi,
-        kategori_transaksi::text AS kategori_transaksi,
-        judul_transaksi,
-        pihak_terkait,
-        nomor_referensi,
-        metode_pembayaran::text AS metode_pembayaran,
-        nominal,
-        status_transaksi::text AS status_transaksi,
-        catatan,
-        dibuat_tanggal,
-        diupdate_tanggal
-      FROM public.project_arus_kas
-      WHERE id_project = ${idProject}
-      ORDER BY tanggal_transaksi DESC, dibuat_tanggal DESC
-    `,
+  const [project, cashflowRows] = await Promise.all([
+    prisma.project.findUnique({
+      where: { id_project: idProject },
+      select: {
+        id_project: true,
+        nama_project: true,
+        nilai_limit_lelang: true,
+        spare_bidding: true,
+        biaya_balik_nama: true,
+        biaya_eksekusi: true,
+        biaya_renov: true,
+        dana_cadangan: true,
+      },
+    }),
+    prisma.projectArusKas.findMany({
+      where: {
+        id_project: idProject,
+        status_transaksi: {
+          not: "dibatalkan",
+        },
+      },
+      orderBy: [{ tanggal_transaksi: "desc" }, { id_project_arus_kas: "desc" }],
+      select: {
+        id_project_arus_kas: true,
+        id_project: true,
+        wallet_key: true,
+        tanggal_transaksi: true,
+        jenis_transaksi: true,
+        kategori_transaksi: true,
+        judul_transaksi: true,
+        nominal: true,
+        status_transaksi: true,
+        catatan: true,
+        dibuat_tanggal: true,
+        diupdate_tanggal: true,
+      },
+    }),
   ]);
-
-  const project = projectRows[0];
 
   if (!project) {
     return null;
   }
 
-  const transactions = cashflowRows.map((row) => ({
-    ...row,
-    wallet_key: extractWalletKey(row.catatan),
-    catatan: cleanCatatan(row.catatan),
+  const transactions: DbCashflow[] = cashflowRows.map((row) => ({
+    id_project_arus_kas: row.id_project_arus_kas,
+    id_project: row.id_project,
+    wallet_key: normalizeWalletKey(row.wallet_key),
+    tanggal_transaksi: row.tanggal_transaksi,
+    jenis_transaksi: row.jenis_transaksi,
+    kategori_transaksi: row.kategori_transaksi,
+    judul_transaksi: row.judul_transaksi,
     nominal: toNumber(row.nominal),
+    status_transaksi: row.status_transaksi,
+    catatan: row.catatan,
+    dibuat_tanggal: row.dibuat_tanggal,
+    diupdate_tanggal: row.diupdate_tanggal,
   }));
 
-  const budgetUtama =
-    toNumber(project.nilai_limit_lelang) + toNumber(project.spare_bidding);
-  const budgetDokumen = toNumber(project.biaya_balik_nama);
-  const budgetEksekusi = toNumber(project.biaya_eksekusi);
-  const budgetRenovasi = toNumber(project.biaya_renov);
-  const budgetCadangan = Math.max(
-    toNumber(project.dana_cadangan) ||
-      toNumber(project.target_pendanaan) - toNumber(project.total_biaya_akuisisi),
-    0
-  );
+  const summaryMap = new Map<
+    WalletKey,
+    { income: number; expense: number }
+  >();
 
-  const walletBase = [
-    {
-      walletKey: "utama" as WalletKey,
-      title: "Dompet Utama",
-      budget: budgetUtama,
-      visible: true,
-    },
-    {
-      walletKey: "dokumen" as WalletKey,
-      title: "Pengurusan Dokumen",
-      budget: budgetDokumen,
-      visible: true,
-    },
-    {
-      walletKey: "eksekusi" as WalletKey,
-      title: "Eksekusi Pengosongan",
-      budget: budgetEksekusi,
-      visible: true,
-    },
-    {
-      walletKey: "renovasi" as WalletKey,
-      title: "Renovasi",
-      budget: budgetRenovasi,
-      visible: true,
-    },
-    {
-      walletKey: "cadangan" as WalletKey,
-      title: "Dana Cadangan",
-      budget: budgetCadangan,
-      visible: budgetCadangan > 0,
-    },
-  ].filter((item) => item.visible);
+  for (const wallet of WALLET_META) {
+    summaryMap.set(wallet.key, { income: 0, expense: 0 });
+  }
 
-  const wallets = walletBase.map((wallet) => {
-    const rows = transactions.filter(
-      (item) => item.wallet_key === wallet.walletKey
-    );
+  for (const row of transactions) {
+    const walletKey = normalizeWalletKey(row.wallet_key);
+    const current = summaryMap.get(walletKey) ?? { income: 0, expense: 0 };
+    const nominal = toNumber(row.nominal);
 
-    const income = rows
-      .filter((item) => item.jenis_transaksi === "masuk")
-      .reduce((sum, item) => sum + toNumber(item.nominal), 0);
+    if (row.jenis_transaksi === "pemasukan") {
+      current.income += nominal;
+    } else {
+      current.expense += nominal;
+    }
 
-    const expense = rows
-      .filter((item) => item.jenis_transaksi === "keluar")
-      .reduce((sum, item) => sum + toNumber(item.nominal), 0);
+    summaryMap.set(walletKey, current);
+  }
 
-    const balance = income - expense;
-    const usedBudget = expense;
-    const remainingBudget = wallet.budget - usedBudget;
+  const wallets: WalletSummary[] = WALLET_META.map((meta) => {
+    const budget = meta.getBudget(project);
+    const summary = summaryMap.get(meta.key) ?? { income: 0, expense: 0 };
+    const balance = budget + summary.income - summary.expense;
 
     return {
-      walletKey: wallet.walletKey,
-      title: wallet.title,
-      budget: wallet.budget,
-      income,
-      expense,
+      walletKey: meta.key,
+      title: meta.title,
+      budget,
+      income: summary.income,
+      expense: summary.expense,
+      usedBudget: summary.expense,
+      remainingBudget: balance,
       balance,
-      usedBudget,
-      remainingBudget,
-      visible: true,
     };
   });
 
-  const totalIncome = wallets.reduce((sum, item) => sum + item.income, 0);
-  const totalExpense = wallets.reduce((sum, item) => sum + item.expense, 0);
-  const totalBalance = wallets.reduce((sum, item) => sum + item.balance, 0);
+  const totalIncome = wallets.reduce((sum, wallet) => sum + wallet.income, 0);
+  const totalExpense = wallets.reduce((sum, wallet) => sum + wallet.expense, 0);
+  const totalBalance = wallets.reduce((sum, wallet) => sum + wallet.balance, 0);
   const totalRemainingBudget = wallets.reduce(
-    (sum, item) => sum + item.remainingBudget,
+    (sum, wallet) => sum + wallet.remainingBudget,
     0
   );
 
   return {
-    project,
+    project: {
+      id_project: project.id_project,
+      nama_project: project.nama_project,
+    },
     wallets,
     transactions,
     totalIncome,

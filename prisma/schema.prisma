@@ -233,28 +233,28 @@ model ProjectCma {
 }
 
 model ProjectArusKas {
-  id_project_arus_kas BigInt                           @id @default(autoincrement())
-  id_project          String                           @db.VarChar(20)
-  tanggal_transaksi   DateTime                         @db.Date
+  id_project_arus_kas BigInt                 @id @default(autoincrement())
+  id_project          String                 @db.VarChar(20)
+  wallet_key          wallet_key_enum
+  tanggal_transaksi   DateTime               @db.Date
   jenis_transaksi     jenis_arus_kas_enum
   kategori_transaksi  kategori_arus_kas_enum
-  judul_transaksi     String                           @db.VarChar(255)
-  pihak_terkait       String?                          @db.VarChar(255)
-  nomor_referensi     String?                          @db.VarChar(100)
-  metode_pembayaran   metode_pembayaran_arus_kas_enum?
-  nominal             Decimal                          @default(0) @db.Decimal(20, 2)
-  status_transaksi    status_arus_kas_enum             @default(tercatat)
+  judul_transaksi     String                 @db.VarChar(255)
+  nominal             Decimal                @default(0) @db.Decimal(20, 2)
+  status_transaksi    status_arus_kas_enum   @default(tercatat)
   catatan             String?
-  dibuat_tanggal      DateTime                         @default(now()) @db.Timestamptz(6)
-  diupdate_tanggal    DateTime                         @default(now()) @db.Timestamptz(6)
+  dibuat_tanggal      DateTime               @default(now()) @db.Timestamptz(6)
+  diupdate_tanggal    DateTime               @updatedAt @db.Timestamptz(6)
 
   project Project @relation(fields: [id_project], references: [id_project], onDelete: Cascade, map: "project_arus_kas_project_fk")
 
   @@index([id_project], map: "idx_project_arus_kas_project")
+  @@index([wallet_key], map: "idx_project_arus_kas_wallet")
   @@index([tanggal_transaksi], map: "idx_project_arus_kas_tanggal")
   @@index([jenis_transaksi], map: "idx_project_arus_kas_jenis")
   @@index([kategori_transaksi], map: "idx_project_arus_kas_kategori")
   @@index([status_transaksi], map: "idx_project_arus_kas_status")
+  @@index([id_project, wallet_key, tanggal_transaksi], map: "idx_project_arus_kas_project_wallet_tanggal")
   @@map("project_arus_kas")
 }
 
@@ -718,6 +718,14 @@ enum status_pembayaran_project_enum {
   dibatalkan
 }
 
+enum wallet_key_enum {
+  utama
+  dokumen
+  eksekusi
+  renovasi
+  cadangan
+}
+
 enum jenis_arus_kas_enum {
   pemasukan
   pengeluaran
@@ -729,18 +737,15 @@ enum kategori_arus_kas_enum {
   refund
   pemasukan_lain
   pembelian_aset
+  biaya_spare_bidding
   biaya_dokumen_balik_nama
   biaya_eksekusi_pengosongan
   biaya_renovasi
-}
-
-enum metode_pembayaran_arus_kas_enum {
-  transfer
-  tunai
+  penggunaan_dana_cadangan
+  pengeluaran_lain
 }
 
 enum status_arus_kas_enum {
   tercatat
-  dibayar
   dibatalkan
 }

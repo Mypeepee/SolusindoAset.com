@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ChevronDown, Plus } from "lucide-react";
 import type { ManageFundData, WalletKey } from "../types";
 import WalletGrid from "./wallet-grid";
 import CashflowTable from "./cashflow-table";
+import CashflowEntrySheet from "./cashflow-entry-sheet";
 
 function getRowTimestamp(row: unknown) {
   if (!row || typeof row !== "object") return 0;
@@ -33,83 +35,145 @@ function getRowTimestamp(row: unknown) {
   return 0;
 }
 
+function getWalletLabel(walletKey: WalletKey | "all") {
+  switch (walletKey) {
+    case "all":
+      return "Semua dompet";
+    case "utama":
+      return "Dompet Utama";
+    case "dokumen":
+      return "Dokumen";
+    case "eksekusi":
+      return "Eksekusi";
+    case "renovasi":
+      return "Renovasi";
+    case "cadangan":
+      return "Cadangan";
+    default:
+      return "Semua dompet";
+  }
+}
+
+const WALLET_OPTIONS: Array<{ value: WalletKey | "all"; label: string }> = [
+  { value: "all", label: "Semua dompet" },
+  { value: "utama", label: "Dompet Utama" },
+  { value: "dokumen", label: "Dokumen" },
+  { value: "eksekusi", label: "Eksekusi" },
+  { value: "renovasi", label: "Renovasi" },
+  { value: "cadangan", label: "Cadangan" },
+];
+
 export default function ManageFundScreen({
   data,
 }: {
   data: ManageFundData;
 }) {
   const [selectedWallet, setSelectedWallet] = useState<WalletKey | "all">("all");
-  const [selectedKind, setSelectedKind] = useState<"all" | "masuk" | "keluar">(
-    "all"
-  );
+  const [isComposerOpen, setIsComposerOpen] = useState(false);
 
   const latestRows = useMemo(() => {
     const source = Array.isArray(data.transactions) ? data.transactions : [];
 
     return [...source]
       .filter((row) => {
-        const matchWallet =
-          selectedWallet === "all" ? true : row.wallet_key === selectedWallet;
-
-        const matchKind =
-          selectedKind === "all" ? true : row.jenis_transaksi === selectedKind;
-
-        return matchWallet && matchKind;
+        return selectedWallet === "all"
+          ? true
+          : row.wallet_key === selectedWallet;
       })
       .sort((a, b) => getRowTimestamp(b) - getRowTimestamp(a));
-  }, [data.transactions, selectedWallet, selectedKind]);
+  }, [data.transactions, selectedWallet]);
+
+  const defaultWallet =
+    selectedWallet === "all" ? data.wallets?.[0]?.walletKey : selectedWallet;
 
   return (
-    <div className="space-y-8">
-      <WalletGrid
+    <>
+      <div className="space-y-8">
+        <WalletGrid
+          wallets={data.wallets}
+          selectedWallet={selectedWallet}
+          onSelectWallet={setSelectedWallet}
+        />
+
+        <section className="space-y-5 rounded-[30px] border border-white/10 bg-white/[0.03] p-5 sm:p-6">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <div className="text-[11px] uppercase tracking-[0.24em] text-white/38">
+                History of transaction
+              </div>
+
+              <h2 className="mt-3 text-[clamp(1.4rem,2vw,1.9rem)] font-semibold text-white">
+                Transaksi terbaru
+              </h2>
+
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+                Riwayat transaksi terbaru dari dompet yang sedang dipilih.
+              </p>
+            </div>
+
+            <div className="flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative min-w-[220px]">
+                  <select
+                    value={selectedWallet}
+                    onChange={(event) =>
+                      setSelectedWallet(event.target.value as WalletKey | "all")
+                    }
+                    className="h-11 w-full appearance-none rounded-full border border-white/10 bg-white/[0.04] px-4 pr-11 text-sm font-medium text-slate-200 outline-none transition hover:bg-white/[0.06] focus:border-cyan-300/35 focus:bg-white/[0.06]"
+                  >
+                    {WALLET_OPTIONS.map((option) => (
+                      <option
+                        key={option.value}
+                        value={option.value}
+                        className="bg-slate-950 text-white"
+                      >
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+
+                  <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/45" />
+                </div>
+
+                <div className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-300">
+                  {latestRows.length} transaksi
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsComposerOpen(true)}
+                className="inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-400/12 px-4 py-2 text-sm font-medium text-cyan-100 transition hover:bg-cyan-400/16"
+              >
+                <Plus className="h-4 w-4" />
+                Catat transaksi
+              </button>
+            </div>
+          </div>
+
+          <CashflowTable
+            rows={latestRows}
+            onCreateTransaction={() => setIsComposerOpen(true)}
+          />
+        </section>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setIsComposerOpen(true)}
+        className="fixed bottom-6 right-6 z-30 inline-flex h-14 w-14 items-center justify-center rounded-full border border-cyan-300/30 bg-cyan-400/15 text-cyan-100 shadow-[0_20px_50px_rgba(34,211,238,0.18)] backdrop-blur-xl transition hover:bg-cyan-400/20 lg:hidden"
+        aria-label="Catat transaksi"
+      >
+        <Plus className="h-5 w-5" />
+      </button>
+
+      <CashflowEntrySheet
+        open={isComposerOpen}
+        onClose={() => setIsComposerOpen(false)}
+        idProject={data.project.id_project}
         wallets={data.wallets}
-        selectedWallet={selectedWallet}
-        onSelectWallet={setSelectedWallet}
+        defaultWallet={defaultWallet}
       />
-
-      <section className="space-y-4 rounded-[28px] border border-white/10 bg-white/[0.03] p-4 sm:p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <div className="text-[11px] uppercase tracking-[0.22em] text-white/38">
-              History of transaction
-            </div>
-            <h2 className="mt-2 text-lg font-semibold text-white">
-              Transaksi terbaru
-            </h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Riwayat transaksi terbaru dari dompet yang sedang dipilih.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {(["all", "masuk", "keluar"] as const).map((kind) => {
-              const active = selectedKind === kind;
-
-              return (
-                <button
-                  key={kind}
-                  type="button"
-                  onClick={() => setSelectedKind(kind)}
-                  className={[
-                    "rounded-full border px-3 py-1.5 text-xs font-medium capitalize transition",
-                    active
-                      ? "border-cyan-300/40 bg-cyan-400/10 text-cyan-200"
-                      : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.06]",
-                  ].join(" ")}
-                >
-                  {kind === "all" ? "Semua" : kind}
-                </button>
-              );
-            })}
-
-            <div className="ml-1 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-300">
-              {latestRows.length} transaksi
-            </div>
-          </div>
-        </div>
-
-        <CashflowTable rows={latestRows} />
-      </section>
-    </div>
+    </>
   );
 }

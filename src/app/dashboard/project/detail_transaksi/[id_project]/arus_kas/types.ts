@@ -24,22 +24,19 @@ export type DbProject = {
 };
 
 export type DbCashflow = {
-  id_project_arus_kas: number;
-  id_project: string;
-  tanggal_transaksi: string | Date;
-  jenis_transaksi: string;
-  kategori_transaksi: string;
-  judul_transaksi: string;
-  pihak_terkait?: string | null;
-  nomor_referensi?: string | null;
-  metode_pembayaran?: string | null;
-  nominal: number;
-  status_transaksi: string;
-  catatan?: string | null;
-  dibuat_tanggal?: string | Date;
-  diupdate_tanggal?: string | Date;
-  wallet_key?: WalletKey;
-};
+    id_project_arus_kas: bigint;
+    id_project: string;
+    wallet_key: WalletKey;
+    tanggal_transaksi: Date | string;
+    jenis_transaksi: "pemasukan" | "pengeluaran";
+    kategori_transaksi: string;
+    judul_transaksi: string;
+    nominal: number;
+    status_transaksi: "tercatat" | "dibatalkan";
+    catatan?: string | null;
+    dibuat_tanggal?: Date | string;
+    diupdate_tanggal?: Date | string;
+  };
 
 export type WalletSummary = {
   walletKey: WalletKey;

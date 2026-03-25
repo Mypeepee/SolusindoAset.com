@@ -622,22 +622,24 @@ export default function ProjectFundraisingCard({
         </div>
 
         <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-          <Link
-            href={detailHref}
-            className="flex-1 rounded-[20px] bg-[linear-gradient(135deg,#e7ffe9_0%,#a7f3d0_42%,#34d399_100%)] px-5 py-3.5 text-center text-sm font-semibold text-[#04110a] shadow-[0_18px_34px_rgba(52,211,153,0.28)] transition duration-200 hover:brightness-105 active:scale-[0.99]"
-          >
-            Lihat Detail
-          </Link>
+  <Link
+    href={detailHref}
+    onClick={() => console.log("DETAIL CLICK", detailHref)}
+    className="flex-1 rounded-[20px] bg-[linear-gradient(135deg,#e7ffe9_0%,#a7f3d0_42%,#34d399_100%)] px-5 py-3.5 text-center text-sm font-semibold text-[#04110a] shadow-[0_18px_34px_rgba(52,211,153,0.28)] transition duration-200 hover:brightness-105 active:scale-[0.99]"
+  >
+    Lihat Detail
+  </Link>
 
-          {adminMode ? (
-            <Link
-              href={manageFundHref}
-              className="flex-1 rounded-[20px] border border-white/15 bg-white/[0.04] px-5 py-3.5 text-center text-sm font-semibold text-white backdrop-blur-md transition duration-200 hover:bg-white/[0.07] active:scale-[0.99]"
-            >
-              Manage Fund
-            </Link>
-          ) : null}
-        </div>
+  {adminMode ? (
+    <Link
+      href={manageFundHref}
+      onClick={() => console.log("MANAGE CLICK", manageFundHref)}
+      className="flex-1 rounded-[20px] border border-white/15 bg-white/[0.04] px-5 py-3.5 text-center text-sm font-semibold text-white backdrop-blur-md transition duration-200 hover:bg-white/[0.07] active:scale-[0.99]"
+    >
+      Manage Fund
+    </Link>
+  ) : null}
+</div>
       </div>
     </article>
   );

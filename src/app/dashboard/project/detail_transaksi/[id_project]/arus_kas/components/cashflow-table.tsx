@@ -1,193 +1,310 @@
+import type { LucideIcon } from "lucide-react";
 import {
-    ArrowDownLeft,
-    ArrowUpRight,
-    CalendarDays,
-    CircleDollarSign,
-    FileText,
-    Wallet2,
-  } from "lucide-react";
-  import { formatCurrency } from "../lib/format-currency";
-  import type { DbCashflow } from "../types";
-  
-  function formatDate(value?: string | Date | null) {
-    if (!value) return "-";
-  
-    const date = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(date.getTime())) return "-";
-  
-    return new Intl.DateTimeFormat("id-ID", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }).format(date);
+  CalendarDays,
+  CircleDollarSign,
+  FileCheck2,
+  FileText,
+  Hammer,
+  PiggyBank,
+  Plus,
+  ShieldCheck,
+  Wallet2,
+} from "lucide-react";
+import { formatCurrency } from "../lib/format-currency";
+import type { DbCashflow } from "../types";
+
+const WALLET_THEME: Record<
+  string,
+  {
+    icon: LucideIcon;
+    shell: string;
+    glow: string;
+    border: string;
+    badgeClass: string;
+    iconWrap: string;
+    amountClass: string;
   }
-  
-  function getWalletLabel(walletKey?: string | null) {
-    switch (walletKey) {
-      case "utama":
-        return "Dompet Utama";
-      case "dokumen":
-        return "Dokumen";
-      case "eksekusi":
-        return "Eksekusi";
-      case "renovasi":
-        return "Renovasi";
-      case "cadangan":
-        return "Cadangan";
-      default:
-        return "Dompet Utama";
-    }
+> = {
+  utama: {
+    icon: Wallet2,
+    shell:
+      "bg-[radial-gradient(circle_at_top_left,rgba(74,222,128,0.14),transparent_34%),linear-gradient(135deg,rgba(10,18,18,0.98),rgba(8,26,20,0.96))]",
+    glow: "shadow-[0_18px_60px_rgba(16,185,129,0.10)]",
+    border: "border-emerald-400/20",
+    badgeClass: "border-emerald-300/15 bg-emerald-400/10 text-emerald-200",
+    iconWrap: "border-emerald-300/20 bg-emerald-400/12 text-emerald-200",
+    amountClass: "text-emerald-100",
+  },
+  dokumen: {
+    icon: FileCheck2,
+    shell:
+      "bg-[radial-gradient(circle_at_top_left,rgba(103,232,249,0.14),transparent_34%),linear-gradient(135deg,rgba(7,18,33,0.98),rgba(7,28,46,0.96))]",
+    glow: "shadow-[0_18px_60px_rgba(34,211,238,0.10)]",
+    border: "border-cyan-400/20",
+    badgeClass: "border-cyan-300/15 bg-cyan-400/10 text-cyan-200",
+    iconWrap: "border-cyan-300/20 bg-cyan-400/12 text-cyan-200",
+    amountClass: "text-cyan-100",
+  },
+  eksekusi: {
+    icon: ShieldCheck,
+    shell:
+      "bg-[radial-gradient(circle_at_top_left,rgba(253,224,71,0.13),transparent_34%),linear-gradient(135deg,rgba(24,18,7,0.98),rgba(36,24,7,0.96))]",
+    glow: "shadow-[0_18px_60px_rgba(245,158,11,0.10)]",
+    border: "border-amber-300/20",
+    badgeClass: "border-amber-300/15 bg-amber-400/10 text-amber-200",
+    iconWrap: "border-amber-300/20 bg-amber-400/12 text-amber-200",
+    amountClass: "text-amber-100",
+  },
+  renovasi: {
+    icon: Hammer,
+    shell:
+      "bg-[radial-gradient(circle_at_top_left,rgba(196,181,253,0.14),transparent_34%),linear-gradient(135deg,rgba(16,12,28,0.98),rgba(24,14,42,0.96))]",
+    glow: "shadow-[0_18px_60px_rgba(139,92,246,0.10)]",
+    border: "border-violet-300/20",
+    badgeClass: "border-violet-300/15 bg-violet-400/10 text-violet-200",
+    iconWrap: "border-violet-300/20 bg-violet-400/12 text-violet-200",
+    amountClass: "text-violet-100",
+  },
+  cadangan: {
+    icon: PiggyBank,
+    shell:
+      "bg-[radial-gradient(circle_at_top_left,rgba(251,113,133,0.14),transparent_34%),linear-gradient(135deg,rgba(28,12,18,0.98),rgba(40,12,22,0.96))]",
+    glow: "shadow-[0_18px_60px_rgba(244,63,94,0.10)]",
+    border: "border-rose-300/20",
+    badgeClass: "border-rose-300/15 bg-rose-400/10 text-rose-200",
+    iconWrap: "border-rose-300/20 bg-rose-400/12 text-rose-200",
+    amountClass: "text-rose-100",
+  },
+};
+
+function formatDate(value?: string | Date | null) {
+  if (!value) return "-";
+
+  const normalized =
+    typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
+      ? `${value}T00:00:00`
+      : value;
+
+  const date = normalized instanceof Date ? normalized : new Date(normalized);
+  if (Number.isNaN(date.getTime())) return "-";
+
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
+function formatLabel(value?: string | null) {
+  if (!value) return "Tanpa label";
+
+  return value
+    .replaceAll("_", " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getWalletLabel(walletKey?: string | null) {
+  switch (walletKey) {
+    case "utama":
+      return "Dompet Utama";
+    case "dokumen":
+      return "Dokumen";
+    case "eksekusi":
+      return "Eksekusi";
+    case "renovasi":
+      return "Renovasi";
+    case "cadangan":
+      return "Cadangan";
+    default:
+      return "Dompet Utama";
   }
-  
-  function getWalletTone(walletKey?: string | null) {
-    switch (walletKey) {
-      case "utama":
-        return "border-emerald-300/15 bg-emerald-400/10 text-emerald-200";
-      case "dokumen":
-        return "border-cyan-300/15 bg-cyan-400/10 text-cyan-200";
-      case "eksekusi":
-        return "border-amber-300/15 bg-amber-400/10 text-amber-200";
-      case "renovasi":
-        return "border-violet-300/15 bg-violet-400/10 text-violet-200";
-      case "cadangan":
-        return "border-rose-300/15 bg-rose-400/10 text-rose-200";
-      default:
-        return "border-white/10 bg-white/[0.05] text-white/70";
-    }
+}
+
+function getStatusTone(status?: string | null) {
+  switch (status) {
+    case "berhasil":
+    case "success":
+    case "selesai":
+      return "border-emerald-300/20 bg-emerald-400/10 text-emerald-100";
+    case "pending":
+    case "menunggu":
+      return "border-amber-300/20 bg-amber-400/10 text-amber-100";
+    case "gagal":
+    case "dibatalkan":
+    case "failed":
+      return "border-rose-300/20 bg-rose-400/10 text-rose-100";
+    case "tercatat":
+      return "border-white/10 bg-white/[0.06] text-white/75";
+    default:
+      return "border-white/10 bg-white/[0.05] text-white/70";
   }
-  
-  function getStatusTone(status?: string | null) {
-    switch (status) {
-      case "berhasil":
-      case "success":
-      case "selesai":
-        return "border-emerald-300/15 bg-emerald-400/10 text-emerald-200";
-      case "pending":
-      case "menunggu":
-        return "border-amber-300/15 bg-amber-400/10 text-amber-200";
-      case "gagal":
-      case "dibatalkan":
-      case "failed":
-        return "border-rose-300/15 bg-rose-400/10 text-rose-200";
-      default:
-        return "border-white/10 bg-white/[0.05] text-white/70";
-    }
-  }
-  
-  export default function CashflowTable({
-    rows,
-  }: {
-    rows: DbCashflow[];
-  }) {
-    if (!rows?.length) {
-      return (
-        <div className="rounded-[28px] border border-dashed border-white/10 bg-white/[0.02] px-6 py-14 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-white/50">
-            <CircleDollarSign className="h-6 w-6" />
-          </div>
-  
-          <h3 className="mt-5 text-lg font-semibold text-white">
-            Belum ada transaksi
-          </h3>
-  
-          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-400">
-            Belum ada riwayat transaksi pada filter yang sedang dipilih.
-          </p>
-        </div>
-      );
-    }
-  
+}
+
+function isExpense(kind?: string | null) {
+  return kind === "keluar" || kind === "pengeluaran";
+}
+
+function getEmptyCopy() {
+  return {
+    title: "Belum ada transaksi",
+    description:
+      "Belum ada riwayat transaksi pada dompet atau filter yang sedang dipilih. Tambahkan transaksi pertama untuk mulai mencatat arus kas proyek.",
+  };
+}
+
+export default function CashflowTable({
+  rows,
+  onCreateTransaction,
+}: {
+  rows: DbCashflow[];
+  onCreateTransaction?: () => void;
+}) {
+  if (!rows?.length) {
+    const emptyCopy = getEmptyCopy();
+
     return (
-      <div className="overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.03]">
-        <div className="divide-y divide-white/8">
-          {rows.map((item) => {
-            const isExpense = item.jenis_transaksi === "keluar";
-            const AmountIcon = isExpense ? ArrowUpRight : ArrowDownLeft;
-  
-            return (
-              <div
-                key={item.id_project_arus_kas}
-                className="flex flex-col gap-4 px-5 py-4 transition-colors duration-200 hover:bg-white/[0.03] sm:px-6"
-              >
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2.5">
-                      <div className="truncate text-sm font-semibold text-white sm:text-[15px]">
-                        {item.judul_transaksi || "Transaksi"}
-                      </div>
-  
-                      <div
-                        className={[
-                          "inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em]",
-                          getWalletTone(item.wallet_key),
-                        ].join(" ")}
-                      >
-                        <Wallet2 className="mr-1.5 h-3.5 w-3.5" />
-                        {getWalletLabel(item.wallet_key)}
-                      </div>
-  
-                      <div
-                        className={[
-                          "inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em]",
-                          isExpense
-                            ? "border-rose-300/15 bg-rose-400/10 text-rose-200"
-                            : "border-emerald-300/15 bg-emerald-400/10 text-emerald-200",
-                        ].join(" ")}
-                      >
-                        {item.jenis_transaksi}
-                      </div>
-                    </div>
-  
-                    {item.catatan ? (
-                      <div className="mt-2 flex items-start gap-2 text-sm text-slate-400">
-                        <FileText className="mt-0.5 h-4 w-4 shrink-0 text-white/30" />
-                        <p className="line-clamp-2">{item.catatan}</p>
-                      </div>
-                    ) : null}
-                  </div>
-  
-                  <div className="shrink-0 text-left lg:text-right">
-                    <div
-                      className={[
-                        "inline-flex items-center gap-2 text-lg font-semibold",
-                        isExpense ? "text-rose-100" : "text-emerald-100",
-                      ].join(" ")}
-                    >
-                      <AmountIcon className="h-4 w-4" />
-                      <span>
-                        {isExpense ? "-" : "+"}
-                        {formatCurrency(Number(item.nominal ?? 0))}
-                      </span>
-                    </div>
-  
-                    <div className="mt-2">
-                      <span
-                        className={[
-                          "inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em]",
-                          getStatusTone(item.status_transaksi),
-                        ].join(" ")}
-                      >
-                        {item.status_transaksi ?? "—"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-  
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-white/38">
-                  <div className="inline-flex items-center gap-1.5">
-                    <CalendarDays className="h-3.5 w-3.5" />
-                    <span>{formatDate(item.tanggal_transaksi)}</span>
-                  </div>
-  
-                  <div className="inline-flex items-center gap-1.5">
-                    <CircleDollarSign className="h-3.5 w-3.5" />
-                    <span>ID: {item.id_project_arus_kas}</span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+      <div className="rounded-[30px] border border-dashed border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01))] px-6 py-14 text-center">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] border border-white/10 bg-white/[0.04] text-white/50">
+          <CircleDollarSign className="h-7 w-7" />
         </div>
+
+        <h3 className="mt-5 text-xl font-semibold text-white">
+          {emptyCopy.title}
+        </h3>
+
+        <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-400">
+          {emptyCopy.description}
+        </p>
+
+        {onCreateTransaction ? (
+          <button
+            type="button"
+            onClick={onCreateTransaction}
+            className="mt-6 inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-400/12 px-4 py-2.5 text-sm font-medium text-cyan-100 transition hover:bg-cyan-400/16"
+          >
+            <Plus className="h-4 w-4" />
+            Catat transaksi pertama
+          </button>
+        ) : null}
       </div>
     );
   }
+
+  return (
+    <div className="space-y-3">
+      {rows.map((item) => {
+        const theme = WALLET_THEME[item.wallet_key ?? "utama"] ?? WALLET_THEME.utama;
+        const Icon = theme.icon;
+        const expense = isExpense(item.jenis_transaksi);
+
+        return (
+          <article
+            key={item.id_project_arus_kas}
+            className={[
+              "group relative overflow-hidden rounded-[28px] border px-5 py-4 transition-all duration-200 sm:px-6 sm:py-5",
+              "hover:-translate-y-[1px] hover:border-white/20",
+              theme.shell,
+              theme.glow,
+              theme.border,
+            ].join(" ")}
+          >
+            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent_28%,transparent_74%,rgba(255,255,255,0.02))]" />
+            <div className="pointer-events-none absolute -right-10 top-0 h-32 w-32 rounded-full bg-white/6 blur-3xl" />
+            <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-white/10" />
+
+            <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start gap-3">
+                  <div
+                    className={[
+                      "mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border backdrop-blur-md",
+                      theme.iconWrap,
+                    ].join(" ")}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="truncate text-[15px] font-semibold text-white sm:text-[17px]">
+                        {item.judul_transaksi || "Transaksi"}
+                      </h3>
+
+                      <span
+                        className={[
+                          "inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em]",
+                          theme.badgeClass,
+                        ].join(" ")}
+                      >
+                        <Icon className="mr-1.5 h-3.5 w-3.5" />
+                        {getWalletLabel(item.wallet_key)}
+                      </span>
+                    </div>
+
+                    {item.catatan ? (
+                      <div className="mt-2 flex items-start gap-2 text-sm leading-6 text-slate-300/90">
+                        <FileText className="mt-1 h-4 w-4 shrink-0 text-white/30" />
+                        <p className="line-clamp-2">{item.catatan}</p>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-white/45">
+                        {formatLabel(item.kategori_transaksi)}
+                      </p>
+                    )}
+
+                    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-white/42">
+                      <div className="inline-flex items-center gap-1.5">
+                        <CalendarDays className="h-3.5 w-3.5" />
+                        <span>{formatDate(item.tanggal_transaksi)}</span>
+                      </div>
+
+                      <div className="inline-flex items-center gap-1.5">
+                        <CircleDollarSign className="h-3.5 w-3.5" />
+                        <span>{formatLabel(item.kategori_transaksi)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-end justify-between gap-4 border-t border-white/8 pt-4 lg:min-w-[240px] lg:block lg:border-t-0 lg:pt-0 lg:text-right">
+                <div className="space-y-1">
+                <div
+  className={[
+    "text-[11px] uppercase tracking-[0.22em]",
+    expense ? "text-rose-200/80" : "text-white/38",
+  ].join(" ")}
+>
+  {expense ? "Pengeluaran" : "Pemasukan"}
+</div>
+
+                  <div
+  className={[
+    "text-lg font-semibold sm:text-[28px] sm:leading-none",
+    expense ? "text-rose-100" : theme.amountClass,
+  ].join(" ")}
+>
+  {expense ? "-" : "+"}
+  {formatCurrency(Number(item.nominal ?? 0))}
+</div>
+                </div>
+
+                <div className="mt-0 lg:mt-3">
+                  <span
+                    className={[
+                      "inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em]",
+                      getStatusTone(item.status_transaksi),
+                    ].join(" ")}
+                  >
+                    {formatLabel(item.status_transaksi)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
