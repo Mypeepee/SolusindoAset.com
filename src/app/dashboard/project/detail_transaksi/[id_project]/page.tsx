@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 
@@ -49,12 +50,10 @@ function findExistingColumn(columns: string[], candidates: string[]) {
   );
 }
 
-function pickAgentName(agent: unknown, fallback: string) {
-  const record =
-    agent && typeof agent === "object"
-      ? (agent as Record<string, unknown>)
-      : null;
-
+function pickDisplayName(
+  record: Record<string, unknown> | null | undefined,
+  fallback: string
+) {
   const name = toText(
     getRecordValue(record, [
       "nama_lengkap",
@@ -72,13 +71,9 @@ function pickAgentName(agent: unknown, fallback: string) {
   return name || fallback;
 }
 
-function pickAgentAvatar(agent: unknown) {
-  const record =
-    agent && typeof agent === "object"
-      ? (agent as Record<string, unknown>)
-      : null;
-
+function pickAvatar(record: Record<string, unknown> | null | undefined) {
   const avatar = getRecordValue(record, [
+    "foto_profil_url",
     "foto_profil",
     "fotoProfil",
     "avatar",
@@ -125,6 +120,45 @@ export default async function DetailTransaksiPage({
   }
 
   const creator = project.pembuat as Record<string, unknown> | null;
+
+  const relatedAgentIds = Array.from(
+    new Set(
+      [project.dibuat_oleh, ...project.investorProject.map((item) => item.id_agent)]
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    )
+  );
+
+  const agentIdentityRows =
+    relatedAgentIds.length > 0
+      ? await prisma.$queryRaw<
+          Array<{
+            id_agent: string;
+            id_pengguna: string | null;
+            nama_lengkap: string | null;
+            foto_profil_url: string | null;
+          }>
+        >(Prisma.sql`
+          SELECT
+            a.id_agent,
+            a.id_pengguna,
+            a.foto_profil_url,
+            p.nama_lengkap
+          FROM public.agent a
+          LEFT JOIN public.pengguna p
+            ON p.id_pengguna = a.id_pengguna
+          WHERE a.id_agent IN (${Prisma.join(relatedAgentIds)})
+        `)
+      : [];
+
+  const agentIdentityMap = new Map(
+    agentIdentityRows.map((row) => [
+      row.id_agent,
+      {
+        name: toText(row.nama_lengkap),
+        avatar: toText(row.foto_profil_url),
+      },
+    ])
+  );
 
   const listingColumnRows = await prisma.$queryRaw<
     Array<{ table_schema: string; column_name: string }>
@@ -215,6 +249,8 @@ export default async function DetailTransaksiPage({
       ? listingLandArea
       : listingBuildingArea;
 
+  const creatorIdentity = agentIdentityMap.get(project.dibuat_oleh);
+
   const viewModel: ProjectDetailViewModel = {
     id: project.id_project,
     listingId: project.id_listing,
@@ -247,8 +283,12 @@ export default async function DetailTransaksiPage({
     description: project.deskripsi_project,
 
     createdById: project.dibuat_oleh,
-    createdByName: pickAgentName(creator, project.dibuat_oleh),
-    createdByAvatar: pickAgentAvatar(creator),
+    createdByName:
+      creatorIdentity?.name ||
+      pickDisplayName(creator, project.dibuat_oleh),
+    createdByAvatar:
+      creatorIdentity?.avatar ||
+      pickAvatar(creator),
 
     auctionLimitValue: toNumeric(project.nilai_limit_lelang),
     spareBidding: toNumeric(project.spare_bidding),
@@ -263,11 +303,16 @@ export default async function DetailTransaksiPage({
 
     investors: project.investorProject.map((item) => {
       const agent = item.agent as Record<string, unknown> | null;
+      const identity = agentIdentityMap.get(item.id_agent);
 
       return {
         id: String(item.id_project_investor),
-        name: pickAgentName(agent, item.id_agent),
-        avatar: pickAgentAvatar(agent),
+        name:
+          identity?.name ||
+          pickDisplayName(agent, item.id_agent),
+        avatar:
+          identity?.avatar ||
+          pickAvatar(agent),
         committed: toNumeric(item.nominal_komitmen),
         paid: toNumeric(item.nominal_terbayar),
         ownership:
