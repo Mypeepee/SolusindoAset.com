@@ -199,12 +199,10 @@ model ProjectInvestor {
   id_project             String                         @db.VarChar(20)
   id_agent               String                         @db.VarChar(20)
   nominal_komitmen       Decimal                        @default(0) @db.Decimal(20, 2)
-  nominal_terbayar       Decimal                        @default(0) @db.Decimal(20, 2)
   persentase_kepemilikan Decimal?                       @db.Decimal(10, 6)
   status                 status_pembayaran_project_enum @default(menunggu_pembayaran)
-  catatan                String?
   dibuat_tanggal         DateTime                       @default(now()) @db.Timestamptz(6)
-  diupdate_tanggal       DateTime                       @default(now()) @db.Timestamptz(6)
+  diupdate_tanggal       DateTime                       @updatedAt @db.Timestamptz(6)
 
   project Project @relation(fields: [id_project], references: [id_project], onDelete: Cascade, map: "project_investor_project_fk")
   agent   Agent   @relation(fields: [id_agent], references: [id_agent], onDelete: Cascade, map: "project_investor_agent_fk")
@@ -711,11 +709,8 @@ enum status_project_enum {
 }
 
 enum status_pembayaran_project_enum {
-  menunggu_pembayaran
-  dibayar_sebagian
   lunas
-  dikembalikan
-  dibatalkan
+  menunggu_pembayaran
 }
 
 enum wallet_key_enum {

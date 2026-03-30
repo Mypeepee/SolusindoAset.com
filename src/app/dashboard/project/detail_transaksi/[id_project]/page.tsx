@@ -124,7 +124,10 @@ export default async function DetailTransaksiPage({
   const relatedAgentIds = Array.from(
     new Set(
       [project.dibuat_oleh, ...project.investorProject.map((item) => item.id_agent)]
-        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        .filter(
+          (value): value is string =>
+            typeof value === "string" && value.trim().length > 0
+        )
     )
   );
 
@@ -284,11 +287,8 @@ export default async function DetailTransaksiPage({
 
     createdById: project.dibuat_oleh,
     createdByName:
-      creatorIdentity?.name ||
-      pickDisplayName(creator, project.dibuat_oleh),
-    createdByAvatar:
-      creatorIdentity?.avatar ||
-      pickAvatar(creator),
+      creatorIdentity?.name || pickDisplayName(creator, project.dibuat_oleh),
+    createdByAvatar: creatorIdentity?.avatar || pickAvatar(creator),
 
     auctionLimitValue: toNumeric(project.nilai_limit_lelang),
     spareBidding: toNumeric(project.spare_bidding),
@@ -307,14 +307,9 @@ export default async function DetailTransaksiPage({
 
       return {
         id: String(item.id_project_investor),
-        name:
-          identity?.name ||
-          pickDisplayName(agent, item.id_agent),
-        avatar:
-          identity?.avatar ||
-          pickAvatar(agent),
+        name: identity?.name || pickDisplayName(agent, item.id_agent),
+        avatar: identity?.avatar || pickAvatar(agent),
         committed: toNumeric(item.nominal_komitmen),
-        paid: toNumeric(item.nominal_terbayar),
         ownership:
           item.persentase_kepemilikan != null
             ? toNumeric(item.persentase_kepemilikan)

@@ -27,7 +27,6 @@ type StatusProject =
 type ProjectInvestorInput = {
   id_agent?: string;
   nominal_komitmen?: number;
-  nominal_terbayar?: number;
   persentase_kepemilikan?: number | null;
   status?: StatusPembayaranProject;
   catatan?: string | null;
@@ -205,11 +204,11 @@ function getDerivedProjectDates(body: CreateProjectPayload) {
 function getBiayaBalikNamaBreakdown(acquisitionBase: number) {
   const base = toNonNegativeNumber(acquisitionBase);
 
-  const bea_lelang = base * 0.02; // 2%
-  const bphtb = base * 0.05; // 5%
-  const ppn_lelang = base * 0.011; // 1.1%
-  const balik_nama = base * 0.001; // 0.1%
-  const roya = 75000; // flat
+  const bea_lelang = base * 0.02;
+  const bphtb = base * 0.05;
+  const ppn_lelang = base * 0.011;
+  const balik_nama = base * 0.001;
+  const roya = 75000;
 
   return {
     bea_lelang,
@@ -233,9 +232,6 @@ function getProjectAcquisitionFinancials(body: CreateProjectPayload) {
   const biaya_renov = toNonNegativeNumber(body.biaya_renov);
   const target_pendanaan = toNonNegativeNumber(body.target_pendanaan);
 
-  // IMPORTANT:
-  // biaya balik nama selalu dihitung dari nilai_limit_lelang
-  // kalau nilai_limit_lelang kosong, fallback ke acquisition_base
   const biaya_balik_nama_base =
     nilaiLimitLelang > 0 ? nilaiLimitLelang : acquisition_base;
 
@@ -280,9 +276,6 @@ function normalizeInvestorAllocations(
       nominal_komitmen:
         toSafeNumber(existing?.nominal_komitmen) +
         Math.max(0, toSafeNumber(item.nominal_komitmen)),
-      nominal_terbayar:
-        toSafeNumber(existing?.nominal_terbayar) +
-        Math.max(0, toSafeNumber(item.nominal_terbayar)),
       persentase_kepemilikan:
         item.persentase_kepemilikan === null ||
         item.persentase_kepemilikan === undefined
@@ -480,7 +473,6 @@ export async function POST(request: Request) {
 
           tanggal_pembelian: derivedDates.tanggal_pembelian,
 
-          // disamakan: harga_pembelian = total biaya akuisisi final
           harga_pembelian: toDecimal(financials.total_biaya_akuisisi),
           estimasi_harga_jual: toDecimal(estimasiHargaJual),
           estimasi_profit_bersih: toDecimal(estimasiProfitBersih),
@@ -507,21 +499,19 @@ export async function POST(request: Request) {
           dana_cadangan: toDecimal(financials.dana_cadangan),
 
           investorProject:
-            investorAllocations.length > 0
-              ? {
-                  create: investorAllocations.map((item) => ({
-                    id_agent: item.id_agent,
-                    nominal_komitmen: toDecimal(item.nominal_komitmen),
-                    nominal_terbayar: toDecimal(item.nominal_terbayar),
-                    persentase_kepemilikan:
-                      item.persentase_kepemilikan === null
-                        ? null
-                        : toDecimal(item.persentase_kepemilikan),
-                    status: item.status,
-                    catatan: item.catatan,
-                  })),
-                }
-              : undefined,
+          investorAllocations.length > 0
+            ? {
+                create: investorAllocations.map((item) => ({
+                  id_agent: item.id_agent,
+                  nominal_komitmen: toDecimal(item.nominal_komitmen),
+                  persentase_kepemilikan:
+                    item.persentase_kepemilikan === null
+                      ? null
+                      : toDecimal(item.persentase_kepemilikan),
+                  status: item.status,
+                })),
+              }
+            : undefined,
 
           cmaEntries:
             cmaEntries.length > 0
