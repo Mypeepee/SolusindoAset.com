@@ -150,11 +150,18 @@ export default function ProjectionSummaryCard({
   const targetPendanaan = Number(form.target_pendanaan || 0);
   const estimasiHargaJual = Number(form.estimasi_harga_jual || 0);
 
-  const hargaMenangLelang =
-    Number(form.nilai_limit_lelang || 0) + Number(form.spare_bidding || 0);
+  const nilaiLimitLelang = Number(form.nilai_limit_lelang || 0);
+  const spareBidding = Number(form.spare_bidding || 0);
+  const biayaEksekusi = Number(form.biaya_eksekusi || 0);
+  const biayaRenov = Number(form.biaya_renov || 0);
 
+  const hargaMenangLelang = nilaiLimitLelang + spareBidding;
+
+  // Samakan dengan AcquisitionSetup:
+  // biaya balik nama dihitung dari nilai_limit_lelang saja,
+  // bukan dari harga menang lelang.
   const biayaBalikNamaBreakdown =
-    getBiayaBalikNamaBreakdown(hargaMenangLelang);
+    getBiayaBalikNamaBreakdown(nilaiLimitLelang);
 
   const biayaBalikNamaFinal =
     Number(biayaBalikNamaBreakdown.bea_lelang || 0) +
@@ -164,10 +171,11 @@ export default function ProjectionSummaryCard({
     Number(biayaBalikNamaBreakdown.roya || 0);
 
   const hargaPembelianFinal =
-    hargaMenangLelang +
+    nilaiLimitLelang +
+    spareBidding +
     biayaBalikNamaFinal +
-    Number(form.biaya_eksekusi || 0) +
-    Number(form.biaya_renov || 0);
+    biayaEksekusi +
+    biayaRenov;
 
   const profitFinal = estimasiHargaJual - hargaPembelianFinal;
 
@@ -334,7 +342,7 @@ export default function ProjectionSummaryCard({
               icon={Wallet}
               label="Total Akuisisi"
               value={formatCurrency(hargaPembelianFinal)}
-              helper="Harga menang + balik nama + eksekusi + renov"
+              helper="Nilai limit + spare bidding + balik nama + eksekusi + renov"
             />
 
             <StatCard

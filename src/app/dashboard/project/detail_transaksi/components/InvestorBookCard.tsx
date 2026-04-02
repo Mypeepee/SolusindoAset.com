@@ -6,19 +6,18 @@ import { useSession } from "next-auth/react";
 import { Check, ChevronDown, Loader2, Sparkles, Users2 } from "lucide-react";
 
 import type { ProjectDetailViewModel } from "./types";
-import {
-  formatIDR,
-  formatPercent,
-  getInitials,
-  normalizeImage,
-  toNumber,
-} from "./utils";
+import { formatIDR, getInitials, normalizeImage, toNumber } from "./utils";
 import { EmptyState, SectionCard } from "./shared";
 
 type PaymentStatus = "menunggu_pembayaran" | "lunas";
 
 type InvestorItem = ProjectDetailViewModel["investors"][number] & {
   status: PaymentStatus | string;
+};
+
+type OwnershipDisplay = {
+  ratio: number | null;
+  percentText: string;
 };
 
 const STATUS_OPTIONS: PaymentStatus[] = ["menunggu_pembayaran", "lunas"];
@@ -56,16 +55,99 @@ const STATUS_META: Record<
   },
 };
 
-function normalizeOwnership(value: unknown) {
-  const numeric = toNumber(value);
-  if (!numeric) return null;
-  return numeric > 1 ? numeric / 100 : numeric;
-}
-
 function normalizeStatus(value: unknown): PaymentStatus {
   return String(value ?? "").toLowerCase() === "lunas"
     ? "lunas"
     : "menunggu_pembayaran";
+}
+
+function getCommittedValue(value: unknown) {
+  const numeric = toNumber(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return 0;
+  return numeric;
+}
+
+/**
+ * Membuat persentase kepemilikan yang:
+ * - dihitung dari committed / total committed
+ * - ditampilkan 1 digit desimal
+ * - jika dijumlahkan hasil tampilannya pasti = 100.0%
+ *
+ * Teknik: largest remainder method pada skala 0.1%
+ */
+function buildOwnershipDisplayMap(items: InvestorItem[]) {
+  const result = new Map<string, OwnershipDisplay>();
+
+  const normalized = items.map((item, index) => {
+    const committed = getCommittedValue(item.committed);
+    return {
+      item,
+      key: String(item.id),
+      committed,
+      index,
+    };
+  });
+
+  const totalCommitted = normalized.reduce(
+    (sum, item) => sum + item.committed,
+    0
+  );
+
+  if (totalCommitted <= 0) {
+    normalized.forEach(({ key }) => {
+      result.set(key, {
+        ratio: null,
+        percentText: "—",
+      });
+    });
+    return result;
+  }
+
+  const SCALE = 10; // 1 digit desimal -> 0.1%
+  const TARGET_UNITS = 100 * SCALE; // 100.0% = 1000 unit
+
+  const calculated = normalized.map(({ key, committed, index }) => {
+    const ratio = committed / totalCommitted;
+    const exactPercent = ratio * 100;
+    const scaled = exactPercent * SCALE;
+
+    const floorUnits = Math.floor(scaled + 1e-9);
+    const remainder = scaled - floorUnits;
+
+    return {
+      key,
+      ratio,
+      committed,
+      index,
+      units: floorUnits,
+      remainder,
+    };
+  });
+
+  const usedUnits = calculated.reduce((sum, item) => sum + item.units, 0);
+  let remainingUnits = TARGET_UNITS - usedUnits;
+
+  if (remainingUnits > 0) {
+    const ranked = [...calculated].sort((a, b) => {
+      if (b.remainder !== a.remainder) return b.remainder - a.remainder;
+      if (b.committed !== a.committed) return b.committed - a.committed;
+      return a.index - b.index;
+    });
+
+    for (let i = 0; i < remainingUnits; i += 1) {
+      ranked[i % ranked.length].units += 1;
+    }
+  }
+
+  calculated.forEach((item) => {
+    const percentValue = item.units / SCALE;
+    result.set(item.key, {
+      ratio: item.ratio,
+      percentText: `${percentValue.toFixed(1)}%`,
+    });
+  });
+
+  return result;
 }
 
 function InvestorIdentity({
@@ -282,7 +364,9 @@ export default function InvestorBookCard({
   const initialInvestors = useMemo(
     () =>
       ([...project.investors] as InvestorItem[])
-        .sort((a, b) => toNumber(b.committed) - toNumber(a.committed))
+        .sort(
+          (a, b) => getCommittedValue(b.committed) - getCommittedValue(a.committed)
+        )
         .map((item) => ({
           ...item,
           status: normalizeStatus(item.status),
@@ -297,6 +381,10 @@ export default function InvestorBookCard({
   useEffect(() => {
     setInvestors(initialInvestors);
   }, [initialInvestors]);
+
+  const ownershipDisplayMap = useMemo(() => {
+    return buildOwnershipDisplayMap(investors);
+  }, [investors]);
 
   async function handleStatusChange(
     investorId: string | number,
@@ -385,9 +473,14 @@ export default function InvestorBookCard({
 
             <div className="divide-y divide-white/10">
               {investors.map((item) => {
-                const ownership = normalizeOwnership(item.ownership);
                 const status = normalizeStatus(item.status);
                 const isSaving = String(savingId) === String(item.id);
+                const committed = getCommittedValue(item.committed);
+                const ownershipDisplay =
+                  ownershipDisplayMap.get(String(item.id)) ?? {
+                    ratio: null,
+                    percentText: "—",
+                  };
 
                 return (
                   <div
@@ -406,14 +499,14 @@ export default function InvestorBookCard({
                     <div className="min-w-0">
                       <MobileFieldLabel>Komitmen</MobileFieldLabel>
                       <div className="truncate font-mono text-white">
-                        {formatIDR(toNumber(item.committed))}
+                        {formatIDR(committed)}
                       </div>
                     </div>
 
                     <div className="min-w-0">
                       <MobileFieldLabel>Kepemilikan</MobileFieldLabel>
                       <div className="truncate text-white md:text-center">
-                        {ownership != null ? formatPercent(ownership) : "—"}
+                        {ownershipDisplay.percentText}
                       </div>
                     </div>
 

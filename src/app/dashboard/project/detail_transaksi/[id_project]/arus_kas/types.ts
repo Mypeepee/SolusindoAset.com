@@ -24,19 +24,19 @@ export type DbProject = {
 };
 
 export type DbCashflow = {
-    id_project_arus_kas: bigint;
-    id_project: string;
-    wallet_key: WalletKey;
-    tanggal_transaksi: Date | string;
-    jenis_transaksi: "pemasukan" | "pengeluaran";
-    kategori_transaksi: string;
-    judul_transaksi: string;
-    nominal: number;
-    status_transaksi: "tercatat" | "dibatalkan";
-    catatan?: string | null;
-    dibuat_tanggal?: Date | string;
-    diupdate_tanggal?: Date | string;
-  };
+  id_project_arus_kas: bigint | number | string;
+  id_project: string;
+  wallet_key: WalletKey;
+  tanggal_transaksi: Date | string;
+  jenis_transaksi: "pemasukan" | "pengeluaran";
+  kategori_transaksi: string;
+  judul_transaksi: string;
+  nominal: number | string;
+  status_transaksi: "tercatat" | "dibatalkan";
+  catatan?: string | null;
+  dibuat_tanggal?: Date | string;
+  diupdate_tanggal?: Date | string;
+};
 
 export type WalletSummary = {
   walletKey: WalletKey;
@@ -58,4 +58,23 @@ export type ManageFundData = {
   totalExpense: number;
   totalBalance: number;
   totalRemainingBudget: number;
+};
+
+export type ProjectInvestorOption = {
+  id_project_investor: string | number;
+  id_agent: string;
+  nama?: string | null;
+  foto_profil_url?: string | null;
+  nama_kantor?: string | null;
+  kota_area?: string | null;
+  jabatan?: string | null;
+  nomor_whatsapp?: string | null;
+  nominal_komitmen?: number | string | null;
+  persentase_kepemilikan?: number | string | null;
+  status?: string | null;
+};
+
+export type ProjectInvestorResponse = {
+  investors: ProjectInvestorOption[];
+  project_total_pendanaan: number;
 };

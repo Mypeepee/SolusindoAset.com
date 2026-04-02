@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Crown, Gem, Rocket, Shield, type LucideIcon } from "lucide-react";
+import {
+  AlertTriangle,
+  Crown,
+  Gem,
+  Rocket,
+  Shield,
+} from "lucide-react";
 import { toast } from "sonner";
 import AddProjectModal, {
   type CreateProjectFormValues,
@@ -12,11 +18,14 @@ import { buildCreateProjectPayload } from "./modal/utils";
 
 type Props = {
   totalDana: number;
-  danaTerkumpul: number;
-  targetPendanaan: number;
+  totalDanaLunas?: number;
+  totalDanaPending?: number;
   projectAktif: number;
-  estimasiProfit: number;
   jumlahPropertyDidanai: number;
+  pendingPaymentCount?: number;
+  pendingProjectCount?: number;
+  hasPendingPayment?: boolean;
+  realizedProfit?: number;
   jabatan?: string | null;
   createdById?: string;
   onCreateProject?: (values: CreateProjectFormValues) => void | Promise<void>;
@@ -187,9 +196,14 @@ function ShortcutButton({
 
 export default function ProjectWalletCard({
   totalDana,
-  projectAktif,
+  totalDanaPending = 0,
   jumlahPropertyDidanai,
+  pendingPaymentCount = 0,
+  pendingProjectCount = 0,
+  hasPendingPayment = false,
+  realizedProfit = 0,
   createdById,
+  onCreateProject,
 }: Props) {
   const theme = getTierTheme(totalDana);
   const TierIcon = theme.icon;
@@ -210,12 +224,13 @@ export default function ProjectWalletCard({
         body: JSON.stringify(payload),
       });
 
-      const result =
-        (await response.json()) as CreateProjectSubmitResponse;
+      const result = (await response.json()) as CreateProjectSubmitResponse;
 
       if (!response.ok || !result.success) {
         throw new Error(result.message || "Gagal menyimpan project.");
       }
+
+      await onCreateProject?.(values);
 
       setOpenAddModal(false);
       toast.success("Project Berhasil Disimpan!");
@@ -229,6 +244,15 @@ export default function ProjectWalletCard({
       setSubmitting(false);
     }
   }
+
+  const pendingHelper =
+    pendingProjectCount > 0
+      ? `${pendingProjectCount} project masih menunggu pembayaran sebesar ${formatCurrency(
+          totalDanaPending
+        )}.`
+      : `${pendingPaymentCount} komitmen masih menunggu pembayaran sebesar ${formatCurrency(
+          totalDanaPending
+        )}.`;
 
   return (
     <>
@@ -272,6 +296,25 @@ export default function ProjectWalletCard({
               <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300">
                 {theme.deskripsi}
               </p>
+
+              {hasPendingPayment ? (
+                <div className="mt-4 max-w-2xl rounded-[22px] border border-amber-300/20 bg-amber-400/10 px-4 py-3.5 backdrop-blur-md">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-300/15 text-amber-100">
+                      <AlertTriangle className="h-4 w-4" />
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-amber-100">
+                        Segera selesaikan pembayaran
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-amber-100/85">
+                        {pendingHelper}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <button
@@ -285,23 +328,27 @@ export default function ProjectWalletCard({
 
           <div className="grid gap-4 md:grid-cols-3">
             <ShortcutButton
-              label="Project Aktif"
-              value={String(projectAktif)}
-              helper="Lihat semua card project yang sedang berjalan"
+              label="Property Didanai"
+              value={String(jumlahPropertyDidanai ?? 0)}
+              helper="Jumlah properti yang saat ini sudah masuk ke portofolio pendanaanmu"
               theme={theme}
             />
 
             <ShortcutButton
               label="Pendanaan Saya"
               value={formatCurrency(totalDana)}
-              helper="Lihat daftar project yang saat ini kamu danai"
+              helper={
+                hasPendingPayment
+                  ? `Termasuk pending ${formatCurrency(totalDanaPending)}`
+                  : "Total nominal komitmen pendanaan atas akun kamu"
+              }
               theme={theme}
             />
 
             <ShortcutButton
-              label="Property Didanai"
-              value={String(jumlahPropertyDidanai ?? 0)}
-              helper="Jumlah properti yang saat ini sudah kamu biayai"
+              label="Profit Terealisasi"
+              value={formatCurrency(realizedProfit)}
+              helper="Sementara masih dummy sambil pengerjaan sistem penjualan property"
               theme={theme}
             />
           </div>

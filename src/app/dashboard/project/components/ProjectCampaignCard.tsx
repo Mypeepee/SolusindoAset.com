@@ -492,9 +492,13 @@ function FundingPanel({
 export default function ProjectFundraisingCard({
   project,
   adminMode = false,
+  isDeleting = false,
+  onDelete,
 }: {
   project: ProjectCampaign;
   adminMode?: boolean;
+  isDeleting?: boolean;
+  onDelete?: (project: ProjectCampaign) => void | Promise<void>;
 }) {
   const progress = getProgress(project);
   const roi = getROI(project);
@@ -509,6 +513,15 @@ export default function ProjectFundraisingCard({
     project.id
   )}`;
   const manageFundHref = `${detailHref}/arus_kas`;
+
+  const handleDeleteClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  
+    if (isDeleting || !onDelete) return;
+  
+    void onDelete(project);
+  };
 
   return (
     <article className="group relative overflow-hidden rounded-[34px] border border-white/10 bg-[linear-gradient(180deg,#08111d_0%,#050a12_100%)] shadow-[0_28px_90px_rgba(0,0,0,0.42)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_34px_110px_rgba(0,0,0,0.5)]">
@@ -544,7 +557,41 @@ export default function ProjectFundraisingCard({
             </InfoChip>
           </div>
 
-          <InfoChip tone="default">ASSET BACKED</InfoChip>
+          {adminMode ? (
+            <button
+              type="button"
+              onClick={handleDeleteClick}
+              disabled={isDeleting || !onDelete}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-semibold tracking-[0.16em] backdrop-blur-md transition",
+                "border-rose-400/25 bg-rose-400/10 text-rose-100",
+                "hover:bg-rose-400/15 hover:text-white",
+                "disabled:cursor-not-allowed disabled:opacity-60"
+              )}
+              title={`Hapus project ${project.nama}`}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.9"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-3.5 w-3.5"
+              >
+                <path d="M3 6h18" />
+                <path d="M8 6V4.75A1.75 1.75 0 0 1 9.75 3h4.5A1.75 1.75 0 0 1 16 4.75V6" />
+                <path d="M19 6l-1 13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                <path d="M10 11v6" />
+                <path d="M14 11v6" />
+              </svg>
+
+              {isDeleting ? "DELETING..." : "DELETE"}
+            </button>
+          ) : (
+            <InfoChip tone="default">ASSET BACKED</InfoChip>
+          )}
         </div>
 
         <div className="absolute bottom-5 left-5 right-5">
@@ -622,24 +669,24 @@ export default function ProjectFundraisingCard({
         </div>
 
         <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-  <Link
-    href={detailHref}
-    onClick={() => console.log("DETAIL CLICK", detailHref)}
-    className="flex-1 rounded-[20px] bg-[linear-gradient(135deg,#e7ffe9_0%,#a7f3d0_42%,#34d399_100%)] px-5 py-3.5 text-center text-sm font-semibold text-[#04110a] shadow-[0_18px_34px_rgba(52,211,153,0.28)] transition duration-200 hover:brightness-105 active:scale-[0.99]"
-  >
-    Lihat Detail
-  </Link>
+          <Link
+            href={detailHref}
+            onClick={() => console.log("DETAIL CLICK", detailHref)}
+            className="flex-1 rounded-[20px] bg-[linear-gradient(135deg,#e7ffe9_0%,#a7f3d0_42%,#34d399_100%)] px-5 py-3.5 text-center text-sm font-semibold text-[#04110a] shadow-[0_18px_34px_rgba(52,211,153,0.28)] transition duration-200 hover:brightness-105 active:scale-[0.99]"
+          >
+            Lihat Detail
+          </Link>
 
-  {adminMode ? (
-    <Link
-      href={manageFundHref}
-      onClick={() => console.log("MANAGE CLICK", manageFundHref)}
-      className="flex-1 rounded-[20px] border border-white/15 bg-white/[0.04] px-5 py-3.5 text-center text-sm font-semibold text-white backdrop-blur-md transition duration-200 hover:bg-white/[0.07] active:scale-[0.99]"
-    >
-      Manage Fund
-    </Link>
-  ) : null}
-</div>
+          {adminMode ? (
+            <Link
+              href={manageFundHref}
+              onClick={() => console.log("MANAGE CLICK", manageFundHref)}
+              className="flex-1 rounded-[20px] border border-white/15 bg-white/[0.04] px-5 py-3.5 text-center text-sm font-semibold text-white backdrop-blur-md transition duration-200 hover:bg-white/[0.07] active:scale-[0.99]"
+            >
+              Manage Fund
+            </Link>
+          ) : null}
+        </div>
       </div>
     </article>
   );

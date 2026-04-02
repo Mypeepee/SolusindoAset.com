@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, ArrowRight, Loader2, X } from "lucide-react";
 import type {
@@ -55,6 +55,8 @@ export default function AddProjectModal({
   const [listingError, setListingError] = useState("");
   const [listingLimit, setListingLimit] = useState(LISTING_PAGE_SIZE);
 
+  const contentScrollRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -71,6 +73,20 @@ export default function AddProjectModal({
     setListingError("");
     setListingLimit(LISTING_PAGE_SIZE);
   }, [open, createdById]);
+
+  // paksa scroll ke atas setiap pindah step
+  useEffect(() => {
+    if (!open) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      contentScrollRef.current?.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [step, open]);
 
   // lock body scroll saat modal open
   useEffect(() => {
@@ -450,7 +466,10 @@ export default function AddProjectModal({
             onSubmit={handleSubmit}
             className="flex min-h-0 min-w-0 flex-1 flex-col"
           >
-            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
+            <div
+              ref={contentScrollRef}
+              className="min-h-0 min-w-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6"
+            >
               <div
                 className={`grid min-w-0 gap-6 ${
                   step === 1

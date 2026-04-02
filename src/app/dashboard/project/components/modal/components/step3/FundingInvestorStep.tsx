@@ -125,21 +125,44 @@ function InvestorAvatar({
   name: string;
   src?: string | null;
 }) {
-  const normalized = normalizeImageUrl(src);
+  const normalized = useMemo(() => normalizeImageUrl(src), [src]);
+  const [status, setStatus] = useState<"loading" | "loaded" | "error">(
+    normalized ? "loading" : "error"
+  );
 
-  if (normalized) {
-    return (
-      <img
-        src={normalized}
-        alt={name}
-        className="h-11 w-11 rounded-[16px] object-cover ring-1 ring-white/10"
-      />
-    );
-  }
+  useEffect(() => {
+    setStatus(normalized ? "loading" : "error");
+  }, [normalized]);
+
+  const initial = (name || "?").trim().slice(0, 1).toUpperCase();
 
   return (
-    <div className="flex h-11 w-11 items-center justify-center rounded-[16px] border border-white/10 bg-white/[0.05] text-sm font-bold text-white">
-      {(name || "?").slice(0, 1).toUpperCase()}
+    <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-[16px] bg-white/[0.05] ring-1 ring-white/10">
+      {normalized && status !== "error" ? (
+        <>
+          {status !== "loaded" ? (
+            <div className="absolute inset-0 animate-pulse bg-white/[0.06]" />
+          ) : null}
+
+          <img
+            src={normalized}
+            alt={name}
+            loading="eager"
+            decoding="async"
+            fetchPriority="high"
+            draggable={false}
+            onLoad={() => setStatus("loaded")}
+            onError={() => setStatus("error")}
+            className={`h-full w-full object-cover transition-opacity duration-200 ${
+              status === "loaded" ? "opacity-100" : "opacity-0"
+            }`}
+          />
+        </>
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-sm font-bold text-white">
+          {initial}
+        </div>
+      )}
     </div>
   );
 }
@@ -230,9 +253,11 @@ function FancyDatePicker({ value, onChange }: FancyDatePickerProps) {
 
   useEffect(() => {
     if (selectedDate) {
-      setViewDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
+      setViewDate(
+        new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1)
+      );
     }
-  }, [value, selectedDate]);
+  }, [value]);
 
   const cells = useMemo(() => getMonthCells(viewDate), [viewDate]);
 
@@ -390,10 +415,26 @@ function InvestorCombobox({
   const [loading, setLoading] = useState(false);
   const [options, setOptions] = useState<InvestorOption[]>([]);
 
+  const searchCacheRef = useRef<Map<string, InvestorOption[]>>(new Map());
+  const preloadedImageRef = useRef<Set<string>>(new Set());
+
   const takenIds = useMemo(
     () => new Set(selectedIds.filter((id) => id && id !== value)),
     [selectedIds, value]
   );
+
+  function preloadInvestorImages(items: InvestorOption[]) {
+    for (const item of items) {
+      const imageUrl = normalizeImageUrl(item.foto_profil_url);
+      if (!imageUrl || preloadedImageRef.current.has(imageUrl)) continue;
+
+      preloadedImageRef.current.add(imageUrl);
+
+      const img = new window.Image();
+      img.decoding = "async";
+      img.src = imageUrl;
+    }
+  }
 
   useEffect(() => {
     function handleOutside(event: MouseEvent) {
@@ -408,9 +449,29 @@ function InvestorCombobox({
   }, []);
 
   useEffect(() => {
+    const imageUrl = normalizeImageUrl(avatar);
+    if (!imageUrl || preloadedImageRef.current.has(imageUrl)) return;
+
+    preloadedImageRef.current.add(imageUrl);
+
+    const img = new window.Image();
+    img.decoding = "async";
+    img.src = imageUrl;
+  }, [avatar]);
+
+  useEffect(() => {
     if (!open) return;
 
     const controller = new AbortController();
+    const cacheKey = query.trim().toLowerCase();
+
+    const cached = searchCacheRef.current.get(cacheKey);
+    if (cached) {
+      setOptions(cached);
+      preloadInvestorImages(cached);
+      setLoading(false);
+      return;
+    }
 
     const timer = window.setTimeout(async () => {
       setLoading(true);
@@ -425,7 +486,6 @@ function InvestorCombobox({
 
         const response = await fetch(`/api/project/modal?${params.toString()}`, {
           method: "GET",
-          cache: "no-store",
           signal: controller.signal,
         });
 
@@ -434,7 +494,11 @@ function InvestorCombobox({
         }
 
         const payload: ProjectModalApiResponse = await response.json();
-        setOptions(Array.isArray(payload.investors) ? payload.investors : []);
+        const investors = Array.isArray(payload.investors) ? payload.investors : [];
+
+        searchCacheRef.current.set(cacheKey, investors);
+        setOptions(investors);
+        preloadInvestorImages(investors);
       } catch (error) {
         if ((error as Error).name !== "AbortError") {
           setOptions([]);
@@ -442,7 +506,7 @@ function InvestorCombobox({
       } finally {
         setLoading(false);
       }
-    }, 250);
+    }, 200);
 
     return () => {
       controller.abort();

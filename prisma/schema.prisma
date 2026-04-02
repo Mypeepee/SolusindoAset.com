@@ -67,16 +67,17 @@ model Agent {
   teamLeader        Agent?  @relation("AgentTeamLeader", fields: [id_team_leader], references: [id_agent])
   teamLeaderMembers Agent[] @relation("AgentTeamLeader")
 
-  berita          Berita[]
-  detailTransaksi DetailTransaksi[]
-  listings        Listing[]
-  penukaranPoin   PenukaranPoin[]
-  pesertaAcara    PesertaAcara[]
-  pilihanPemilu   PilihanPemilu[]
-  projectDibuat   Project[]
-  projectInvestor ProjectInvestor[]
-  riwayatPoin     RiwayatPoin[]
-  transaksiAgent  Transaksi[]       @relation("TransaksiAgent")
+  berita                 Berita[]
+  detailTransaksi        DetailTransaksi[]
+  listings               Listing[]
+  penukaranPoin          PenukaranPoin[]
+  pesertaAcara           PesertaAcara[]
+  pilihanPemilu          PilihanPemilu[]
+  projectDibuat          Project[]
+  projectInvestor        ProjectInvestor[]
+  projectSelesaiInvestor ProjectSelesaiInvestor[]
+  riwayatPoin            RiwayatPoin[]
+  transaksiAgent         Transaksi[]              @relation("TransaksiAgent")
 
   @@index([jabatan], map: "idx_agent_jabatan")
   @@index([nama_kantor], map: "idx_agent_kantor")
@@ -131,6 +132,7 @@ model Listing {
   listingBoosts      ListingBoost[]
   pilihanPemilu      PilihanPemilu[]
   project            Project[]
+  projectSelesai     ProjectSelesai[]
   transaksi          Transaksi[]
 
   @@index([kota], map: "idx_property_lokasi")
@@ -185,6 +187,7 @@ model Project {
   investorProject ProjectInvestor[]
   cmaEntries      ProjectCma[]
   arusKas         ProjectArusKas[]
+  projectSelesai  ProjectSelesai?
 
   @@index([id_listing], map: "idx_project_listing")
   @@index([dibuat_oleh], map: "idx_project_dibuat_oleh")
@@ -212,6 +215,49 @@ model ProjectInvestor {
   @@index([id_agent], map: "idx_project_investor_agent")
   @@index([status], map: "idx_project_investor_status")
   @@map("project_investor")
+}
+
+model ProjectSelesai {
+  id_project            String    @id @db.VarChar(20)
+  id_listing            BigInt
+  tanggal_pembelian     DateTime? @db.Date
+  tanggal_terjual       DateTime  @db.Date
+  durasi_hari           Int
+  harga_jual            Decimal   @default(0) @db.Decimal(20, 2)
+  total_biaya_akuisisi  Decimal   @default(0) @db.Decimal(20, 2)
+  profit_kotor          Decimal   @default(0) @db.Decimal(20, 2)
+  pph_percent           Decimal   @default(0) @db.Decimal(5, 2)
+  ajb_percent           Decimal   @default(0) @db.Decimal(5, 2)
+  agent_fee_percent     Decimal   @default(0) @db.Decimal(5, 2)
+  total_biaya_transaksi Decimal   @default(0) @db.Decimal(20, 2)
+  profit_bersih         Decimal   @default(0) @db.Decimal(20, 2)
+  roi_bersih            Decimal   @default(0) @db.Decimal(10, 2)
+  dibuat_tanggal        DateTime  @default(now()) @db.Timestamptz(6)
+  diupdate_tanggal      DateTime  @updatedAt @db.Timestamptz(6)
+
+  project         Project                  @relation(fields: [id_project], references: [id_project], onDelete: Cascade, map: "project_selesai_project_fk")
+  listing         Listing                  @relation(fields: [id_listing], references: [id_property], onDelete: Restrict, map: "project_selesai_listing_fk")
+  investorSelesai ProjectSelesaiInvestor[]
+
+  @@index([id_listing], map: "idx_project_selesai_listing")
+  @@index([tanggal_terjual], map: "idx_project_selesai_tanggal_terjual")
+  @@map("project_selesai")
+}
+
+model ProjectSelesaiInvestor {
+  id_project     String  @db.VarChar(20)
+  id_agent       String  @db.VarChar(20)
+  modal          Decimal @default(0) @db.Decimal(20, 2)
+  porsi_percent  Decimal @default(0) @db.Decimal(10, 6)
+  profit         Decimal @default(0) @db.Decimal(20, 2)
+  total_diterima Decimal @default(0) @db.Decimal(20, 2)
+
+  projectSelesai ProjectSelesai @relation(fields: [id_project], references: [id_project], onDelete: Cascade, map: "project_selesai_investor_project_fk")
+  agent          Agent          @relation(fields: [id_agent], references: [id_agent], onDelete: Cascade, map: "project_selesai_investor_agent_fk")
+
+  @@id([id_project, id_agent])
+  @@index([id_agent], map: "idx_project_selesai_investor_agent")
+  @@map("project_selesai_investor")
 }
 
 model ProjectCma {
@@ -297,7 +343,7 @@ model Transaksi {
 model DetailTransaksi {
   id           BigInt    @id @default(autoincrement())
   id_transaksi BigInt
-  id_agent     String    @db.VarChar(20)
+  id_agent     String    @db.VarChar(50)
   role         String    @db.VarChar(50)
   pendapatan   BigInt
   agent        Agent     @relation(fields: [id_agent], references: [id_agent], onDelete: Cascade, map: "detail_transaksi_agent_fk")

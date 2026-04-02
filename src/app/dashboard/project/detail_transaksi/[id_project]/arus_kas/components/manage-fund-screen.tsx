@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ChevronDown, Plus } from "lucide-react";
-import type { ManageFundData, WalletKey } from "../types";
+import type { DbCashflow, ManageFundData, WalletKey } from "../types";
 import WalletGrid from "./wallet-grid";
 import CashflowTable from "./cashflow-table";
 import CashflowEntrySheet from "./cashflow-entry-sheet";
@@ -35,25 +35,6 @@ function getRowTimestamp(row: unknown) {
   return 0;
 }
 
-function getWalletLabel(walletKey: WalletKey | "all") {
-  switch (walletKey) {
-    case "all":
-      return "Semua dompet";
-    case "utama":
-      return "Dompet Utama";
-    case "dokumen":
-      return "Dokumen";
-    case "eksekusi":
-      return "Eksekusi";
-    case "renovasi":
-      return "Renovasi";
-    case "cadangan":
-      return "Cadangan";
-    default:
-      return "Semua dompet";
-  }
-}
-
 const WALLET_OPTIONS: Array<{ value: WalletKey | "all"; label: string }> = [
   { value: "all", label: "Semua dompet" },
   { value: "utama", label: "Dompet Utama" },
@@ -70,6 +51,9 @@ export default function ManageFundScreen({
 }) {
   const [selectedWallet, setSelectedWallet] = useState<WalletKey | "all">("all");
   const [isComposerOpen, setIsComposerOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] =
+    useState<DbCashflow | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const latestRows = useMemo(() => {
     const source = Array.isArray(data.transactions) ? data.transactions : [];
@@ -84,7 +68,90 @@ export default function ManageFundScreen({
   }, [data.transactions, selectedWallet]);
 
   const defaultWallet =
-    selectedWallet === "all" ? data.wallets?.[0]?.walletKey : selectedWallet;
+    editingTransaction?.wallet_key
+      ? (editingTransaction.wallet_key as WalletKey)
+      : selectedWallet === "all"
+        ? data.wallets?.[0]?.walletKey
+        : selectedWallet;
+
+  function handleOpenCreate() {
+    setEditingTransaction(null);
+    setIsComposerOpen(true);
+  }
+
+  function handleEditTransaction(row: DbCashflow) {
+    setEditingTransaction(row);
+    setIsComposerOpen(true);
+  }
+
+  async function handleDeleteTransaction(row: DbCashflow) {
+    const transactionId = String(row.id_project_arus_kas ?? "");
+
+    if (!transactionId) {
+      window.alert("ID transaksi tidak ditemukan.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Hapus transaksi "${row.judul_transaksi || "Tanpa judul"}"?`
+    );
+
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+
+    try {
+      const response = await fetch(
+        `/api/project/catat_arus_kas/${transactionId}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      let responseJson: { message?: string } | null = null;
+
+      try {
+        responseJson = await response.json();
+      } catch {
+        responseJson = null;
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          responseJson?.message || "Gagal menghapus transaksi."
+        );
+      }
+
+      if (
+        editingTransaction &&
+        String(editingTransaction.id_project_arus_kas) === transactionId
+      ) {
+        setEditingTransaction(null);
+        setIsComposerOpen(false);
+      }
+
+      window.location.reload();
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "Terjadi kesalahan saat menghapus transaksi."
+      );
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  function handleCloseComposer() {
+    setIsComposerOpen(false);
+    setEditingTransaction(null);
+  }
+
+  function handleSubmitted() {
+    setIsComposerOpen(false);
+    setEditingTransaction(null);
+    window.location.reload();
+  }
 
   return (
     <>
@@ -138,11 +205,20 @@ export default function ManageFundScreen({
                 <div className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-300">
                   {latestRows.length} transaksi
                 </div>
+
+                {editingTransaction ? (
+                  <div className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-2 text-sm text-cyan-100">
+                    Sedang edit:{" "}
+                    <span className="font-medium">
+                      {editingTransaction.judul_transaksi || "Transaksi"}
+                    </span>
+                  </div>
+                ) : null}
               </div>
 
               <button
                 type="button"
-                onClick={() => setIsComposerOpen(true)}
+                onClick={handleOpenCreate}
                 className="inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-400/12 px-4 py-2 text-sm font-medium text-cyan-100 transition hover:bg-cyan-400/16"
               >
                 <Plus className="h-4 w-4" />
@@ -153,14 +229,22 @@ export default function ManageFundScreen({
 
           <CashflowTable
             rows={latestRows}
-            onCreateTransaction={() => setIsComposerOpen(true)}
+            onCreateTransaction={handleOpenCreate}
+            onEditTransaction={handleEditTransaction}
+            onDeleteTransaction={handleDeleteTransaction}
           />
+
+          {isDeleting ? (
+            <div className="rounded-[18px] border border-rose-300/15 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+              Sedang menghapus transaksi...
+            </div>
+          ) : null}
         </section>
       </div>
 
       <button
         type="button"
-        onClick={() => setIsComposerOpen(true)}
+        onClick={handleOpenCreate}
         className="fixed bottom-6 right-6 z-30 inline-flex h-14 w-14 items-center justify-center rounded-full border border-cyan-300/30 bg-cyan-400/15 text-cyan-100 shadow-[0_20px_50px_rgba(34,211,238,0.18)] backdrop-blur-xl transition hover:bg-cyan-400/20 lg:hidden"
         aria-label="Catat transaksi"
       >
@@ -169,10 +253,12 @@ export default function ManageFundScreen({
 
       <CashflowEntrySheet
         open={isComposerOpen}
-        onClose={() => setIsComposerOpen(false)}
+        onClose={handleCloseComposer}
         idProject={data.project.id_project}
         wallets={data.wallets}
         defaultWallet={defaultWallet}
+        editingTransaction={editingTransaction}
+        onSubmitted={handleSubmitted}
       />
     </>
   );
