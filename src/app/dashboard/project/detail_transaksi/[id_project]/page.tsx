@@ -254,7 +254,51 @@ export default async function DetailTransaksiPage({
 
   const creatorIdentity = agentIdentityMap.get(project.dibuat_oleh);
 
-  const viewModel: ProjectDetailViewModel = {
+  const projectSelesaiRows = await prisma.$queryRaw<
+    Array<{
+      id_project: string;
+      id_listing: number | null;
+      tanggal_pembelian: Date | string | null;
+      tanggal_terjual: Date | string | null;
+      durasi_hari: number | null;
+      harga_jual: Prisma.Decimal | number | string | null;
+      total_biaya_akuisisi: Prisma.Decimal | number | string | null;
+      profit_kotor: Prisma.Decimal | number | string | null;
+      pph_percent: Prisma.Decimal | number | string | null;
+      ajb_percent: Prisma.Decimal | number | string | null;
+      agent_fee_percent: Prisma.Decimal | number | string | null;
+      total_biaya_transaksi: Prisma.Decimal | number | string | null;
+      profit_bersih: Prisma.Decimal | number | string | null;
+      roi_bersih: Prisma.Decimal | number | string | null;
+      dibuat_tanggal: Date | string | null;
+      diupdate_tanggal: Date | string | null;
+    }>
+  >(Prisma.sql`
+    SELECT
+      id_project,
+      id_listing,
+      tanggal_pembelian,
+      tanggal_terjual,
+      durasi_hari,
+      harga_jual,
+      total_biaya_akuisisi,
+      profit_kotor,
+      pph_percent,
+      ajb_percent,
+      agent_fee_percent,
+      total_biaya_transaksi,
+      profit_bersih,
+      roi_bersih,
+      dibuat_tanggal,
+      diupdate_tanggal
+    FROM public.project_selesai
+    WHERE id_project = ${params.id_project}
+    LIMIT 1
+  `);
+
+  const projectSelesai = projectSelesaiRows[0] ?? null;
+
+  const viewModel = {
     id: project.id_project,
     listingId: project.id_listing,
     name: project.nama_project,
@@ -326,6 +370,67 @@ export default async function DetailTransaksiPage({
       price: toNumeric(item.harga),
       note: item.catatan,
     })),
+
+    // flatten ke root biar BloombergHeroCard lama/baru sama-sama bisa baca
+    tanggal_terjual: projectSelesai?.tanggal_terjual ?? null,
+    harga_jual: toNumeric(projectSelesai?.harga_jual),
+    total_biaya_transaksi: toNumeric(projectSelesai?.total_biaya_transaksi),
+    profit_kotor: toNumeric(projectSelesai?.profit_kotor),
+    profit_bersih: toNumeric(projectSelesai?.profit_bersih),
+    pph_percent: toNumeric(projectSelesai?.pph_percent),
+    ajb_percent: toNumeric(projectSelesai?.ajb_percent),
+    agent_fee_percent: toNumeric(projectSelesai?.agent_fee_percent),
+    roi_bersih_percent: toNumeric(projectSelesai?.roi_bersih),
+
+    // nested relation-style object untuk debug/compatibility
+    projectSelesai: projectSelesai
+      ? {
+          id_project: projectSelesai.id_project,
+          id_listing: projectSelesai.id_listing,
+          tanggal_pembelian: projectSelesai.tanggal_pembelian,
+          tanggal_terjual: projectSelesai.tanggal_terjual,
+          durasi_hari: projectSelesai.durasi_hari,
+          harga_jual: toNumeric(projectSelesai.harga_jual),
+          total_biaya_akuisisi: toNumeric(projectSelesai.total_biaya_akuisisi),
+          profit_kotor: toNumeric(projectSelesai.profit_kotor),
+          pph_percent: toNumeric(projectSelesai.pph_percent),
+          ajb_percent: toNumeric(projectSelesai.ajb_percent),
+          agent_fee_percent: toNumeric(projectSelesai.agent_fee_percent),
+          total_biaya_transaksi: toNumeric(projectSelesai.total_biaya_transaksi),
+          profit_bersih: toNumeric(projectSelesai.profit_bersih),
+          roi_bersih: toNumeric(projectSelesai.roi_bersih),
+          dibuat_tanggal: projectSelesai.dibuat_tanggal,
+          diupdate_tanggal: projectSelesai.diupdate_tanggal,
+        }
+      : null,
+  } as ProjectDetailViewModel & {
+    tanggal_terjual?: Date | string | null;
+    harga_jual?: number;
+    total_biaya_transaksi?: number;
+    profit_kotor?: number;
+    profit_bersih?: number;
+    pph_percent?: number;
+    ajb_percent?: number;
+    agent_fee_percent?: number;
+    roi_bersih_percent?: number;
+    projectSelesai?: {
+      id_project: string;
+      id_listing: number | null;
+      tanggal_pembelian: Date | string | null;
+      tanggal_terjual: Date | string | null;
+      durasi_hari: number | null;
+      harga_jual: number;
+      total_biaya_akuisisi: number;
+      profit_kotor: number;
+      pph_percent: number;
+      ajb_percent: number;
+      agent_fee_percent: number;
+      total_biaya_transaksi: number;
+      profit_bersih: number;
+      roi_bersih: number;
+      dibuat_tanggal: Date | string | null;
+      diupdate_tanggal: Date | string | null;
+    } | null;
   };
 
   return (

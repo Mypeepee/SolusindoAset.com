@@ -348,7 +348,7 @@ export default function ProjectWalletCard({
             <ShortcutButton
               label="Profit Terealisasi"
               value={formatCurrency(realizedProfit)}
-              helper="Sementara masih dummy sambil pengerjaan sistem penjualan property"
+              helper="Total profit yang dihasilkan!"
               theme={theme}
             />
           </div>

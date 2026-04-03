@@ -23,6 +23,7 @@ type WalletSummaryRow = {
   jumlah_property_didanai: string | number | null;
   pending_payment_count: string | number | null;
   pending_project_count: string | number | null;
+  realized_profit: string | number | null;
 };
 
 function toNumber(value: string | number | null | undefined) {
@@ -46,38 +47,55 @@ export async function GET(request: NextRequest) {
     const result = await pool.query<WalletSummaryRow>(
       `
         SELECT
-          COALESCE(SUM(pi.nominal_komitmen), 0) AS total_dana,
-          COALESCE(
-            SUM(
-              CASE
-                WHEN pi.status = 'lunas' THEN pi.nominal_komitmen
-                ELSE 0
-              END
-            ),
-            0
-          ) AS total_lunas,
-          COALESCE(
-            SUM(
-              CASE
-                WHEN pi.status = 'menunggu_pembayaran' THEN pi.nominal_komitmen
-                ELSE 0
-              END
-            ),
-            0
-          ) AS total_pending,
-          COUNT(DISTINCT pi.id_project)::int AS project_aktif,
-          COUNT(DISTINCT pi.id_project)::int AS jumlah_property_didanai,
-          COUNT(*) FILTER (
-            WHERE pi.status = 'menunggu_pembayaran'
-          )::int AS pending_payment_count,
-          COUNT(DISTINCT CASE
-            WHEN pi.status = 'menunggu_pembayaran' THEN pi.id_project
-            ELSE NULL
-          END)::int AS pending_project_count
-        FROM public.project_investor pi
-        INNER JOIN public.project p
-          ON p.id_project = pi.id_project
-        WHERE pi.id_agent = $1
+          inv.total_dana,
+          inv.total_lunas,
+          inv.total_pending,
+          inv.project_aktif,
+          inv.jumlah_property_didanai,
+          inv.pending_payment_count,
+          inv.pending_project_count,
+          prof.realized_profit
+        FROM (
+          SELECT
+            COALESCE(SUM(pi.nominal_komitmen), 0) AS total_dana,
+            COALESCE(
+              SUM(
+                CASE
+                  WHEN pi.status = 'lunas' THEN pi.nominal_komitmen
+                  ELSE 0
+                END
+              ),
+              0
+            ) AS total_lunas,
+            COALESCE(
+              SUM(
+                CASE
+                  WHEN pi.status = 'menunggu_pembayaran' THEN pi.nominal_komitmen
+                  ELSE 0
+                END
+              ),
+              0
+            ) AS total_pending,
+            COUNT(DISTINCT pi.id_project)::int AS project_aktif,
+            COUNT(DISTINCT pi.id_project)::int AS jumlah_property_didanai,
+            COUNT(*) FILTER (
+              WHERE pi.status = 'menunggu_pembayaran'
+            )::int AS pending_payment_count,
+            COUNT(DISTINCT CASE
+              WHEN pi.status = 'menunggu_pembayaran' THEN pi.id_project
+              ELSE NULL
+            END)::int AS pending_project_count
+          FROM public.project_investor pi
+          INNER JOIN public.project p
+            ON p.id_project = pi.id_project
+          WHERE pi.id_agent = $1
+        ) inv
+        CROSS JOIN (
+          SELECT
+            COALESCE(SUM(psi.profit), 0) AS realized_profit
+          FROM public.project_selesai_investor psi
+          WHERE psi.id_agent = $1
+        ) prof
       `,
       [idAgent]
     );
@@ -90,6 +108,7 @@ export async function GET(request: NextRequest) {
       jumlah_property_didanai: 0,
       pending_payment_count: 0,
       pending_project_count: 0,
+      realized_profit: 0,
     };
 
     const totalDana = toNumber(row.total_dana);
@@ -99,6 +118,7 @@ export async function GET(request: NextRequest) {
     const jumlahPropertyDidanai = toNumber(row.jumlah_property_didanai);
     const pendingPaymentCount = toNumber(row.pending_payment_count);
     const pendingProjectCount = toNumber(row.pending_project_count);
+    const realizedProfit = toNumber(row.realized_profit);
 
     return NextResponse.json({
       success: true,
@@ -112,6 +132,7 @@ export async function GET(request: NextRequest) {
         pendingPaymentCount,
         pendingProjectCount,
         hasPendingPayment: pendingPaymentCount > 0,
+        realizedProfit,
       },
     });
   } catch (error) {

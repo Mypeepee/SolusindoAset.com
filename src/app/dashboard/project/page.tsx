@@ -31,6 +31,7 @@ type InvestorWalletSummary = {
   pendingPaymentCount: number;
   pendingProjectCount: number;
   hasPendingPayment: boolean;
+  realizedProfit: number;
 };
 
 type WalletSummaryResponse = {
@@ -39,7 +40,11 @@ type WalletSummaryResponse = {
   message?: string;
 };
 
+type TabKey = "semua" | "berjalan" | "selesai";
+type SortKey = "termurah" | "termahal" | "terlama" | "tercepat";
+
 const EMPTY_WALLET_SUMMARY: InvestorWalletSummary = {
+  idAgent: undefined,
   totalDana: 0,
   totalDanaLunas: 0,
   totalDanaPending: 0,
@@ -48,7 +53,291 @@ const EMPTY_WALLET_SUMMARY: InvestorWalletSummary = {
   pendingPaymentCount: 0,
   pendingProjectCount: 0,
   hasPendingPayment: false,
+  realizedProfit: 0,
 };
+
+function normalizeText(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+function pickNumber(...values: unknown[]) {
+  for (const value of values) {
+    const num = Number(value);
+    if (Number.isFinite(num)) return num;
+  }
+  return 0;
+}
+
+function pickString(...values: unknown[]) {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function asArray(value: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item): item is Record<string, unknown> =>
+      typeof item === "object" && item !== null
+  );
+}
+
+function getProjectStatus(project: ProjectCampaign) {
+  const p = project as Record<string, unknown>;
+
+  return normalizeText(
+    p.status ??
+      p.statusProject ??
+      p.status_project ??
+      p.kategoriStatus ??
+      p.categoryStatus
+  );
+}
+
+function extractProjectSelesai(project: ProjectCampaign) {
+  const p = project as Record<string, unknown>;
+
+  const direct =
+    typeof p.projectSelesai === "object" && p.projectSelesai !== null
+      ? (p.projectSelesai as Record<string, unknown>)
+      : typeof p.project_selesai === "object" && p.project_selesai !== null
+      ? (p.project_selesai as Record<string, unknown>)
+      : null;
+
+  const fromArray =
+    asArray(p.projectSelesai).find(Boolean) ??
+    asArray(p.project_selesai).find(Boolean) ??
+    asArray(p.projectDone).find(Boolean) ??
+    asArray(p.project_done).find(Boolean) ??
+    null;
+
+  const raw = direct ?? fromArray;
+
+  if (!raw) return null;
+
+  const idProject = pickString(raw.id_project, raw.idProject, project.id);
+  const tanggalTerjual = raw.tanggal_terjual ?? raw.tanggalTerjual ?? null;
+  const hargaJual = pickNumber(raw.harga_jual, raw.hargaJual);
+  const durasiHari = pickNumber(raw.durasi_hari, raw.durasiHari);
+  const totalBiayaAkuisisi = pickNumber(
+    raw.total_biaya_akuisisi,
+    raw.totalBiayaAkuisisi
+  );
+  const profitKotor = pickNumber(raw.profit_kotor, raw.profitKotor);
+  const totalBiayaTransaksi = pickNumber(
+    raw.total_biaya_transaksi,
+    raw.totalBiayaTransaksi
+  );
+  const profitBersih = pickNumber(raw.profit_bersih, raw.profitBersih);
+  const roiBersih = pickNumber(raw.roi_bersih, raw.roiBersih);
+
+  if (!idProject || !tanggalTerjual) return null;
+
+  return {
+    id_project: idProject,
+    id_listing: pickNumber(raw.id_listing, raw.idListing),
+    tanggal_pembelian: raw.tanggal_pembelian ?? raw.tanggalPembelian ?? null,
+    tanggal_terjual: tanggalTerjual,
+    durasi_hari: durasiHari,
+    harga_jual: hargaJual,
+    total_biaya_akuisisi: totalBiayaAkuisisi,
+    profit_kotor: profitKotor,
+    pph_percent: pickNumber(raw.pph_percent, raw.pphPercent),
+    ajb_percent: pickNumber(raw.ajb_percent, raw.ajbPercent),
+    agent_fee_percent: pickNumber(raw.agent_fee_percent, raw.agentFeePercent),
+    total_biaya_transaksi: totalBiayaTransaksi,
+    profit_bersih: profitBersih,
+    roi_bersih: roiBersih,
+    dibuat_tanggal: raw.dibuat_tanggal ?? raw.dibuatTanggal ?? null,
+    diupdate_tanggal: raw.diupdate_tanggal ?? raw.diupdateTanggal ?? null,
+  };
+}
+
+function getProjectPrice(project: ProjectCampaign) {
+  const p = project as Record<string, unknown>;
+  const projectSelesai = extractProjectSelesai(project);
+
+  if (projectSelesai) {
+    return pickNumber(projectSelesai.harga_jual, projectSelesai.total_biaya_akuisisi);
+  }
+
+  return pickNumber(
+    p.hargaJual,
+    p.harga_jual,
+    p.hargaBeli,
+    p.harga_beli,
+    p.totalHargaJual,
+    p.total_harga_jual,
+    p.targetPendanaan,
+    p.target_pendanaan,
+    p.nominalPendanaan
+  );
+}
+
+function getProjectDuration(project: ProjectCampaign) {
+  const p = project as Record<string, unknown>;
+  const projectSelesai = extractProjectSelesai(project);
+
+  if (projectSelesai?.durasi_hari) {
+    return pickNumber(projectSelesai.durasi_hari);
+  }
+
+  return pickNumber(
+    p.durasiHari,
+    p.durasi_hari,
+    p.durationDays,
+    p.duration_days,
+    p.estimasiDurasi,
+    p.estimasi_durasi,
+    p.lamaHari,
+    p.lama_hari
+  );
+}
+
+function isProjectSold(project: ProjectCampaign) {
+  const projectSelesai = extractProjectSelesai(project);
+  if (projectSelesai) return true;
+
+  const status = getProjectStatus(project);
+
+  return (
+    status === "terjual" ||
+    status === "sold" ||
+    status === "selesai" ||
+    status === "sudah_selesai"
+  );
+}
+
+function findUserInvestmentFromProject(
+  project: ProjectCampaign,
+  currentAgentId: string | null
+) {
+  if (!currentAgentId) return null;
+
+  const p = project as Record<string, unknown>;
+
+  const directUserInvestment =
+    typeof p.userInvestment === "object" && p.userInvestment !== null
+      ? (p.userInvestment as Record<string, unknown>)
+      : null;
+
+  if (directUserInvestment) {
+    const nominalKomitmen = pickNumber(
+      directUserInvestment.nominalKomitmen,
+      directUserInvestment.nominal_komitmen,
+      directUserInvestment.nominal,
+      directUserInvestment.komitmen
+    );
+
+    const persentaseKepemilikanRaw =
+      directUserInvestment.persentaseKepemilikan ??
+      directUserInvestment.persentase_kepemilikan ??
+      null;
+
+    const persentaseKepemilikan =
+      persentaseKepemilikanRaw === null || persentaseKepemilikanRaw === undefined
+        ? null
+        : Number(persentaseKepemilikanRaw);
+
+    return {
+      nominalKomitmen,
+      persentaseKepemilikan: Number.isFinite(persentaseKepemilikan as number)
+        ? persentaseKepemilikan
+        : null,
+      status: pickString(
+        directUserInvestment.status,
+        directUserInvestment.statusPembayaran,
+        directUserInvestment.status_pembayaran,
+        "menunggu_pembayaran"
+      ),
+      updatedAt: pickString(
+        directUserInvestment.updatedAt,
+        directUserInvestment.diupdate_tanggal,
+        directUserInvestment.updated_at
+      ) || null,
+    };
+  }
+
+  const possibleCollections = [
+    ...asArray(p.projectInvestor),
+    ...asArray(p.projectInvestors),
+    ...asArray(p.project_investor),
+    ...asArray(p.investors),
+    ...asArray(p.investasi),
+    ...asArray(p.investments),
+  ];
+
+  const matched = possibleCollections.find((item) => {
+    const agentId = pickString(
+      item.id_agent,
+      item.idAgent,
+      item.agent_id,
+      item.agentId
+    );
+    return agentId === currentAgentId;
+  });
+
+  if (!matched) return null;
+
+  const nominalKomitmen = pickNumber(
+    matched.nominal_komitmen,
+    matched.nominalKomitmen,
+    matched.nominal,
+    matched.komitmen
+  );
+
+  const persentaseRaw =
+    matched.persentase_kepemilikan ??
+    matched.persentaseKepemilikan ??
+    matched.percent ??
+    null;
+
+  const persentaseKepemilikan =
+    persentaseRaw === null || persentaseRaw === undefined
+      ? null
+      : Number(persentaseRaw);
+
+  return {
+    nominalKomitmen,
+    persentaseKepemilikan: Number.isFinite(persentaseKepemilikan as number)
+      ? persentaseKepemilikan
+      : null,
+    status: pickString(
+      matched.status,
+      matched.statusPembayaran,
+      matched.status_pembayaran,
+      "menunggu_pembayaran"
+    ),
+    updatedAt: pickString(
+      matched.diupdate_tanggal,
+      matched.updatedAt,
+      matched.updated_at
+    ) || null,
+  };
+}
+
+function enrichProjectsWithUserInvestment(
+  projects: ProjectCampaign[],
+  currentAgentId: string | null
+): ProjectCampaign[] {
+  return projects.map((project) => {
+    const userInvestment = findUserInvestmentFromProject(project, currentAgentId);
+    const projectSelesai = extractProjectSelesai(project);
+
+    return {
+      ...project,
+      projectSelesai,
+      userInvestment,
+      status: projectSelesai
+        ? "Sudah Terjual"
+        : pickString(project.status, "Project"),
+    };
+  });
+}
 
 export default function ProjectPage() {
   const { data: session } = useSession();
@@ -63,6 +352,9 @@ export default function ProjectPage() {
     useState<ProjectCampaign | null>(null);
   const [walletSummary, setWalletSummary] =
     useState<InvestorWalletSummary>(EMPTY_WALLET_SUMMARY);
+
+  const [activeTab, setActiveTab] = useState<TabKey>("berjalan");
+  const [sort, setSort] = useState<SortKey>("termurah");
 
   const currentAgentId = (session?.user as any)?.agentId ?? null;
 
@@ -82,7 +374,13 @@ export default function ProjectPage() {
         throw new Error(result.message || "Gagal mengambil daftar project.");
       }
 
-      setCampaigns(Array.isArray(result.data) ? result.data : []);
+      const rawProjects = Array.isArray(result.data) ? result.data : [];
+      const enrichedProjects = enrichProjectsWithUserInvestment(
+        rawProjects,
+        currentAgentId
+      );
+
+      setCampaigns(enrichedProjects);
     } catch (error) {
       setCampaigns([]);
       setProjectError(
@@ -93,7 +391,7 @@ export default function ProjectPage() {
     } finally {
       setLoadingProjects(false);
     }
-  }, []);
+  }, [currentAgentId]);
 
   const fetchWalletSummary = useCallback(async () => {
     if (!currentAgentId) {
@@ -118,7 +416,11 @@ export default function ProjectPage() {
         );
       }
 
-      setWalletSummary(result.data ?? EMPTY_WALLET_SUMMARY);
+      setWalletSummary({
+        ...EMPTY_WALLET_SUMMARY,
+        ...(result.data ?? {}),
+        realizedProfit: Number(result.data?.realizedProfit ?? 0),
+      });
     } catch (error) {
       console.error("[FETCH_WALLET_SUMMARY_ERROR]", error);
       setWalletSummary(EMPTY_WALLET_SUMMARY);
@@ -132,16 +434,6 @@ export default function ProjectPage() {
   useEffect(() => {
     fetchWalletSummary();
   }, [fetchWalletSummary]);
-
-  const totalTarget = useMemo(
-    () => campaigns.reduce((sum, item) => sum + item.targetPendanaan, 0),
-    [campaigns]
-  );
-
-  const totalEstimasiProfit = useMemo(
-    () => campaigns.reduce((sum, item) => sum + item.estimasiProfit, 0),
-    [campaigns]
-  );
 
   async function handleProjectCreated(_values: CreateProjectFormValues) {
     await Promise.all([fetchProjects(), fetchWalletSummary()]);
@@ -202,26 +494,80 @@ export default function ProjectPage() {
     }
   }, [projectToDelete, fetchWalletSummary]);
 
+  const totalBerjalan = useMemo(
+    () => campaigns.filter((item) => !isProjectSold(item)).length,
+    [campaigns]
+  );
+
+  const totalSelesai = useMemo(
+    () => campaigns.filter((item) => isProjectSold(item)).length,
+    [campaigns]
+  );
+
+  const filteredCampaigns = useMemo(() => {
+    const items = [...campaigns].filter((project) => {
+      if (activeTab === "berjalan") {
+        return !isProjectSold(project);
+      }
+
+      if (activeTab === "selesai") {
+        return isProjectSold(project);
+      }
+
+      return true;
+    });
+
+    items.sort((a, b) => {
+      const priceA = getProjectPrice(a);
+      const priceB = getProjectPrice(b);
+      const durationA = getProjectDuration(a);
+      const durationB = getProjectDuration(b);
+
+      switch (sort) {
+        case "termurah":
+          return priceA - priceB;
+        case "termahal":
+          return priceB - priceA;
+        case "terlama":
+          return durationB - durationA;
+        case "tercepat":
+          return durationA - durationB;
+        default:
+          return 0;
+      }
+    });
+
+    return items;
+  }, [campaigns, activeTab, sort]);
+
   return (
     <main className="min-h-screen bg-transparent text-white">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
-      <ProjectWalletCard
-  totalDana={walletSummary.totalDana}
-  totalDanaLunas={walletSummary.totalDanaLunas}
-  totalDanaPending={walletSummary.totalDanaPending}
-  projectAktif={walletSummary.projectAktif}
-  jumlahPropertyDidanai={walletSummary.jumlahPropertyDidanai}
-  pendingPaymentCount={walletSummary.pendingPaymentCount}
-  pendingProjectCount={walletSummary.pendingProjectCount}
-  hasPendingPayment={walletSummary.hasPendingPayment}
-  realizedProfit={125_000_000}
-  jabatan="AGENT"
-  createdById={currentAgentId ?? undefined}
-  onCreateProject={handleProjectCreated}
-/>
+        <ProjectWalletCard
+          totalDana={walletSummary.totalDana}
+          totalDanaLunas={walletSummary.totalDanaLunas}
+          totalDanaPending={walletSummary.totalDanaPending}
+          projectAktif={walletSummary.projectAktif}
+          jumlahPropertyDidanai={walletSummary.jumlahPropertyDidanai}
+          pendingPaymentCount={walletSummary.pendingPaymentCount}
+          pendingProjectCount={walletSummary.pendingProjectCount}
+          hasPendingPayment={walletSummary.hasPendingPayment}
+          realizedProfit={walletSummary.realizedProfit}
+          jabatan="AGENT"
+          createdById={currentAgentId ?? undefined}
+          onCreateProject={handleProjectCreated}
+        />
 
         <section id="status-project" className="space-y-5">
-          <ProjectCategoryTabs />
+          <ProjectCategoryTabs
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            sort={sort}
+            onSortChange={setSort}
+            totalSemua={campaigns.length}
+            totalBerjalan={totalBerjalan}
+            totalSelesai={totalSelesai}
+          />
 
           {loadingProjects ? (
             <div className="rounded-[28px] border border-white/10 bg-white/[0.04] px-5 py-6 text-sm text-slate-300">
@@ -231,16 +577,22 @@ export default function ProjectPage() {
             <div className="rounded-[28px] border border-rose-400/20 bg-rose-500/10 px-5 py-6 text-sm text-rose-200">
               {projectError}
             </div>
-          ) : campaigns.length === 0 ? (
+          ) : filteredCampaigns.length === 0 ? (
             <div className="rounded-[28px] border border-white/10 bg-white/[0.04] px-5 py-6 text-sm text-slate-300">
-              Belum ada project di database.
+              {campaigns.length === 0
+                ? "Belum ada project di database."
+                : activeTab === "berjalan"
+                ? "Belum ada project yang sedang berjalan."
+                : activeTab === "selesai"
+                ? "Belum ada project yang sudah selesai."
+                : "Tidak ada project yang cocok dengan filter saat ini."}
             </div>
           ) : (
             <div
               id="daftar-project"
               className="grid grid-cols-1 gap-5 lg:grid-cols-2"
             >
-              {campaigns.map((project) => {
+              {filteredCampaigns.map((project) => {
                 const canManage =
                   Boolean(currentAgentId) &&
                   project.createdById === currentAgentId;
@@ -297,7 +649,8 @@ export default function ProjectPage() {
               </h3>
 
               <p className="mt-2 text-sm leading-6 text-slate-300">
-                Project ini akan dihapus total dari database beserta data turunannya.
+                Project ini akan dihapus total dari database beserta data
+                turunannya.
               </p>
 
               <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4">

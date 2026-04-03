@@ -32,7 +32,6 @@ type ProjectData = {
   estimasi_harga_jual?: number | string;
   mulai_tanggal?: string | null;
 
-  // optional realized data untuk view mode
   tanggal_terjual?: string | null;
   harga_jual?: number | string;
   pph_percent?: number | string;
@@ -522,9 +521,7 @@ export default function ModalTerjual({
 
     setHargaJualInput(toInputCurrency(hargaJualValue));
     setTotalBiayaAkuisisiInput(toInputCurrency(biayaAkuisisiValue));
-    setTanggalTerjual(
-      tanggalReal || new Date().toISOString().slice(0, 10)
-    );
+    setTanggalTerjual(tanggalReal || new Date().toISOString().slice(0, 10));
 
     setPphInput(String(toSafeNumber(project?.pph_percent || 2.5)));
     setAjbInput(String(toSafeNumber(project?.ajb_percent || 0.5)));

@@ -29,6 +29,7 @@ import {
   Check,
   ChevronDown,
   Clock3,
+  Eye,
   Loader2,
   MapPin,
   ReceiptText,
@@ -57,6 +58,17 @@ type ModalProjectData = {
   total_biaya_akuisisi?: number | string;
   estimasi_harga_jual?: number | string;
   mulai_tanggal?: string | null;
+
+  tanggal_terjual?: string | null;
+  harga_jual?: number | string;
+  pph_percent?: number | string;
+  ajb_percent?: number | string;
+  agent_fee_percent?: number | string;
+  total_biaya_transaksi?: number | string;
+  profit_kotor?: number | string;
+  profit_bersih?: number | string;
+  roi_kotor_percent?: number | string;
+  roi_bersih_percent?: number | string;
 };
 
 type SubmitPayload = {
@@ -417,6 +429,18 @@ function pickInvestorAvatar(item: any) {
     null;
 
   return buildGoogleDriveThumbnail(rawAvatar, 200);
+}
+
+function resolveProjectSelesai(raw: any) {
+  return (
+    raw?.project_selesai ??
+    raw?.projectSelesai ??
+    raw?.project_done ??
+    raw?.projectDone ??
+    raw?.sale ??
+    raw?.realizedSale ??
+    null
+  );
 }
 
 function HeroTopBar({
@@ -903,36 +927,66 @@ function FundingTerminal({
 }
 
 function SaleFloatingButton({
-  visible,
+  mode,
   onClick,
 }: {
-  visible: boolean;
+  mode: "input" | "view" | null;
   onClick: () => void;
 }) {
-  if (!visible) return null;
+  if (!mode) return null;
+
+  const isView = mode === "view";
 
   return (
     <div className="fixed bottom-5 right-5 z-[120] flex flex-col items-end gap-3 sm:bottom-6 sm:right-6">
-      <div className="rounded-full border border-amber-300/18 bg-amber-400/10 px-3 py-1.5 text-[11px] font-medium text-amber-100 backdrop-blur-xl">
-        Data penjualan belum diisi
+      <div
+        className={cn(
+          "rounded-full px-3 py-1.5 text-[11px] font-medium backdrop-blur-xl border",
+          isView
+            ? "border-cyan-300/18 bg-cyan-400/10 text-cyan-100"
+            : "border-amber-300/18 bg-amber-400/10 text-amber-100"
+        )}
+      >
+        {isView ? "Data realisasi sudah tersimpan" : "Data penjualan belum diisi"}
       </div>
 
       <button
         type="button"
         onClick={onClick}
-        aria-label="Buka input penjualan"
-        className="group inline-flex items-center gap-3 rounded-full border border-emerald-300/20 bg-[linear-gradient(180deg,rgba(8,16,18,0.96),rgba(7,22,20,0.92))] px-4 py-3 text-white shadow-[0_16px_40px_rgba(16,185,129,0.14)] backdrop-blur-2xl transition duration-300 hover:border-emerald-300/30 hover:bg-[linear-gradient(180deg,rgba(10,20,22,0.98),rgba(8,26,23,0.96))] hover:shadow-[0_20px_50px_rgba(16,185,129,0.18)] active:scale-[0.99]"
+        aria-label={isView ? "Buka detail realisasi" : "Buka input penjualan"}
+        className={cn(
+          "group inline-flex items-center gap-3 rounded-full border px-4 py-3 text-white shadow-[0_16px_40px_rgba(16,185,129,0.14)] backdrop-blur-2xl transition duration-300 active:scale-[0.99]",
+          isView
+            ? "border-cyan-300/20 bg-[linear-gradient(180deg,rgba(8,14,22,0.96),rgba(7,18,30,0.92))] hover:border-cyan-300/30 hover:bg-[linear-gradient(180deg,rgba(10,18,28,0.98),rgba(8,22,34,0.96))]"
+            : "border-emerald-300/20 bg-[linear-gradient(180deg,rgba(8,16,18,0.96),rgba(7,22,20,0.92))] hover:border-emerald-300/30 hover:bg-[linear-gradient(180deg,rgba(10,20,22,0.98),rgba(8,26,23,0.96))]"
+        )}
       >
-        <span className="flex h-12 w-12 items-center justify-center rounded-full border border-emerald-300/20 bg-emerald-400/10 text-emerald-100">
-          <ReceiptText className="h-5 w-5" strokeWidth={2.2} />
+        <span
+          className={cn(
+            "flex h-12 w-12 items-center justify-center rounded-full border",
+            isView
+              ? "border-cyan-300/20 bg-cyan-400/10 text-cyan-100"
+              : "border-emerald-300/20 bg-emerald-400/10 text-emerald-100"
+          )}
+        >
+          {isView ? (
+            <Eye className="h-5 w-5" strokeWidth={2.2} />
+          ) : (
+            <ReceiptText className="h-5 w-5" strokeWidth={2.2} />
+          )}
         </span>
 
         <span className="flex flex-col items-start text-left">
-          <span className="text-[10px] uppercase tracking-[0.28em] text-emerald-200/65">
-            Exit
+          <span
+            className={cn(
+              "text-[10px] uppercase tracking-[0.28em]",
+              isView ? "text-cyan-200/65" : "text-emerald-200/65"
+            )}
+          >
+            {isView ? "History" : "Exit"}
           </span>
           <span className="mt-0.5 text-sm font-semibold text-white">
-            Input penjualan
+            {isView ? "Lihat Realisasi" : "Input Penjualan"}
           </span>
         </span>
       </button>
@@ -1081,50 +1135,127 @@ export default function BloombergHeroCard({
       ? "Pendanaan terbuka"
       : "Pendanaan tertutup";
 
+  const rawProject = project as any;
+  const rawProjectSelesai = useMemo(
+    () => resolveProjectSelesai(rawProject),
+    [rawProject]
+  );
+
+  const hasSaleData = useMemo(() => {
+    const sale = rawProjectSelesai;
+
+    return (
+      toNumber(rawProject?.harga_jual) > 0 ||
+      toNumber(rawProject?.salePrice) > 0 ||
+      toNumber(rawProject?.realizedSellPrice) > 0 ||
+      toNumber(rawProject?.profit_bersih_realisasi) > 0 ||
+      toNumber(rawProject?.profit_bersih) > 0 ||
+      toNumber(rawProject?.total_biaya_transaksi) > 0 ||
+      Boolean(rawProject?.tanggal_terjual) ||
+      toNumber(sale?.harga_jual) > 0 ||
+      toNumber(sale?.profit_bersih) > 0 ||
+      toNumber(sale?.profit_kotor) > 0 ||
+      toNumber(sale?.total_biaya_transaksi) > 0 ||
+      Boolean(sale?.tanggal_terjual)
+    );
+  }, [rawProject, rawProjectSelesai]);
+
   const modalProject = useMemo<ModalProjectData>(() => {
+    const sale = rawProjectSelesai;
+
     return {
       id_project: projectId,
       nama_project:
-        (project as any)?.name ??
-        (project as any)?.nama_project ??
-        (project as any)?.namaProject ??
+        rawProject?.name ??
+        rawProject?.nama_project ??
+        rawProject?.namaProject ??
         "",
       estimasi_harga_jual:
-        (project as any)?.estimatedSellPrice ??
-        (project as any)?.estimasi_harga_jual ??
+        rawProject?.estimatedSellPrice ??
+        rawProject?.estimasi_harga_jual ??
         0,
       total_biaya_akuisisi:
-        (project as any)?.totalAcquisitionCost ??
-        (project as any)?.total_biaya_akuisisi ??
-        (project as any)?.acquisitionCost ??
+        sale?.total_biaya_akuisisi ??
+        rawProject?.totalAcquisitionCost ??
+        rawProject?.total_biaya_akuisisi ??
+        rawProject?.acquisitionCost ??
         0,
       mulai_tanggal:
-        (project as any)?.startDate ??
-        (project as any)?.mulai_tanggal ??
-        (project as any)?.mulaiTanggal ??
+        rawProject?.startDate ??
+        rawProject?.mulai_tanggal ??
+        rawProject?.mulaiTanggal ??
+        sale?.tanggal_pembelian ??
         null,
       investors,
+
+      tanggal_terjual:
+        sale?.tanggal_terjual ??
+        rawProject?.tanggal_terjual ??
+        rawProject?.tanggalTerjual ??
+        rawProject?.soldDate ??
+        null,
+      harga_jual:
+        sale?.harga_jual ??
+        rawProject?.harga_jual ??
+        rawProject?.salePrice ??
+        rawProject?.realizedSellPrice ??
+        0,
+      pph_percent:
+        sale?.pph_percent ??
+        rawProject?.pph_percent ??
+        rawProject?.pphPercent ??
+        2.5,
+      ajb_percent:
+        sale?.ajb_percent ??
+        rawProject?.ajb_percent ??
+        rawProject?.ajbPercent ??
+        0.5,
+      agent_fee_percent:
+        sale?.agent_fee_percent ??
+        rawProject?.agent_fee_percent ??
+        rawProject?.agentFeePercent ??
+        2,
+      total_biaya_transaksi:
+        sale?.total_biaya_transaksi ??
+        rawProject?.total_biaya_transaksi ??
+        rawProject?.totalBiayaTransaksi ??
+        0,
+      profit_kotor:
+        sale?.profit_kotor ??
+        rawProject?.profit_kotor ??
+        rawProject?.profitKotor ??
+        0,
+      profit_bersih:
+        sale?.profit_bersih ??
+        rawProject?.profit_bersih ??
+        rawProject?.profit_bersih_realisasi ??
+        rawProject?.profitBersih ??
+        0,
+      roi_kotor_percent:
+        rawProject?.roi_kotor_percent ??
+        rawProject?.roiKotorPercent ??
+        0,
+      roi_bersih_percent:
+        sale?.roi_bersih ??
+        rawProject?.roi_bersih_percent ??
+        rawProject?.roiBersihPercent ??
+        0,
     };
-  }, [project, projectId, investors]);
+  }, [projectId, rawProject, rawProjectSelesai, investors]);
 
-  const hasSaleData = useMemo(() => {
-    return (
-      toNumber((project as any)?.harga_jual) > 0 ||
-      toNumber((project as any)?.salePrice) > 0 ||
-      toNumber((project as any)?.realizedSellPrice) > 0 ||
-      toNumber((project as any)?.profit_bersih_realisasi) > 0 ||
-      Boolean((project as any)?.tanggal_terjual)
-    );
-  }, [project]);
+  const saleButtonMode = useMemo<"input" | "view" | null>(() => {
+    if (liveStatus !== "terjual") return null;
+    if (!canManageSale) return null;
+    return hasSaleData ? "view" : "input";
+  }, [liveStatus, canManageSale, hasSaleData]);
 
-  const shouldShowSaleFab =
-    liveStatus === "terjual" && canManageSale && !hasSaleData;
+  const isSaleModalReadOnly = saleButtonMode === "view";
 
   useEffect(() => {
-    if (!shouldShowSaleFab) {
+    if (!saleButtonMode) {
       setOpenModalTerjual(false);
     }
-  }, [shouldShowSaleFab]);
+  }, [saleButtonMode]);
 
   async function handleSubmitSale(payload: SubmitPayload) {
     try {
@@ -1288,7 +1419,7 @@ export default function BloombergHeroCard({
       </section>
 
       <SaleFloatingButton
-        visible={shouldShowSaleFab && !saleSubmitting}
+        mode={!saleSubmitting ? saleButtonMode : null}
         onClick={() => setOpenModalTerjual(true)}
       />
 
@@ -1297,6 +1428,7 @@ export default function BloombergHeroCard({
         onClose={() => setOpenModalTerjual(false)}
         project={modalProject}
         onSubmit={handleSubmitSale}
+        readOnly={isSaleModalReadOnly}
       />
     </>
   );
