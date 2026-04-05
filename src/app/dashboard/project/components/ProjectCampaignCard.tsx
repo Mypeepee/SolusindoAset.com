@@ -1172,7 +1172,7 @@ export default function ProjectFundraisingCard({
               href={manageFundHref}
               className="flex-1 rounded-[20px] border border-white/15 bg-white/[0.04] px-5 py-3.5 text-center text-sm font-semibold text-white backdrop-blur-md transition duration-200 hover:bg-white/[0.07] active:scale-[0.99]"
             >
-              {isSold ? "Lihat Arus Kas" : "Manage Fund"}
+              {isSold ? "Lihat Arus Kas" : "Kelola Dana"}
             </Link>
           ) : null}
         </div>

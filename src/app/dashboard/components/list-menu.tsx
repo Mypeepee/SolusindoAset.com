@@ -29,9 +29,9 @@ export interface MenuItem {
       href: "/dashboard/project" 
     },
     {
-      label: "Analytics",
-      icon: "solar:chart-2-linear",
-      href: "/dashboard/analytics",
+      label: "Surat",
+      icon: "solar:document-text-linear",
+      href: "/dashboard/surat",
     },
     {
       label: "Tasks",
