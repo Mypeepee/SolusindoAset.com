@@ -4,13 +4,15 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.schemas.ktp import KtpOcrResponseSchema
+from app.schemas.risalah import RisalahOcrResponseSchema
 from app.services.ktp_ocr import detect_text_google_vision, clean_ocr_text
 from app.services.ktp_parser import parse_ktp_text
+from app.services.risalah_parser import parse_risalah_text
 from app.services.ktp_preprocess import preprocess_ktp_image
 
 load_dotenv()
 
-app = FastAPI(title="OCR KTP API")
+app = FastAPI(title="OCR Dokumen API")
 
 origins = os.getenv("BACKEND_CORS_ORIGINS", "http://localhost:3000").split(",")
 
@@ -47,13 +49,13 @@ async def ocr_ktp(file: UploadFile = File(...)):
         cleaned_text = clean_ocr_text(raw_text)
         parsed_result = parse_ktp_text(cleaned_text)
 
-        print("\n=== RAW TEXT ===")
+        print("\n=== RAW TEXT KTP ===")
         print(raw_text)
-        print("\n=== CLEANED TEXT ===")
+        print("\n=== CLEANED TEXT KTP ===")
         print(cleaned_text)
-        print("\n=== PARSED RESULT ===")
+        print("\n=== PARSED RESULT KTP ===")
         print(parsed_result)
-        print("====================\n")
+        print("========================\n")
 
         return {
             "raw_text": raw_text,
@@ -68,7 +70,53 @@ async def ocr_ktp(file: UploadFile = File(...)):
     except HTTPException:
         raise
     except Exception as e:
-        print("\n=== OCR ERROR ===")
+        print("\n=== OCR KTP ERROR ===")
         print(str(e))
-        print("=================\n")
+        print("=====================\n")
         raise HTTPException(status_code=500, detail=f"Gagal OCR KTP: {str(e)}")
+
+
+@app.post("/api/ocr/risalah", response_model=RisalahOcrResponseSchema)
+async def ocr_risalah(file: UploadFile = File(...)):
+    try:
+        if not file.content_type or not file.content_type.startswith("image/"):
+            raise HTTPException(status_code=400, detail="File harus berupa gambar.")
+
+        file_bytes = await file.read()
+        if not file_bytes:
+            raise HTTPException(status_code=400, detail="File kosong.")
+
+        processed_bytes = preprocess_ktp_image(file_bytes)
+
+        ocr_result = detect_text_google_vision(processed_bytes)
+        raw_text = ocr_result.get("raw_text", "")
+        confidence = ocr_result.get("confidence", 0)
+
+        cleaned_text = clean_ocr_text(raw_text)
+        parsed_result = parse_risalah_text(cleaned_text)
+
+        print("\n=== RAW TEXT RISALAH ===")
+        print(raw_text)
+        print("\n=== CLEANED TEXT RISALAH ===")
+        print(cleaned_text)
+        print("\n=== PARSED RESULT RISALAH ===")
+        print(parsed_result)
+        print("============================\n")
+
+        return {
+            "raw_text": raw_text,
+            "cleaned_text": cleaned_text,
+            "confidence": confidence,
+            "parsed": parsed_result["parsed"],
+            "score": parsed_result["score"],
+            "status": parsed_result["status"],
+            "warnings": parsed_result["warnings"],
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("\n=== OCR RISALAH ERROR ===")
+        print(str(e))
+        print("=========================\n")
+        raise HTTPException(status_code=500, detail=f"Gagal OCR Risalah: {str(e)}")

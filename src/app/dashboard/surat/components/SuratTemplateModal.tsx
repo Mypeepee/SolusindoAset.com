@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  FileText,
   Image as ImageIcon,
   Loader2,
   Upload,
@@ -12,7 +13,7 @@ import {
 import type { SuratTemplate } from "./data";
 import { kuasaOptions } from "./data";
 import { ocrKTP } from "@/lib/ocrKtp";
-import { parseRisalah } from "@/lib/parseRisalah";
+import { ocrRisalah } from "@/lib/ocrRisalah";
 
 type Props = {
   open: boolean;
@@ -66,6 +67,7 @@ type FormValues = {
 
   nomor_risalah: string;
   tanggal_risalah: string;
+  uraian_risalah: string;
   nama_bank: string;
 
   nomor_kwitansi: string;
@@ -75,7 +77,7 @@ type FormValues = {
   lokasi_asset: string;
 };
 
-type KtpScanStatus = "idle" | "valid" | "review" | "invalid";
+type ScanStatus = "idle" | "valid" | "review" | "invalid";
 
 type OcrKtpParsedData = {
   nama_pemohon?: string;
@@ -97,13 +99,37 @@ type OcrKtpParsedData = {
 };
 
 type OcrKtpBackendResult = {
-  rawText?: string;
-  cleanedText?: string;
+  raw_text?: string;
+  cleaned_text?: string;
   confidence?: number;
   parsed?: OcrKtpParsedData;
   score?: number;
-  status?: KtpScanStatus;
+  status?: ScanStatus;
   warnings?: string[];
+
+  // fallback camelCase kalau helper frontend mengubah key
+  rawText?: string;
+  cleanedText?: string;
+};
+
+type OcrRisalahParsedData = {
+  nomor_risalah?: string;
+  tanggal_risalah?: string;
+  uraian?: string;
+};
+
+type OcrRisalahBackendResult = {
+  raw_text?: string;
+  cleaned_text?: string;
+  confidence?: number;
+  parsed?: OcrRisalahParsedData;
+  score?: number;
+  status?: ScanStatus;
+  warnings?: string[];
+
+  // fallback camelCase
+  rawText?: string;
+  cleanedText?: string;
 };
 
 const initialValues: FormValues = {
@@ -148,6 +174,7 @@ const initialValues: FormValues = {
 
   nomor_risalah: "",
   tanggal_risalah: "",
+  uraian_risalah: "",
   nama_bank: "",
 
   nomor_kwitansi: "",
@@ -192,6 +219,21 @@ function composeFormattedAddress({
   return parts.join(", ");
 }
 
+function getRawText(result: {
+  raw_text?: string;
+  rawText?: string;
+  cleaned_text?: string;
+  cleanedText?: string;
+}) {
+  return (
+    result.cleaned_text ||
+    result.cleanedText ||
+    result.raw_text ||
+    result.rawText ||
+    ""
+  );
+}
+
 export function SuratTemplateModal({
   open,
   template,
@@ -210,15 +252,21 @@ export function SuratTemplateModal({
   const [ktpDebiturOcrConfidence, setKtpDebiturOcrConfidence] = useState(0);
   const [ktpDebiturScore, setKtpDebiturScore] = useState(0);
   const [ktpDebiturStatus, setKtpDebiturStatus] =
-    useState<KtpScanStatus>("idle");
+    useState<ScanStatus>("idle");
   const [ktpDebiturWarnings, setKtpDebiturWarnings] = useState<string[]>([]);
 
   const [ktpPemohonRawText, setKtpPemohonRawText] = useState("");
   const [ktpPemohonOcrConfidence, setKtpPemohonOcrConfidence] = useState(0);
   const [ktpPemohonScore, setKtpPemohonScore] = useState(0);
   const [ktpPemohonStatus, setKtpPemohonStatus] =
-    useState<KtpScanStatus>("idle");
+    useState<ScanStatus>("idle");
   const [ktpPemohonWarnings, setKtpPemohonWarnings] = useState<string[]>([]);
+
+  const [risalahRawText, setRisalahRawText] = useState("");
+  const [risalahOcrConfidence, setRisalahOcrConfidence] = useState(0);
+  const [risalahScore, setRisalahScore] = useState(0);
+  const [risalahStatus, setRisalahStatus] = useState<ScanStatus>("idle");
+  const [risalahWarnings, setRisalahWarnings] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) {
@@ -241,6 +289,12 @@ export function SuratTemplateModal({
       setKtpPemohonScore(0);
       setKtpPemohonStatus("idle");
       setKtpPemohonWarnings([]);
+
+      setRisalahRawText("");
+      setRisalahOcrConfidence(0);
+      setRisalahScore(0);
+      setRisalahStatus("idle");
+      setRisalahWarnings([]);
     }
   }, [open, template?.id]);
 
@@ -294,7 +348,7 @@ export function SuratTemplateModal({
         jenisKota: parsed.jenis_kota_pemohon,
       }) || parsed.alamat_pemohon || "";
 
-    setKtpDebiturRawText(ocr.cleanedText || ocr.rawText || "");
+    setKtpDebiturRawText(getRawText(ocr));
     setKtpDebiturOcrConfidence(Number(ocr.confidence || 0));
     setKtpDebiturScore(Number(ocr.score || 0));
     setKtpDebiturStatus(ocr.status || "invalid");
@@ -339,7 +393,7 @@ export function SuratTemplateModal({
         jenisKota: parsed.jenis_kota_pemohon,
       }) || parsed.alamat_pemohon || "";
 
-    setKtpPemohonRawText(ocr.cleanedText || ocr.rawText || "");
+    setKtpPemohonRawText(getRawText(ocr));
     setKtpPemohonOcrConfidence(Number(ocr.confidence || 0));
     setKtpPemohonScore(Number(ocr.score || 0));
     setKtpPemohonStatus(ocr.status || "invalid");
@@ -369,6 +423,33 @@ export function SuratTemplateModal({
       setKtpPemohonStatus("review");
       setErrorMessage(
         "Hasil scan KTP pemohon perlu dicek manual. Pastikan foto terang, lurus, tidak blur, dan seluruh KTP terlihat."
+      );
+    }
+  };
+
+  const applyRisalahResult = (ocr: OcrRisalahBackendResult) => {
+    const parsed = ocr.parsed ?? {};
+
+    setRisalahRawText(getRawText(ocr));
+    setRisalahOcrConfidence(Number(ocr.confidence || 0));
+    setRisalahScore(Number(ocr.score || 0));
+    setRisalahStatus(ocr.status || "invalid");
+    setRisalahWarnings(ocr.warnings || []);
+
+    update("nomor_risalah", parsed.nomor_risalah || "");
+    update("tanggal_risalah", parsed.tanggal_risalah || "");
+    update("uraian_risalah", parsed.uraian || "");
+
+    const confidenceTooLow = Number(ocr.confidence || 0) < 45;
+    if (
+      ocr.status === "invalid" ||
+      confidenceTooLow ||
+      !parsed.nomor_risalah ||
+      !parsed.tanggal_risalah
+    ) {
+      setRisalahStatus("review");
+      setErrorMessage(
+        "Hasil scan kutipan risalah perlu dicek manual. Pastikan gambar terang, lurus, tidak blur, dan seluruh halaman terlihat."
       );
     }
   };
@@ -403,18 +484,20 @@ export function SuratTemplateModal({
     setErrorMessage("");
     setIsParsingRisalah(true);
 
-    try {
-      const ocr = (await ocrKTP(file)) as OcrKtpBackendResult;
-      const textSource = ocr.cleanedText || ocr.rawText || "";
-      const parsed = parseRisalah(textSource);
+    setRisalahRawText("");
+    setRisalahOcrConfidence(0);
+    setRisalahScore(0);
+    setRisalahStatus("idle");
+    setRisalahWarnings([]);
 
-      update("nomor_risalah", parsed.nomor_risalah || "");
-      update("tanggal_risalah", parsed.tanggal_risalah || "");
-      update("nama_bank", parsed.nama_bank || "");
+    try {
+      const ocr = (await ocrRisalah(file)) as OcrRisalahBackendResult;
+      applyRisalahResult(ocr);
     } catch (err) {
       console.error("OCR Risalah gagal:", err);
+      setRisalahStatus("invalid");
       setErrorMessage(
-        "Gagal membaca kutipan risalah. Pastikan backend OCR aktif dan file cukup jelas."
+        "Gagal membaca kutipan risalah. Pastikan backend OCR risalah aktif dan file cukup jelas."
       );
     } finally {
       setIsParsingRisalah(false);
@@ -519,6 +602,7 @@ export function SuratTemplateModal({
 
       nomor_risalah: values.nomor_risalah,
       tanggal_risalah: values.tanggal_risalah,
+      uraian_risalah: values.uraian_risalah,
       nama_bank: values.nama_bank,
 
       nomor_kwitansi: values.nomor_kwitansi,
@@ -582,6 +666,32 @@ export function SuratTemplateModal({
               helperText="Upload foto atau scan kutipan risalah dengan tulisan yang jelas."
             />
           </div>
+
+          {values.risalahFile ? (
+            <DocumentScanResultCard
+              title="Hasil Scan Kutipan Risalah"
+              status={risalahStatus}
+              score={risalahScore}
+              confidence={risalahOcrConfidence}
+              warnings={risalahWarnings}
+              rawText={risalahRawText}
+              fields={[
+                {
+                  label: "Nomor Risalah",
+                  value: values.nomor_risalah,
+                },
+                {
+                  label: "Tanggal Risalah",
+                  value: values.tanggal_risalah,
+                },
+                {
+                  label: "Uraian",
+                  value: values.uraian_risalah,
+                  full: true,
+                },
+              ]}
+            />
+          ) : null}
 
           {values.ktpDebitur ? (
             <>
@@ -1021,6 +1131,16 @@ export function SuratTemplateModal({
             />
 
             <div className="md:col-span-2">
+              <label className="text-sm text-slate-300">Uraian Risalah</label>
+              <textarea
+                rows={5}
+                value={values.uraian_risalah}
+                onChange={(e) => update("uraian_risalah", e.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm text-white outline-none focus:border-emerald-400"
+              />
+            </div>
+
+            <div className="md:col-span-2">
               <label className="text-sm text-slate-300">Lokasi Asset</label>
               <textarea
                 rows={3}
@@ -1183,7 +1303,7 @@ function ScanResultCard({
   fields,
 }: {
   title: string;
-  status: KtpScanStatus;
+  status: ScanStatus;
   score: number;
   confidence: number;
   warnings: string[];
@@ -1269,6 +1389,105 @@ function ScanResultCard({
   );
 }
 
+function DocumentScanResultCard({
+  title,
+  status,
+  score,
+  confidence,
+  warnings,
+  rawText,
+  fields,
+}: {
+  title: string;
+  status: ScanStatus;
+  score: number;
+  confidence: number;
+  warnings: string[];
+  rawText: string;
+  fields: Array<{
+    label: string;
+    value?: string;
+    full?: boolean;
+  }>;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="inline-flex items-center gap-2 text-sm font-semibold text-white">
+          <FileText className="h-4 w-4" />
+          <span>{title}</span>
+        </div>
+
+        {status === "valid" && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Valid
+          </span>
+        )}
+
+        {status === "review" && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-300">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            Review Manual
+          </span>
+        )}
+
+        {status === "invalid" && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-rose-500/20 bg-rose-500/10 px-2.5 py-1 text-[11px] font-medium text-rose-300">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            Tidak Terbaca
+          </span>
+        )}
+
+        {score > 0 && (
+          <span className="rounded-full border border-slate-700 bg-slate-800 px-2.5 py-1 text-[11px] text-slate-300">
+            Parse Score {score}
+          </span>
+        )}
+
+        {confidence > 0 && (
+          <span className="rounded-full border border-slate-700 bg-slate-800 px-2.5 py-1 text-[11px] text-slate-300">
+            OCR {Math.round(confidence)}%
+          </span>
+        )}
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {fields.map((field) => (
+          <div
+            key={`${field.label}-${field.value ?? ""}`}
+            className={field.full ? "md:col-span-2" : ""}
+          >
+            <InfoItem label={field.label} value={field.value} />
+          </div>
+        ))}
+      </div>
+
+      {warnings.length > 0 ? (
+        <div className="mt-4 rounded-xl border border-amber-500/15 bg-amber-500/10 p-3">
+          <p className="text-xs font-medium text-amber-300">
+            Catatan Verifikasi
+          </p>
+          <ul className="mt-2 space-y-1 text-xs text-amber-200">
+            {warnings.map((warning, idx) => (
+              <li key={`${warning}-${idx}`}>• {warning}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <details className="mt-4">
+        <summary className="cursor-pointer text-xs text-slate-400">
+          Lihat hasil OCR mentah
+        </summary>
+        <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-xl border border-slate-800 bg-slate-950 p-3 text-[11px] leading-5 text-slate-300">
+          {rawText || "-"}
+        </pre>
+      </details>
+    </div>
+  );
+}
+
 function InfoItem({
   label,
   value,
@@ -1281,7 +1500,7 @@ function InfoItem({
       <p className="text-[11px] uppercase tracking-wide text-slate-500">
         {label}
       </p>
-      <p className="mt-1 text-sm text-slate-200">
+      <p className="mt-1 text-sm text-slate-200 whitespace-pre-wrap">
         {value?.trim() ? value : "-"}
       </p>
     </div>
