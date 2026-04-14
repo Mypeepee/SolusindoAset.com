@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { suratTemplates, type SuratTemplate } from "./components/data";
 import { SuratTemplateList } from "./components/SuratTemplateList";
-import { SuratTemplateModal } from "./components/SuratTemplateModal";
+import { TemplatePermohonanEksekusi } from "./components/TemplatePermohonanEksekusi";
 
 export default function SuratPage() {
   const [selectedTemplate, setSelectedTemplate] = useState<SuratTemplate | null>(null);
@@ -11,27 +11,21 @@ export default function SuratPage() {
 
   return (
     <div className="space-y-6">
-      <SuratTemplateList
-        templates={suratTemplates}
-        onUseTemplate={(template) => {
-          setSelectedTemplate(template);
-        }}
-        onPreviewTemplate={(template) => {
-          setPreviewTemplate(template);
-        }}
-      />
+      <div className="rounded-[30px] border border-slate-800 bg-slate-950/80 p-6 shadow-[0_20px_70px_-30px_rgba(16,185,129,0.12)] backdrop-blur-xl">
+        <SuratTemplateList
+          templates={suratTemplates}
+          onUseTemplate={(template) => setSelectedTemplate(template)}
+          onPreviewTemplate={(template) => setPreviewTemplate(template)}
+        />
+      </div>
 
-      <SuratTemplateModal
+      <TemplatePermohonanEksekusi
         open={Boolean(selectedTemplate)}
         template={selectedTemplate}
         onClose={() => setSelectedTemplate(null)}
         onSubmit={({ template, values }) => {
           console.log("TEMPLATE DIPILIH:", template);
           console.log("VALUES:", values);
-
-          // step berikutnya:
-          // generate DOCX dari values ini
-
           setSelectedTemplate(null);
         }}
       />

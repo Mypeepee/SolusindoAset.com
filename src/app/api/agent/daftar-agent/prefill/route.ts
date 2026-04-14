@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const prisma = globalThis.__prisma__ ?? new PrismaClient();
+const prisma = (globalThis as any).__prisma__ ?? new PrismaClient();
 if (process.env.NODE_ENV !== "production") (globalThis as any).__prisma__ = prisma;
 
 function errJson(message: string, status = 400, extra?: any) {
@@ -31,7 +30,7 @@ function toE164Id(raw: string) {
 
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getServerSession();
     const user = session?.user as any;
 
     if (!session || !user?.id) {

@@ -23,7 +23,7 @@ export async function getProperties(params: any) {
 
   // --- MOCK DATA DB (GANTI INI DENGAN QUERY DB ASLI ANDA) ---
   // Di sini saya simulasikan DB membalas data sesuai struktur tabel Anda
-  const dbResult = [/* ... data kosong untuk saat ini ... */]; 
+  const dbResult: any[] = [/* ... data kosong untuk saat ini ... */];
   const totalCount = 0; 
   // -----------------------------------------------------------
 

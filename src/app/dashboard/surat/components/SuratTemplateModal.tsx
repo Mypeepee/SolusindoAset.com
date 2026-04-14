@@ -71,6 +71,15 @@ type FormValues = {
   nama_bank: string;
 
   nomor_kwitansi: string;
+  nomor_risalah_lelang: string;
+  tanggal_kwitansi: string;
+  luas: string;
+  alamat_desa: string;
+  alamat_kecamatan: string;
+  alamat_kota: string;
+  alamat_provinsi: string;
+  no_sertifikat: string;
+
   nomor_kutipan: string;
   nomor_aktegrosse: string;
   nomor_nib: string;
@@ -114,8 +123,18 @@ type OcrKtpBackendResult = {
 
 type OcrRisalahParsedData = {
   nomor_risalah?: string;
+  nomor_kwitansi?: string;
+  nomor_risalah_lelang?: string;
   tanggal_risalah?: string;
+  tanggal_kwitansi?: string;
+  luas?: string;
+  alamat_desa?: string;
+  alamat_kecamatan?: string;
+  alamat_kota?: string;
+  alamat_provinsi?: string;
+  no_sertifikat?: string;
   uraian?: string;
+  nama_bank?: string;
 };
 
 type OcrRisalahBackendResult = {
@@ -178,6 +197,15 @@ const initialValues: FormValues = {
   nama_bank: "",
 
   nomor_kwitansi: "",
+  nomor_risalah_lelang: "",
+  tanggal_kwitansi: "",
+  luas: "",
+  alamat_desa: "",
+  alamat_kecamatan: "",
+  alamat_kota: "",
+  alamat_provinsi: "",
+  no_sertifikat: "",
+
   nomor_kutipan: "",
   nomor_aktegrosse: "",
   nomor_nib: "",
@@ -436,9 +464,22 @@ export function SuratTemplateModal({
     setRisalahStatus(ocr.status || "invalid");
     setRisalahWarnings(ocr.warnings || []);
 
+    // Apply risalah/kwitansi fields
     update("nomor_risalah", parsed.nomor_risalah || "");
     update("tanggal_risalah", parsed.tanggal_risalah || "");
     update("uraian_risalah", parsed.uraian || "");
+
+    // Apply kwitansi fields
+    update("nama_bank", parsed.nama_bank || "");
+    update("nomor_kwitansi", parsed.nomor_kwitansi || "");
+    update("nomor_risalah_lelang", parsed.nomor_risalah_lelang || "");
+    update("tanggal_kwitansi", parsed.tanggal_kwitansi || "");
+    update("luas", parsed.luas || "");
+    update("alamat_desa", parsed.alamat_desa || "");
+    update("alamat_kecamatan", parsed.alamat_kecamatan || "");
+    update("alamat_kota", parsed.alamat_kota || "");
+    update("alamat_provinsi", parsed.alamat_provinsi || "");
+    update("no_sertifikat", parsed.no_sertifikat || "");
 
     const confidenceTooLow = Number(ocr.confidence || 0) < 45;
     if (
@@ -449,7 +490,7 @@ export function SuratTemplateModal({
     ) {
       setRisalahStatus("review");
       setErrorMessage(
-        "Hasil scan kutipan risalah perlu dicek manual. Pastikan gambar terang, lurus, tidak blur, dan seluruh halaman terlihat."
+        "Hasil scan kwitansi KPKNL perlu dicek manual. Pastikan file PDF terbaca dengan baik."
       );
     }
   };
@@ -497,7 +538,7 @@ export function SuratTemplateModal({
       console.error("OCR Risalah gagal:", err);
       setRisalahStatus("invalid");
       setErrorMessage(
-        "Gagal membaca kutipan risalah. Pastikan backend OCR risalah aktif dan file cukup jelas."
+        "Gagal membaca kwitansi KPKNL. Pastikan backend OCR aktif dan file PDF valid."
       );
     } finally {
       setIsParsingRisalah(false);
@@ -659,17 +700,18 @@ export function SuratTemplateModal({
             />
 
             <KtpDropzone
-              label="Upload Kutipan Risalah"
+              label="Upload Kwitansi dari KPKNL"
               filename={values.risalahFile}
               loading={isParsingRisalah}
               onFile={handleRisalah}
-              helperText="Upload foto atau scan kutipan risalah dengan tulisan yang jelas."
+              helperText="Upload file PDF kwitansi dari KPKNL."
+              acceptPdf
             />
           </div>
 
           {values.risalahFile ? (
             <DocumentScanResultCard
-              title="Hasil Scan Kutipan Risalah"
+              title="Hasil Scan Kwitansi KPKNL"
               status={risalahStatus}
               score={risalahScore}
               confidence={risalahOcrConfidence}
@@ -1178,12 +1220,14 @@ function KtpDropzone({
   filename,
   loading = false,
   helperText = "Drag & drop file di sini atau klik untuk memilih file",
+  acceptPdf = false,
 }: {
   label: string;
   onFile: (file: File) => void | Promise<void>;
   filename?: string;
   loading?: boolean;
   helperText?: string;
+  acceptPdf?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -1191,16 +1235,13 @@ function KtpDropzone({
   const handleFile = async (file?: File) => {
     if (!file) return;
 
-    const allowedTypes = [
-      "image/jpeg",
-      "image/jpg",
-      "image/png",
-      "image/webp",
-    ];
+    const allowedTypes = acceptPdf
+      ? ["application/pdf"]
+      : ["image/jpeg", "image/jpg", "image/png", "image/webp"];
     const maxSizeMb = 8;
 
     if (!allowedTypes.includes(file.type)) {
-      alert("Format file harus JPG, PNG, atau WEBP.");
+      alert(acceptPdf ? "Format file harus PDF." : "Format file harus JPG, PNG, atau WEBP.");
       return;
     }
 
@@ -1260,7 +1301,7 @@ function KtpDropzone({
       <input
         ref={inputRef}
         type="file"
-        accept="image/png,image/jpeg,image/jpg,image/webp"
+        accept={acceptPdf ? "application/pdf" : "image/png,image/jpeg,image/jpg,image/webp"}
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];

@@ -1,5 +1,38 @@
-import { FileText } from "lucide-react";
+import {
+  FileText,
+  Users,
+  PenLine,
+  Folder,
+  FileCheck,
+  AlertCircle,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+
+// ─── Legacy stub types (used by unused components, kept for TS compat) ────────
+
+import type { LucideIcon as _LI } from "lucide-react";
+
+export type SuratCategory = {
+  id: string;
+  label: string;
+  icon: _LI;
+  total: number;
+  active?: boolean;
+};
+
+export type SuratRecentDocument = {
+  id: string;
+  title: string;
+  templateCode: string;
+  createdAt: string;
+  editedAt: string;
+  editor: string;
+  category: string;
+  icon: _LI;
+  status: "Final" | "Draft" | "Review";
+};
+
+// ─── Base Types ───────────────────────────────────────────────────────────────
 
 export type SuratTemplateStatus = "Populer" | "Baru" | "Standar";
 
@@ -38,11 +71,98 @@ export type SuratField = {
   helperText?: string;
 };
 
+// ─── Phase System ─────────────────────────────────────────────────────────────
+
+export type SuratPhase =
+  | "pra-kesepakatan"
+  | "pengurusan-dokumen"
+  | "eksekusi";
+
+export type SuratPhaseConfig = {
+  id: SuratPhase;
+  number: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  // Phase selector card
+  numberColor: string;
+  activeBorder: string;
+  activeBg: string;
+  activeGlow: string;
+  badgeClasses: string;
+  dotColor: string;
+  // Template card
+  iconClasses: string;
+  cardHover: string;
+  accentLine: string;
+};
+
+export const suratPhases: SuratPhaseConfig[] = [
+  {
+    id: "pra-kesepakatan",
+    number: "01",
+    title: "Pra-Kesepakatan",
+    subtitle: "MOU & Perjanjian",
+    description:
+      "Dokumen sebelum kesepakatan jasa: PKS, surat kuasa jual, dan pernyataan pemilik aset.",
+    numberColor: "text-amber-400",
+    activeBorder: "border-amber-500/30",
+    activeBg: "bg-amber-950/20",
+    activeGlow: "shadow-[0_0_50px_-20px_rgba(245,158,11,0.3)]",
+    badgeClasses: "border-amber-500/20 bg-amber-500/10 text-amber-300",
+    dotColor: "bg-amber-400",
+    iconClasses: "border-amber-500/20 bg-amber-500/10 text-amber-300",
+    cardHover:
+      "hover:border-amber-500/20 hover:shadow-[0_12px_40px_-20px_rgba(245,158,11,0.2)]",
+    accentLine: "bg-gradient-to-r from-transparent via-amber-500/50 to-transparent",
+  },
+  {
+    id: "pengurusan-dokumen",
+    number: "02",
+    title: "Pengurusan Dokumen",
+    subtitle: "Pasca Lelang",
+    description:
+      "Dokumen pengurusan setelah pemenang lelang ditetapkan: AJB, balik nama, dan sertifikasi.",
+    numberColor: "text-sky-400",
+    activeBorder: "border-sky-500/30",
+    activeBg: "bg-sky-950/20",
+    activeGlow: "shadow-[0_0_50px_-20px_rgba(14,165,233,0.3)]",
+    badgeClasses: "border-sky-500/20 bg-sky-500/10 text-sky-300",
+    dotColor: "bg-sky-400",
+    iconClasses: "border-sky-500/20 bg-sky-500/10 text-sky-300",
+    cardHover:
+      "hover:border-sky-500/20 hover:shadow-[0_12px_40px_-20px_rgba(14,165,233,0.2)]",
+    accentLine: "bg-gradient-to-r from-transparent via-sky-500/50 to-transparent",
+  },
+  {
+    id: "eksekusi",
+    number: "03",
+    title: "Eksekusi Pengosongan",
+    subtitle: "Litigasi & Eksekusi",
+    description:
+      "Surat permohonan eksekusi, somasi pengosongan, dan dokumen litigasi ke Pengadilan Negeri.",
+    numberColor: "text-violet-400",
+    activeBorder: "border-violet-500/30",
+    activeBg: "bg-violet-950/20",
+    activeGlow: "shadow-[0_0_50px_-20px_rgba(139,92,246,0.3)]",
+    badgeClasses: "border-violet-500/20 bg-violet-500/10 text-violet-300",
+    dotColor: "bg-violet-400",
+    iconClasses: "border-violet-500/20 bg-violet-500/10 text-violet-300",
+    cardHover:
+      "hover:border-violet-500/20 hover:shadow-[0_12px_40px_-20px_rgba(139,92,246,0.2)]",
+    accentLine:
+      "bg-gradient-to-r from-transparent via-violet-500/50 to-transparent",
+  },
+];
+
+// ─── Template Type ─────────────────────────────────────────────────────────────
+
 export type SuratTemplate = {
   id: string;
   code: string;
   title: string;
   category: string;
+  phase: SuratPhase;
   description: string;
   status: SuratTemplateStatus;
   updatedAt: string;
@@ -50,7 +170,10 @@ export type SuratTemplate = {
   icon: LucideIcon;
   templateFileName: string;
   fields: SuratField[];
+  comingSoon?: boolean;
 };
+
+// ─── Wizard ────────────────────────────────────────────────────────────────────
 
 export type KuasaOption = {
   id: string;
@@ -126,12 +249,84 @@ export const kuasaOptions: KuasaOption[] = [
   },
 ];
 
+// ─── Templates ─────────────────────────────────────────────────────────────────
+
 export const suratTemplates: SuratTemplate[] = [
+  // ── Phase 1: Pra-Kesepakatan ────────────────────────────────────────────────
+  {
+    id: "pks-jasa-pemasaran",
+    code: "PKS-001",
+    title: "Perjanjian Kerjasama Jasa Pemasaran",
+    category: "Pra-Kesepakatan",
+    phase: "pra-kesepakatan",
+    description:
+      "Template PKS antara balai lelang dengan pemilik aset untuk jasa pemasaran dan penjualan objek melalui mekanisme lelang.",
+    status: "Baru",
+    updatedAt: "13 Apr 2026",
+    usedCount: 0,
+    icon: Users,
+    templateFileName: "Template_PKS_Jasa_Pemasaran.docx",
+    fields: [],
+    comingSoon: true,
+  },
+  {
+    id: "surat-kuasa-jual",
+    code: "PKS-002",
+    title: "Surat Kuasa Penjualan Objek Lelang",
+    category: "Pra-Kesepakatan",
+    phase: "pra-kesepakatan",
+    description:
+      "Surat kuasa dari pemilik objek kepada balai lelang untuk menjual aset melalui proses lelang, termasuk penandatanganan akta.",
+    status: "Standar",
+    updatedAt: "13 Apr 2026",
+    usedCount: 0,
+    icon: PenLine,
+    templateFileName: "Template_Surat_Kuasa_Jual.docx",
+    fields: [],
+    comingSoon: true,
+  },
+
+  // ── Phase 2: Pengurusan Dokumen ─────────────────────────────────────────────
+  {
+    id: "pengantar-ajb",
+    code: "DOK-001",
+    title: "Surat Pengantar Pengurusan AJB",
+    category: "Pengurusan Dokumen",
+    phase: "pengurusan-dokumen",
+    description:
+      "Surat pengantar ke notaris untuk pengurusan Akta Jual Beli (AJB) setelah pemenang lelang ditetapkan dan pelunasan dilakukan.",
+    status: "Baru",
+    updatedAt: "13 Apr 2026",
+    usedCount: 0,
+    icon: Folder,
+    templateFileName: "Template_Pengantar_AJB.docx",
+    fields: [],
+    comingSoon: true,
+  },
+  {
+    id: "permohonan-balik-nama",
+    code: "DOK-002",
+    title: "Surat Permohonan Balik Nama",
+    category: "Pengurusan Dokumen",
+    phase: "pengurusan-dokumen",
+    description:
+      "Surat permohonan balik nama sertifikat dari nama debitur ke nama pemenang lelang di kantor BPN setempat.",
+    status: "Standar",
+    updatedAt: "13 Apr 2026",
+    usedCount: 0,
+    icon: FileCheck,
+    templateFileName: "Template_Balik_Nama.docx",
+    fields: [],
+    comingSoon: true,
+  },
+
+  // ── Phase 3: Eksekusi Pengosongan ───────────────────────────────────────────
   {
     id: "permohonan-eksekusi-pn",
     code: "LIT-001",
     title: "Permohonan Eksekusi",
     category: "Litigasi Perdata",
+    phase: "eksekusi",
     description:
       "Template permohonan eksekusi pengosongan / pelaksanaan eksekusi ke Pengadilan Negeri. Alur input dibuat bertahap: pilih kuasa, scan KTP debitur, lalu isi data asset dan data lelang.",
     status: "Baru",
@@ -429,7 +624,7 @@ export const suratTemplates: SuratTemplate[] = [
         type: "text",
         section: "lelang",
         required: true,
-        placeholder: "Contoh: Bank Rakyat Indonesia",
+        placeholder: "Contoh: Pt. Bank Rakyat Indonesia (Persero), Tbk",
       },
       {
         key: "nomor_risalah",
@@ -462,5 +657,21 @@ export const suratTemplates: SuratTemplate[] = [
         placeholder: "Contoh: 17 November 2025",
       },
     ],
+  },
+  {
+    id: "somasi-pengosongan",
+    code: "LIT-002",
+    title: "Somasi Pengosongan",
+    category: "Litigasi Perdata",
+    phase: "eksekusi",
+    description:
+      "Somasi resmi kepada penghuni objek lelang untuk segera mengosongkan properti sebelum eksekusi pengosongan dilaksanakan oleh Pengadilan Negeri.",
+    status: "Standar",
+    updatedAt: "13 Apr 2026",
+    usedCount: 0,
+    icon: AlertCircle,
+    templateFileName: "Template_Somasi_Pengosongan.docx",
+    fields: [],
+    comingSoon: true,
   },
 ];
