@@ -1,17 +1,22 @@
 import os
+import re
+from datetime import date
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 
 from app.schemas.ktp import KtpOcrResponseSchema
 from app.schemas.risalah import RisalahOcrResponseSchema
 from app.schemas.kwitansi import KwitansiOcrResponseSchema
+from app.schemas.surat import GenerateSuratRequest
 from app.services.ktp_ocr import detect_text_google_vision, clean_ocr_text
 from app.services.ktp_parser import parse_ktp_text
 from app.services.risalah_parser import parse_risalah_text
 from app.services.ktp_preprocess import preprocess_ktp_image
 from app.services.kwitansi_ocr import extract_text_from_pdf, clean_ocr_text as clean_pdf_text
 from app.services.kwitansi_parser import parse_kwitansi_text
+from app.services.surat_generator import fill_template, convert_docx_to_pdf
 
 load_dotenv()
 
@@ -25,6 +30,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 
@@ -167,3 +173,60 @@ async def ocr_kwitansi(file: UploadFile = File(...)):
         print(str(e))
         print("===========================\n")
         raise HTTPException(status_code=500, detail=f"Gagal OCR Kwitansi: {str(e)}")
+
+
+_BULAN_ID = [
+    "", "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+]
+
+
+def _tanggal_indonesia(d: date) -> str:
+    return f"{d.day} {_BULAN_ID[d.month]} {d.year}"
+
+
+def _safe_filename(name: str) -> str:
+    """Strip unsafe chars and replace spaces with underscores."""
+    name = re.sub(r"[^\w\s.-]", "", name)
+    return re.sub(r"\s+", "_", name).strip("_")
+
+
+@app.post("/api/generate/surat")
+async def generate_surat(request: GenerateSuratRequest):
+    """Fill docx template with form values and return PDF (or docx fallback)."""
+    try:
+        print(f"\n=== GENERATE SURAT: {request.template_file} ===")
+
+        # Inject automatic values
+        values = dict(request.values)
+        values["tanggal_surat"] = _tanggal_indonesia(date.today())
+        values["LT"] = values.get("luas", "")          # template alias for luas
+
+        # Build output filename
+        nama = _safe_filename(values.get("nama_pemohon", "Pemohon"))
+        base_name = f"Permohonan_Eksekusi_Pengadilan_{nama}"
+
+        docx_bytes = fill_template(request.template_file, values)
+
+        try:
+            pdf_bytes = convert_docx_to_pdf(docx_bytes)
+            print("=== PDF conversion OK ===\n")
+            return Response(
+                content=pdf_bytes,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f'attachment; filename="{base_name}.pdf"'},
+            )
+        except RuntimeError as pdf_err:
+            # LibreOffice not available — return filled docx instead
+            print(f"=== PDF fallback (docx): {pdf_err} ===\n")
+            return Response(
+                content=docx_bytes,
+                media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                headers={"Content-Disposition": f'attachment; filename="{base_name}.docx"'},
+            )
+
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        print(f"\n=== GENERATE SURAT ERROR: {e} ===\n")
+        raise HTTPException(status_code=500, detail=f"Gagal generate surat: {str(e)}")

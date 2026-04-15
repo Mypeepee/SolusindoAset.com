@@ -17,6 +17,9 @@ export type OcrRisalahResult = {
     no_sertifikat: string;
     tanggal_kwitansi: string;
     nama_bank: string;
+    singkatan_sertifikat: string;
+    jenis_sertifikat: string;
+    nomor_nib: string;
   };
   score: number;
   status: "valid" | "review" | "invalid";
@@ -64,6 +67,9 @@ export async function ocrRisalah(file: File): Promise<OcrRisalahResult> {
       no_sertifikat: "",
       tanggal_kwitansi: "",
       nama_bank: "",
+      singkatan_sertifikat: "",
+      jenis_sertifikat: "",
+      nomor_nib: "",
     },
     score: Number(json.score || 0),
     status: json.status || "invalid",

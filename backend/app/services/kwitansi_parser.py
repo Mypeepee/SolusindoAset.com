@@ -5,6 +5,14 @@ from typing import Dict
 BULAN_PATTERN = r"(?:Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember)"
 DATE_PATTERN = rf"\d{{1,2}}\s+{BULAN_PATTERN}\s+\d{{4}}"
 
+SERTIFIKAT_MAP = {
+    "SHSRS": "Sertipikat Hak Satuan Rumah Susun",
+    "SHGU": "Sertipikat Hak Guna Usaha",
+    "SHGB": "Sertipikat Hak Guna Bangunan",
+    "SHP": "Sertipikat Hak Pakai",
+    "SHM": "Sertipikat Hak Milik",
+}
+
 
 def normalize_text(text: str) -> str:
     """Normalize text by cleaning up whitespace and line breaks."""
@@ -164,15 +172,43 @@ def extract_nama_bank(text: str) -> str:
     return ""
 
 
+def extract_singkatan_sertifikat(text: str) -> str:
+    """Extract sertifikat abbreviation (SHM, SHGB, SHP, SHGU, SHSRS)."""
+    # Longer codes checked first to avoid partial match (e.g. SHM inside SHGB)
+    for abbr in SERTIFIKAT_MAP:
+        if re.search(rf"\b{abbr}\b", text, re.IGNORECASE):
+            return abbr
+    return ""
+
+
 def extract_no_sertifikat(text: str) -> str:
-    """Extract sertifikat number (e.g., 00169 from 'SHM No 00169/tambakrejo')."""
+    """Extract full sertifikat reference (e.g., 00169/tambakrejo from 'SHM No 00169/tambakrejo')."""
     patterns = [
-        # "SHM No 00169/..." — capture only the numeric part before /
-        r"SHM\s+No\.?\s+(\d{5,})(?:/|\s|$)",
-        # "SHM No 00169" standalone
-        r"(?:SHM|SERTIFIKAT)\s+(?:NO\.?|NOMOR)\s+(\d{5,})",
-        # Fallback
-        r"(?:SHM|S\.H\.M)\s+([0-9]{5,})",
+        # "SHM No 00169/tambakrejo" — capture full ref including /text part
+        r"(?:SHM|SHGB|SHP|SHGU|SHSRS)\s+No\.?\s+(\d{5,}/[A-Za-z]+)",
+        # Numeric only (fallback)
+        r"(?:SHM|SHGB|SHP|SHGU|SHSRS|SERTIFIKAT)\s+(?:NO\.?|NOMOR)\s+(\d{5,})",
+        r"(?:SHM|SHGB|SHP|SHGU|SHSRS|S\.H\.M)\s+([0-9]{5,})",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            return cleanup_inline(match.group(1))
+    return ""
+
+
+def extract_nomor_nib(text: str) -> str:
+    """Extract NIB / nomor identifikasi bidang (e.g., 12391102.01324).
+
+    In kwitansi it appears after sertifikat reference: 'SHM No 00169/tambakrejo nomor 12391102.01324'
+    """
+    patterns = [
+        # "nomor 12391102.01324" immediately after sertifikat
+        r"(?:SHM|SHGB|SHP|SHGU|SHSRS)\s+No[.\s]+[\w/]+\s+nomor\s+([\d.]+)",
+        # "Nomor bukti kepemilikan ... 12391102.01324"
+        r"(?:bukti\s+kepemilikan|identifikasi\s+bidang)\s+(\d{8,}(?:\.\d+)?)",
+        # Standalone long number with dot (NIB format)
+        r"\b(\d{11,14}\.\d{4,6})\b",
     ]
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
@@ -211,9 +247,12 @@ def parse_kwitansi_text(text: str) -> Dict:
     tanggal_risalah = extract_tanggal_risalah(text)
     luas = extract_luas(text)
     alamat = extract_alamat(text)
+    singkatan_sertifikat = extract_singkatan_sertifikat(text)
     no_sertifikat = extract_no_sertifikat(text)
+    nomor_nib = extract_nomor_nib(text)
     tanggal_kwitansi = extract_tanggal_kwitansi(text)
     nama_bank = extract_nama_bank(text)
+    jenis_sertifikat = SERTIFIKAT_MAP.get(singkatan_sertifikat, "")
 
     parsed = {
         "nomor_kwitansi": nomor_kwitansi,
@@ -224,26 +263,23 @@ def parse_kwitansi_text(text: str) -> Dict:
         "alamat_kecamatan": alamat.get("kecamatan", ""),
         "alamat_kota": alamat.get("kota", ""),
         "alamat_provinsi": alamat.get("provinsi", ""),
+        "singkatan_sertifikat": singkatan_sertifikat,
+        "jenis_sertifikat": jenis_sertifikat,
         "no_sertifikat": no_sertifikat,
+        "nomor_nib": nomor_nib,
         "tanggal_kwitansi": tanggal_kwitansi,
         "nama_bank": nama_bank,
     }
 
     score = 0
-    if nomor_kwitansi:
-        score += 15
-    if nomor_risalah_lelang:
-        score += 10
-    if tanggal_risalah:
-        score += 10
-    if luas:
-        score += 10
-    if alamat.get("desa") or alamat.get("kecamatan") or alamat.get("kota"):
-        score += 25
-    if no_sertifikat:
-        score += 15
-    if tanggal_kwitansi:
-        score += 15
+    if nomor_kwitansi:   score += 15
+    if nomor_risalah_lelang: score += 10
+    if tanggal_risalah:  score += 10
+    if luas:             score += 10
+    if alamat.get("desa") or alamat.get("kecamatan") or alamat.get("kota"): score += 20
+    if singkatan_sertifikat: score += 10
+    if no_sertifikat:    score += 10
+    if tanggal_kwitansi: score += 15
 
     warnings = []
     if not nomor_kwitansi:
@@ -254,6 +290,8 @@ def parse_kwitansi_text(text: str) -> Dict:
         warnings.append("Tanggal risalah belum terbaca jelas.")
     if not luas:
         warnings.append("Luas objek belum terbaca jelas.")
+    if not singkatan_sertifikat:
+        warnings.append("Jenis sertifikat (SHM/SHGB/dll) belum terbaca.")
     if not no_sertifikat:
         warnings.append("Nomor sertifikat belum terbaca jelas.")
     if not tanggal_kwitansi:

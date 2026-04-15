@@ -14,6 +14,9 @@ class KwitansiParsedSchema(BaseModel):
     no_sertifikat: str = ""
     tanggal_kwitansi: str = ""
     nama_bank: str = ""
+    singkatan_sertifikat: str = ""
+    jenis_sertifikat: str = ""
+    nomor_nib: str = ""
 
 
 class KwitansiOcrResponseSchema(BaseModel):
