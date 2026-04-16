@@ -11,7 +11,13 @@
       "Read(//Users/jasnc/Downloads/Important/kosku/**)",
       "Bash(python3 -c ':*)",
       "Bash(node -e \"const {Handshake} = require\\('./node_modules/lucide-react'\\); console.log\\(!!Handshake\\)\")",
-      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d.get\\('version','?'\\)\\)\")"
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d.get\\('version','?'\\)\\)\")",
+      "Bash(curl -s \"https://dayoffapi.vercel.app/api?month=4&year=2026\")",
+      "Bash(node -e \"const pkg = require\\('./package.json'\\); console.log\\('next-auth:', pkg.dependencies['next-auth'] || pkg.devDependencies?.['next-auth']\\)\")",
+      "Bash(node -e \"const s=require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\); const p=JSON.parse\\(s\\); console.log\\(p.dependencies['next-auth']\\)\")",
+      "Bash(python3 -c \"import sys,json; p=json.load\\(sys.stdin\\); print\\('next-auth:', p['dependencies'].get\\('next-auth','?'\\)\\); print\\('next:', p['dependencies'].get\\('next','?'\\)\\)\")",
+      "Bash(ls /Users/jasnc/Downloads/Important/kosku/.env*)",
+      "Bash(ls /Users/jasnc/Downloads/Important/kosku/.claude/worktrees/busy-shamir/.env*)"
     ]
   }
 }

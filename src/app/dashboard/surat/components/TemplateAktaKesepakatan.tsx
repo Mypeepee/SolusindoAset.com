@@ -194,6 +194,56 @@ function formatRp(raw: string): string {
   return isNaN(n) ? "" : n.toLocaleString("id-ID");
 }
 
+const ID_DAYS_LONG = ["Minggu","Senin","Selasa","Rabu","Kamis","Jumat","Sabtu"];
+
+function terbilangAngka(n: number): string {
+  if (!isFinite(n) || isNaN(n) || n < 0) return "";
+  if (n === 0) return "nol";
+  const satuan = ["","satu","dua","tiga","empat","lima","enam","tujuh","delapan","sembilan",
+    "sepuluh","sebelas","dua belas","tiga belas","empat belas","lima belas","enam belas",
+    "tujuh belas","delapan belas","sembilan belas"];
+  if (n < 20) return satuan[n];
+  if (n < 100) {
+    const puluhan = ["","","dua puluh","tiga puluh","empat puluh","lima puluh",
+      "enam puluh","tujuh puluh","delapan puluh","sembilan puluh"];
+    const rest = n % 10;
+    return puluhan[Math.floor(n / 10)] + (rest ? " " + satuan[rest] : "");
+  }
+  if (n < 200) return "seratus" + (n % 100 ? " " + terbilangAngka(n % 100) : "");
+  if (n < 1000) return terbilangAngka(Math.floor(n / 100)) + " ratus" + (n % 100 ? " " + terbilangAngka(n % 100) : "");
+  if (n < 2000) return "seribu" + (n % 1000 ? " " + terbilangAngka(n % 1000) : "");
+  if (n < 1e6)  return terbilangAngka(Math.floor(n / 1000)) + " ribu" + (n % 1000 ? " " + terbilangAngka(n % 1000) : "");
+  if (n < 1e9)  return terbilangAngka(Math.floor(n / 1e6)) + " juta" + (n % 1e6 ? " " + terbilangAngka(n % 1e6) : "");
+  return terbilangAngka(Math.floor(n / 1e9)) + " miliar" + (n % 1e9 ? " " + terbilangAngka(n % 1e9) : "");
+}
+
+// "02-04-1974" atau "02/04/1974" → "02 April 1974"
+// "02 April 1974" → tetap "02 April 1974"
+function normalizeTanggalID(dateStr: string): string {
+  const s = dateStr.trim();
+  const dashMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (dashMatch) {
+    const day      = parseInt(dashMatch[1], 10);
+    const monthIdx = parseInt(dashMatch[2], 10) - 1;
+    const year     = dashMatch[3];
+    if (monthIdx >= 0 && monthIdx < 12) {
+      return `${day} ${ID_MONTHS[monthIdx]} ${year}`;
+    }
+  }
+  return s;
+}
+
+// "02 April 1974" atau "02-04-1974" → "dua April seribu sembilan ratus tujuh puluh empat"
+function terbilangTanggal(dateStr: string): string {
+  const normalized = normalizeTanggalID(dateStr);
+  const parts = normalized.split(" ");
+  if (parts.length !== 3) return normalized;
+  const day  = parseInt(parts[0], 10);
+  const year = parseInt(parts[2], 10);
+  if (isNaN(day) || isNaN(year)) return normalized;
+  return `${terbilangAngka(day)} ${parts[1]} ${terbilangAngka(year)}`;
+}
+
 function computeTermin1(totalRaw: string, persenStr: string): { jumlah: number; display: string } {
   const total = parseInt(totalRaw.replace(/\D/g, ""), 10);
   const pct   = parseFloat(persenStr);
@@ -433,7 +483,7 @@ export function TemplateAktaKesepakatan({ open, template, onClose, onSubmit }: P
     void runKtpOcr(file, setScanP1, setOcrP1, (p, alamat) => setF(prev => ({
       ...prev,
       p1_nama: p.nama_pemohon || prev.p1_nama, p1_nik: p.nik_pemohon || prev.p1_nik,
-      p1_kotalahir: p.kotalahir_pemohon || prev.p1_kotalahir, p1_tanggallahir: p.tanggallahir_pemohon || prev.p1_tanggallahir,
+      p1_kotalahir: p.kotalahir_pemohon || prev.p1_kotalahir, p1_tanggallahir: normalizeTanggalID(p.tanggallahir_pemohon || "") || prev.p1_tanggallahir,
       p1_kelamin: p.kelamin_pemohon || prev.p1_kelamin, p1_agama: p.agama_pemohon || prev.p1_agama,
       p1_pekerjaan: p.pekerjaan_pemohon || prev.p1_pekerjaan, p1_statuskawin: p.statuskawin_pemohon || prev.p1_statuskawin,
       p1_warga_negara: p.warga_negara || prev.p1_warga_negara || "Indonesia",
@@ -449,7 +499,7 @@ export function TemplateAktaKesepakatan({ open, template, onClose, onSubmit }: P
     void runKtpOcr(file, setScanKuasa, setOcrKuasa, (p, alamat) => setF(prev => ({
       ...prev,
       kuasa_nama: p.nama_pemohon || prev.kuasa_nama, kuasa_nik: p.nik_pemohon || prev.kuasa_nik,
-      kuasa_kotalahir: p.kotalahir_pemohon || prev.kuasa_kotalahir, kuasa_tanggallahir: p.tanggallahir_pemohon || prev.kuasa_tanggallahir,
+      kuasa_kotalahir: p.kotalahir_pemohon || prev.kuasa_kotalahir, kuasa_tanggallahir: normalizeTanggalID(p.tanggallahir_pemohon || "") || prev.kuasa_tanggallahir,
       kuasa_kelamin: p.kelamin_pemohon || prev.kuasa_kelamin, kuasa_agama: p.agama_pemohon || prev.kuasa_agama,
       kuasa_pekerjaan: p.pekerjaan_pemohon || prev.kuasa_pekerjaan, kuasa_statuskawin: p.statuskawin_pemohon || prev.kuasa_statuskawin,
       kuasa_alamat_utama: p.alamat_utama_pemohon || prev.kuasa_alamat_utama, kuasa_rt_rw: p.rt_rw_pemohon || prev.kuasa_rt_rw,
@@ -464,7 +514,7 @@ export function TemplateAktaKesepakatan({ open, template, onClose, onSubmit }: P
     void runKtpOcr(file, setScanPemenang, setOcrPemenang, (p, alamat) => setF(prev => ({
       ...prev,
       pemenang_nama: p.nama_pemohon || prev.pemenang_nama, pemenang_nik: p.nik_pemohon || prev.pemenang_nik,
-      pemenang_kotalahir: p.kotalahir_pemohon || prev.pemenang_kotalahir, pemenang_tanggallahir: p.tanggallahir_pemohon || prev.pemenang_tanggallahir,
+      pemenang_kotalahir: p.kotalahir_pemohon || prev.pemenang_kotalahir, pemenang_tanggallahir: normalizeTanggalID(p.tanggallahir_pemohon || "") || prev.pemenang_tanggallahir,
       pemenang_kelamin: p.kelamin_pemohon || prev.pemenang_kelamin, pemenang_agama: p.agama_pemohon || prev.pemenang_agama,
       pemenang_pekerjaan: p.pekerjaan_pemohon || prev.pemenang_pekerjaan, pemenang_statuskawin: p.statuskawin_pemohon || prev.pemenang_statuskawin,
       pemenang_warga_negara: p.warga_negara || prev.pemenang_warga_negara || "Indonesia",
@@ -555,11 +605,71 @@ export function TemplateAktaKesepakatan({ open, template, onClose, onSubmit }: P
       for (const [k, v] of Object.entries(f)) {
         if (typeof v === "string") values[k] = v;
       }
-      values["termin_1_persen"]  = String(t1PctNum);
-      values["termin_1_jumlah"]  = t1.display;
-      values["termin_2_persen"]  = String(t2PctNum.toFixed(2));
-      values["termin_2_jumlah"]  = t2.display;
-      values["total_kompensasi_rp"] = formatRp(f.total_kompensasi);
+
+      // ── Tanggal penandatanganan (auto hari ini) ────────────────────────
+      const now   = new Date();
+      const hariIni = ID_DAYS_LONG[now.getDay()];
+      const tglNum  = now.getDate();
+      const tglStr  = `${tglNum} ${ID_MONTHS[now.getMonth()]} ${now.getFullYear()}`;
+      const jamStr  = String(now.getHours()).padStart(2, "0") + ".00";
+      values["hari"]             = hariIni;
+      values["tanggal"]          = tglStr;
+      values["terbilang_tanggal"]= terbilangTanggal(tglStr);
+      values["jam"]              = jamStr;
+      values["jam_terbilang"]    = terbilangAngka(now.getHours());
+
+      // ── Pihak Kesatu — Pemiliklama ─────────────────────────────────────
+      values["nama_pemiliklama"]     = f.p1_nama;
+      values["alamat_pemiliklama"]   = f.p1_alamat;
+      values["pekerjaan_pemiliklama"]= f.p1_pekerjaan;
+      values["NIK_pemiliklama"]      = f.p1_nik;
+
+      // ── Penerima Kuasa ─────────────────────────────────────────────────
+      values["nama_kuasa"]                   = f.kuasa_nama;
+      values["tempatlahir_kuasa"]            = f.kuasa_kotalahir;
+      values["tanggallahir_kuasa"]           = normalizeTanggalID(f.kuasa_tanggallahir);
+      values["terbilang_tanggallahir_kuasa"] = terbilangTanggal(f.kuasa_tanggallahir);
+      values["pekerjaan_kuasa"]              = f.kuasa_pekerjaan;
+      values["alamat_kuasa"]                 = f.kuasa_alamat;
+      values["NIK_kuasa"]                    = f.kuasa_nik;
+
+      // ── Pemenang Lelang — Pemohon ──────────────────────────────────────
+      values["nama_pemohon"]                    = f.pemenang_nama;
+      values["tempatlahir_pemohon"]             = f.pemenang_kotalahir;
+      values["tanggallahir_pemohon"]            = normalizeTanggalID(f.pemenang_tanggallahir);
+      values["terbilang_tanggallahir_pemohon"]  = terbilangTanggal(f.pemenang_tanggallahir);
+      values["pekerjaan_pemohon"]               = f.pemenang_pekerjaan;
+      values["alamat_pemohon"]                  = f.pemenang_alamat;
+      values["NIK_pemohon"]                     = f.pemenang_nik;
+
+      // ── Kwitansi & Sertifikat ──────────────────────────────────────────
+      values["NIB"]                         = f.nomor_nib;
+      values["LT"]                          = f.luas;
+      values["terbilang_luas"]              = terbilangAngka(parseInt(f.luas.replace(/\D/g, ""), 10) || 0);
+      values["nomor_sertifikat"]            = f.no_sertifikat;
+      values["jenis_sertifikat"]            = f.jenis_sertifikat;
+      values["nomor_risalahlelang"]         = f.nomor_risalah_lelang;
+      values["tanggal_risalahlelang"]       = f.tanggal_risalah;
+      values["terbilang_tanggalrisalahlelang"] = terbilangTanggal(f.tanggal_risalah);
+
+      // ── Kesepakatan ────────────────────────────────────────────────────
+      const totalNum = parseInt(f.total_kompensasi.replace(/\D/g, ""), 10) || 0;
+      values["deadline_serahterima"]             = f.deadline_serah_terima;
+      values["terbilang_deadline_serahterima"]   = terbilangTanggal(f.deadline_serah_terima);
+      values["nominal_kompensasi"]               = formatRp(f.total_kompensasi);
+      values["terbilang_nominal_kompensasi"]     = terbilangAngka(totalNum);
+      values["nominal_terminpertama"]            = t1.display;
+      values["terbilang_terminpertama"]          = terbilangAngka(t1.jumlah);
+      values["persentase_nominal_terminpertama"] = String(t1PctNum);
+      values["nominal_terminkedua"]              = t2.display;
+      values["terbilang_terminkedua"]            = terbilangAngka(t2.jumlah);
+
+      // legacy keys (kept for safety)
+      values["termin_1_persen"]        = String(t1PctNum);
+      values["termin_1_jumlah"]        = t1.display;
+      values["termin_2_persen"]        = String(t2PctNum.toFixed(2));
+      values["termin_2_jumlah"]        = t2.display;
+      values["total_kompensasi_rp"]    = formatRp(f.total_kompensasi);
 
       const { blob, filename, isPdf } = await generateSurat(template.templateFileName, values);
       downloadBlob(blob, filename);

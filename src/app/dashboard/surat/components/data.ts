@@ -702,7 +702,7 @@ export const suratTemplates: SuratTemplate[] = [
     updatedAt: "15 Apr 2026",
     usedCount: 0,
     icon: FileCheck,
-    templateFileName: "AKTA KESEPAKATAN BERSAMA RUNGKUT.docx",
+    templateFileName: "Akta_kesepakatan_bersama_perdamaian.docx",
     fields: [],
     comingSoon: false,
   },

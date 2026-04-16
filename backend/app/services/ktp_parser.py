@@ -284,18 +284,34 @@ def extract_status_kawin(text: str) -> str:
     return ""
 
 
+_AGAMA_VALUES = {
+    "ISLAM", "KRISTEN", "KATOLIK", "HINDU", "BUDDHA", "BUDHA", "KONGHUCU",
+    "PROTESTAN", "KRISTEN PROTESTAN", "KRISTEN KATOLIK",
+}
+_STATUS_VALUES = {
+    "BELUM KAWIN", "KAWIN", "CERAI HIDUP", "CERAI MATI",
+}
+_GENDER_VALUES = {"LAKI-LAKI", "LAKI LAKI", "PEREMPUAN"}
+_PEKERJAAN_BLACKLIST = _AGAMA_VALUES | _STATUS_VALUES | _GENDER_VALUES | {"INDONESIA", "WNI", "WNA"}
+
+
+def _is_invalid_pekerjaan(value: str) -> bool:
+    upper = value.upper().strip()
+    return upper in _PEKERJAAN_BLACKLIST or is_field_label(value)
+
+
 def extract_pekerjaan(lines: List[str]) -> str:
     for i, line in enumerate(lines):
         cleaned = cleanup_value(line)
 
         if re.search(r"Pekerjaan", cleaned, re.IGNORECASE):
             same_line = re.sub(r"Pekerjaan", "", cleaned, flags=re.IGNORECASE).strip(" :;-")
-            if same_line:
+            if same_line and not _is_invalid_pekerjaan(same_line):
                 return normalize_title_keep_roman(cleanup_value(same_line))
 
             for j in range(i + 1, min(i + 5, len(lines))):
                 candidate = cleanup_value(lines[j])
-                if candidate and not is_noise_line(candidate) and not is_field_label(candidate):
+                if candidate and not is_noise_line(candidate) and not _is_invalid_pekerjaan(candidate):
                     return normalize_title_keep_roman(candidate)
 
     return ""

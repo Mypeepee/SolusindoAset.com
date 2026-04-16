@@ -113,7 +113,7 @@ export default function Kalendar({
         const month = currentDate.getMonth() + 1;
         
         const response = await fetch(
-          `https://dayoffapi.vercel.app/api?month=${month}&year=${year}`,
+          `/api/holidays?month=${month}&year=${year}`,
           { headers: { 'Accept': 'application/json' } }
         );
 
