@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth";
 
 type ProjectSelesaiItem = {
   id_project: string;

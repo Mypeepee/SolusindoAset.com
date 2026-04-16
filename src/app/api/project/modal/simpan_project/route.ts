@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { getServerSession } from "next-auth";
 
 import { prisma } from "@/lib/prisma";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth";
 
 type StatusPembayaranProject =
   | "menunggu_pembayaran"

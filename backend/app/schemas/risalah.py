@@ -6,6 +6,9 @@ class RisalahParsedSchema(BaseModel):
     nomor_risalah: str = ""
     tanggal_risalah: str = ""
     uraian: str = ""
+    pejabat_lelang: str = ""
+    jam_lelang: str = ""
+    nip: str = ""
 
 
 class RisalahOcrResponseSchema(BaseModel):

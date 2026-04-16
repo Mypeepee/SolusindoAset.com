@@ -80,6 +80,21 @@ def fill_template(template_filename: str, values: dict) -> bytes:
     return buf.read()
 
 
+def trim_pdf_pages(pdf_bytes: bytes, keep_pages: int) -> bytes:
+    """Return a PDF containing only the first `keep_pages` pages."""
+    import fitz  # pymupdf
+    src = fitz.open(stream=pdf_bytes, filetype="pdf")
+    if src.page_count <= keep_pages:
+        src.close()
+        return pdf_bytes
+    dst = fitz.open()
+    dst.insert_pdf(src, from_page=0, to_page=keep_pages - 1)
+    result = dst.tobytes(garbage=4, deflate=True)
+    src.close()
+    dst.close()
+    return result
+
+
 def convert_docx_to_pdf(docx_bytes: bytes) -> bytes:
     """Convert docx bytes to PDF using LibreOffice headless. Raises RuntimeError if unavailable."""
     with tempfile.TemporaryDirectory() as tmpdir:

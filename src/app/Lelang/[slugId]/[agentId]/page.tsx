@@ -5,7 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import DetailClient from "../DetailClient";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth";
 
 interface ParamsShape {
   slugId: string;

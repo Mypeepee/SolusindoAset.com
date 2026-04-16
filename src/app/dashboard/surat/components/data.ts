@@ -288,6 +288,22 @@ export const suratTemplates: SuratTemplate[] = [
 
   // ── Phase 2: Pengurusan Dokumen ─────────────────────────────────────────────
   {
+    id: "permohonan-akte-grosse",
+    code: "DOK-003",
+    title: "Permohonan Akte Grosse",
+    category: "Pengurusan Dokumen",
+    phase: "pengurusan-dokumen",
+    description:
+      "Permohonan penerbitan akte grosse kepada notaris perjanjian kredit oleh pemenang lelang.",
+    status: "Baru",
+    updatedAt: "15 Apr 2026",
+    usedCount: 0,
+    icon: PenLine,
+    templateFileName: "Permohonan_Akta_Grosse.docx",
+    fields: [],
+    comingSoon: false,
+  },
+  {
     id: "pengantar-ajb",
     code: "DOK-001",
     title: "Surat Pengantar Pengurusan AJB",
@@ -673,5 +689,21 @@ export const suratTemplates: SuratTemplate[] = [
     templateFileName: "Template_Somasi_Pengosongan.docx",
     fields: [],
     comingSoon: true,
+  },
+  {
+    id: "akta-kesepakatan-bersama",
+    code: "LIT-003",
+    title: "Akta Kesepakatan Bersama",
+    category: "Litigasi Perdata",
+    phase: "eksekusi",
+    description:
+      "Akta perdamaian / mediasi antara pemenang lelang dengan penghuni lama untuk pengosongan sukarela dengan kompensasi. Dibuat sebelum proses eksekusi paksa melalui Pengadilan Negeri.",
+    status: "Baru",
+    updatedAt: "15 Apr 2026",
+    usedCount: 0,
+    icon: FileCheck,
+    templateFileName: "AKTA KESEPAKATAN BERSAMA RUNGKUT.docx",
+    fields: [],
+    comingSoon: false,
   },
 ];

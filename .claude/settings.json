@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/Users/jasnc/anaconda3/bin/python3 -c ':*)",
+      "Read(//Users/jasnc/Downloads/Important/kosku/src/app/dashboard/surat/**)",
+      "Read(//Users/jasnc/Downloads/Important/kosku/src/app/dashboard/surat/components/**)",
+      "Read(//private/tmp/**)",
+      "Bash(cp \"/Users/jasnc/Downloads/Important/kosku/src/app/dashboard/surat/components/AKTA KESEPAKATAN BERSAMA RUNGKUT.docx\" akta_kesepakatan.docx)",
+      "Bash(unzip -o akta_kesepakatan.docx word/document.xml -d akta_kesepakatan_extracted/)",
+      "Bash(python3 -c \"import sys,re; text=sys.stdin.read\\(\\); clean=re.sub\\(r'<[^>]+>','',text\\); print\\(clean[:8000]\\)\")",
+      "Read(//Users/jasnc/Downloads/Important/kosku/**)",
+      "Bash(python3 -c ':*)",
+      "Bash(node -e \"const {Handshake} = require\\('./node_modules/lucide-react'\\); console.log\\(!!Handshake\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d.get\\('version','?'\\)\\)\")"
+    ]
+  }
+}

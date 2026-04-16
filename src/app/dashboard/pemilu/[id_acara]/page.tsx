@@ -3,7 +3,7 @@ import { PrismaClient, status_peserta_enum } from "@prisma/client";
 import PemiluClient from "./PemiluClient";
 
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
