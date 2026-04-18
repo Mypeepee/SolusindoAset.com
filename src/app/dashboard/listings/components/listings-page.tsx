@@ -11,6 +11,7 @@ type ListingsPageProps = {
   };
   listings: Listing[];
   currentAgentId: string; // id agent dari session
+  userRole?: string;
 };
 
 export default function ListingsPage({

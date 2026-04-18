@@ -1,5 +1,32 @@
 // app/dashboard/listings/page.tsx
 import prisma from "@/lib/prisma";
+
+/** Ambil URL pertama dari field gambar (CSV), normalisasi jadi bisa di-render browser */
+function resolveThumb(gambar: string | null | undefined): string | undefined {
+  if (!gambar) return undefined;
+  const raw = gambar.split(",")[0].trim();
+  if (!raw) return undefined;
+
+  // Sudah URL lengkap (http/https)
+  if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    // Untuk Drive: lewatkan proxy supaya tidak kena CORS / restricted sharing
+    if (raw.includes("drive.google.com")) {
+      return `/api/img?url=${encodeURIComponent(raw)}`;
+    }
+    return raw;
+  }
+
+  // Raw Google Drive file ID (hanya alfanumerik, dash, underscore — tidak ada titik atau slash)
+  if (/^[A-Za-z0-9_-]{10,}$/.test(raw)) {
+    const driveUrl = `https://drive.google.com/thumbnail?id=${raw}&sz=w400`;
+    return `/api/img?url=${encodeURIComponent(driveUrl)}`;
+  }
+
+  // Path relatif (diawali /)
+  if (raw.startsWith("/")) return raw;
+
+  return undefined;
+}
 import ListingsPage from "./components/listings-page";
 import { fetchListingHeaderStats } from "./lib/property-stats";
 import { getServerSession } from "next-auth";
@@ -63,9 +90,7 @@ export default async function DashboardListingsPage() {
       area: (p as any).area_lokasi ?? "",
       address: p.alamat_lengkap ?? "",
       price: formatRupiah(Number(p.harga)),
-      thumbnailUrl: p.gambar
-        ? p.gambar.split(",")[0].trim()
-        : undefined,
+      thumbnailUrl: resolveThumb(p.gambar),
       views: p.dilihat ?? 0,
     };
   });
@@ -74,7 +99,7 @@ export default async function DashboardListingsPage() {
     <ListingsPage
       headerStats={headerStats}
       listings={listings}
-      currentAgentId={agentId}
+      currentAgentId={agentId ?? ""}
       userRole={userRole}
     />
   );

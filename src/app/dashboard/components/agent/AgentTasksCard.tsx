@@ -1,118 +1,287 @@
 "use client";
 
 import { Icon } from "@iconify/react";
+import Link from "next/link";
 import type { AgentTask } from "./types";
-import { cn, humanTime } from "./utils";
+import { cn, humanTime, humanDateShort } from "./utils";
+
+function isOverdue(iso?: string) {
+  if (!iso) return false;
+  return new Date(iso) < new Date();
+}
+
+function isToday(iso?: string) {
+  if (!iso) return false;
+  const d   = new Date(iso);
+  const now = new Date();
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth()    === now.getMonth() &&
+    d.getDate()     === now.getDate()
+  );
+}
 
 function TaskSkeleton() {
   return (
     <div className="rounded-3xl border border-white/8 bg-[#07090f] p-6">
-      <div className="h-5 w-32 bg-white/10 rounded animate-pulse" />
-      <div className="mt-5 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <div className="h-3 w-16 animate-pulse rounded bg-white/8" />
+          <div className="h-5 w-36 animate-pulse rounded bg-white/10" />
+        </div>
+        <div className="h-11 w-11 animate-pulse rounded-2xl bg-white/8" />
+      </div>
+      <div className="mt-5 space-y-2.5">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="h-14 rounded-2xl bg-white/5 border border-white/10 animate-pulse" />
+          <div key={i} className="h-16 animate-pulse rounded-2xl bg-white/5" />
         ))}
       </div>
     </div>
   );
 }
 
-function priorityPill(p: AgentTask["priority"]) {
-  if (p === "HIGH") return "border-rose-400/40 bg-rose-500/10 text-rose-200";
-  if (p === "MEDIUM") return "border-amber-400/40 bg-amber-500/10 text-amber-200";
-  return "border-emerald-400/30 bg-emerald-500/10 text-emerald-200";
-}
-
 function channelIcon(c?: AgentTask["channel"]) {
-  if (c === "WA") return "solar:chat-round-call-bold";
-  if (c === "CALL") return "solar:phone-calling-rounded-bold";
-  if (c === "MEET") return "solar:calendar-bold";
-  return "solar:checklist-minimalistic-bold";
+  if (c === "WA")   return { icon: "solar:chat-round-call-bold-duotone", color: "text-emerald-200 bg-emerald-500/10 border-emerald-400/25" };
+  if (c === "CALL") return { icon: "solar:phone-calling-rounded-bold-duotone", color: "text-sky-200 bg-sky-500/10 border-sky-400/25" };
+  if (c === "MEET") return { icon: "solar:buildings-3-bold-duotone", color: "text-violet-200 bg-violet-500/10 border-violet-400/25" };
+  return                   { icon: "solar:checklist-minimalistic-bold-duotone", color: "text-slate-300 bg-white/5 border-white/10" };
 }
 
-export function AgentTasksCard({ loading, tasks }: { loading: boolean; tasks?: AgentTask[] }) {
+function TaskRow({ task, overdue }: { task: AgentTask; overdue?: boolean }) {
+  const ch   = channelIcon(task.channel);
+  const time = isToday(task.dueAt) ? humanTime(task.dueAt) : humanDateShort(task.dueAt);
+
+  return (
+    <div
+      className={cn(
+        "group rounded-2xl border p-4 transition-all",
+        overdue
+          ? "border-rose-400/25 bg-rose-500/6 hover:border-rose-400/40"
+          : task.priority === "HIGH"
+          ? "border-amber-400/20 bg-amber-500/5 hover:border-amber-400/35"
+          : "border-white/8 bg-black/20 hover:border-white/15",
+      )}
+    >
+      <div className="flex items-start gap-3">
+        {/* Channel icon */}
+        <div
+          className={cn(
+            "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-base",
+            ch.color,
+          )}
+        >
+          <Icon icon={ch.icon} />
+        </div>
+
+        {/* Content */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-sm font-semibold text-white leading-tight truncate">
+              {task.title}
+            </p>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {overdue && (
+                <span className="rounded-md border border-rose-400/40 bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-bold text-rose-200">
+                  OVERDUE
+                </span>
+              )}
+              <span
+                className={cn(
+                  "rounded-md border px-1.5 py-0.5 text-[10px] font-bold",
+                  task.priority === "HIGH"
+                    ? "border-rose-400/40 bg-rose-500/15 text-rose-200"
+                    : task.priority === "MEDIUM"
+                    ? "border-amber-400/40 bg-amber-500/15 text-amber-200"
+                    : "border-emerald-400/25 bg-emerald-500/10 text-emerald-200",
+                )}
+              >
+                {task.priority}
+              </span>
+            </div>
+          </div>
+
+          <p className="mt-0.5 text-[11px] text-slate-400 truncate">
+            {task.leadName ? `${task.leadName} · ` : ""}
+            <span className={cn("font-medium", overdue ? "text-rose-300" : "text-slate-300")}>
+              {overdue ? "Telat — " : "Due "}{time}
+            </span>
+          </p>
+        </div>
+      </div>
+
+      {/* Action row */}
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          {task.channel === "WA" && (
+            <a
+              href={`https://wa.me/`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1 rounded-lg border border-emerald-400/25 bg-emerald-500/10 px-2.5 py-1.5 text-[11px] font-medium text-emerald-200 hover:bg-emerald-500/15 transition"
+            >
+              <Icon icon="solar:chat-round-call-bold" className="text-sm" />
+              WA
+            </a>
+          )}
+          {task.channel === "CALL" && (
+            <button
+              type="button"
+              className="flex items-center gap-1 rounded-lg border border-sky-400/25 bg-sky-500/10 px-2.5 py-1.5 text-[11px] font-medium text-sky-200 hover:bg-sky-500/15 transition"
+            >
+              <Icon icon="solar:phone-calling-rounded-bold" className="text-sm" />
+              Telepon
+            </button>
+          )}
+          {task.channel === "MEET" && (
+            <Link
+              href="/dashboard/jadwal-acara"
+              className="flex items-center gap-1 rounded-lg border border-violet-400/25 bg-violet-500/10 px-2.5 py-1.5 text-[11px] font-medium text-violet-200 hover:bg-violet-500/15 transition"
+            >
+              <Icon icon="solar:map-point-wave-bold" className="text-sm" />
+              Viewing
+            </Link>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            className="flex items-center gap-1 rounded-lg border border-white/8 bg-white/5 px-2.5 py-1.5 text-[11px] text-slate-300 hover:bg-white/10 transition"
+          >
+            <Icon icon="solar:check-read-linear" className="text-sm" />
+            Selesai
+          </button>
+          <button
+            type="button"
+            className="flex items-center gap-1 rounded-lg border border-emerald-400/25 bg-emerald-500/10 px-2.5 py-1.5 text-[11px] text-emerald-200 hover:bg-emerald-500/15 transition"
+          >
+            <Icon icon="solar:eye-bold" className="text-sm" />
+            Detail
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function AgentTasksCard({
+  loading,
+  tasks,
+}: {
+  loading: boolean;
+  tasks?: AgentTask[];
+}) {
   if (loading) return <TaskSkeleton />;
 
-  const list = tasks || [];
+  const list     = tasks ?? [];
+  const overdue  = list.filter((t) => isOverdue(t.dueAt)).sort((a, b) => (a.priority > b.priority ? -1 : 1));
+  const high     = list.filter((t) => !isOverdue(t.dueAt) && t.priority === "HIGH");
+  const rest     = list.filter((t) => !isOverdue(t.dueAt) && t.priority !== "HIGH").slice(0, 4);
+  const total    = list.length;
 
   return (
     <div className="rounded-3xl border border-white/8 bg-[#07090f] p-6">
+      {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs text-slate-400">Today</p>
-          <h3 className="mt-1 text-base font-bold text-white">Follow-up & Tasks</h3>
-          <p className="mt-1 text-[11px] text-slate-500">Yang “due” hari ini harus kelar dulu.</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Today</p>
+          <h3 className="mt-0.5 text-base font-bold text-white">Follow-up & Tasks</h3>
+          <p className="mt-1 text-[11px] text-slate-500">
+            {overdue.length > 0
+              ? <span className="text-rose-300 font-semibold">{overdue.length} overdue — selesaikan segera!</span>
+              : `${total} tasks aktif — prioritaskan yang HIGH dulu.`}
+          </p>
         </div>
-        <div className="h-10 w-10 rounded-2xl border border-white/10 bg-black/30 flex items-center justify-center">
-          <Icon icon="solar:checklist-bold-duotone" className="text-xl text-emerald-200" />
+
+        <div className="flex items-center gap-2">
+          {overdue.length > 0 && (
+            <div className="flex h-9 w-9 animate-pulse items-center justify-center rounded-xl border border-rose-400/30 bg-rose-500/10">
+              <Icon icon="solar:bell-bing-bold-duotone" className="text-base text-rose-300" />
+            </div>
+          )}
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-black/30">
+            <Icon icon="solar:checklist-bold-duotone" className="text-xl text-emerald-200" />
+          </div>
         </div>
       </div>
 
-      {list.length === 0 ? (
-        <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-5 text-center">
-          <Icon icon="solar:confetti-bold-duotone" className="text-3xl text-emerald-200 mx-auto" />
-          <p className="mt-2 text-sm font-semibold text-white">Aman! Tidak ada task mendesak</p>
-          <p className="mt-1 text-xs text-slate-400">Tambahkan follow-up untuk menjaga pipeline tetap bergerak.</p>
+      {total === 0 ? (
+        <div className="mt-6 rounded-2xl border border-white/8 bg-black/20 p-6 text-center">
+          <Icon icon="solar:confetti-bold-duotone" className="mx-auto text-3xl text-emerald-200" />
+          <p className="mt-2 text-sm font-semibold text-white">Semua bersih! Tidak ada task mendesak</p>
+          <p className="mt-1 text-xs text-slate-400">
+            Tambahkan follow-up untuk menjaga pipeline tetap bergerak.
+          </p>
         </div>
       ) : (
-        <div className="mt-5 space-y-3">
-          {list.slice(0, 6).map((t) => (
-            <div
-              key={t.id}
-              className={cn(
-                "rounded-2xl border border-white/10 bg-black/20 p-4",
-                "hover:border-emerald-400/20 hover:bg-white/[0.03] transition"
+        <div className="mt-5 space-y-2">
+          {/* Overdue */}
+          {overdue.length > 0 && (
+            <>
+              <SectionDivider label="Overdue" icon="solar:danger-triangle-bold-duotone" color="rose" />
+              {overdue.slice(0, 3).map((t) => (
+                <TaskRow key={t.id} task={t} overdue />
+              ))}
+            </>
+          )}
+
+          {/* HIGH priority */}
+          {high.length > 0 && (
+            <>
+              <SectionDivider label="Prioritas Tinggi" icon="solar:fire-bold-duotone" color="amber" />
+              {high.slice(0, 3).map((t) => (
+                <TaskRow key={t.id} task={t} />
+              ))}
+            </>
+          )}
+
+          {/* Rest */}
+          {rest.length > 0 && (
+            <>
+              {(overdue.length > 0 || high.length > 0) && (
+                <SectionDivider label="Lainnya" icon="solar:checklist-minimalistic-bold-duotone" color="slate" />
               )}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white truncate">{t.title}</p>
-                  <p className="mt-1 text-[11px] text-slate-400 truncate">
-                    {t.leadName ? `Lead: ${t.leadName} • ` : ""}Due {humanTime(t.dueAt)}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className={cn("px-2 py-1 rounded-full border text-[10px] font-semibold", priorityPill(t.priority))}>
-                    {t.priority}
-                  </span>
-                  <div className="h-9 w-9 rounded-xl border border-white/10 bg-black/30 flex items-center justify-center">
-                    <Icon icon={channelIcon(t.channel)} className="text-lg text-emerald-200" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-3 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => alert("TODO: mark done")}
-                  className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-white/90 transition"
-                >
-                  Selesai
-                </button>
-                <button
-                  type="button"
-                  onClick={() => alert("TODO: open detail")}
-                  className="px-3 py-2 rounded-xl border border-emerald-400/30 bg-emerald-500/10 hover:bg-emerald-500/15 text-xs text-emerald-200 transition flex items-center gap-2"
-                >
-                  <Icon icon="solar:arrow-right-up-linear" className="text-base" />
-                  Buka
-                </button>
-              </div>
-            </div>
-          ))}
+              {rest.map((t) => (
+                <TaskRow key={t.id} task={t} />
+              ))}
+            </>
+          )}
         </div>
       )}
 
-      <div className="mt-4 flex justify-end">
-        <button
-          type="button"
-          onClick={() => alert("TODO: open all tasks")}
-          className="text-xs text-slate-400 hover:text-emerald-200 transition flex items-center gap-2"
+      <div className="mt-4 flex items-center justify-between border-t border-white/5 pt-3">
+        <p className="text-[11px] text-slate-500">{total} total tasks</p>
+        <Link
+          href="/dashboard/tasks"
+          className="flex items-center gap-1.5 text-xs text-slate-400 transition hover:text-emerald-200"
         >
-          Lihat semua tasks <Icon icon="solar:alt-arrow-right-linear" className="text-base" />
-        </button>
+          Lihat semua
+          <Icon icon="solar:alt-arrow-right-linear" className="text-sm" />
+        </Link>
       </div>
+    </div>
+  );
+}
+
+function SectionDivider({
+  label,
+  icon,
+  color,
+}: {
+  label: string;
+  icon: string;
+  color: "rose" | "amber" | "slate";
+}) {
+  const c = {
+    rose:  "text-rose-300",
+    amber: "text-amber-300",
+    slate: "text-slate-400",
+  };
+  return (
+    <div className={cn("flex items-center gap-1.5 pt-1 pb-0.5", c[color])}>
+      <Icon icon={icon} className="text-sm" />
+      <p className="text-[10px] font-bold uppercase tracking-[0.15em]">{label}</p>
+      <div className="flex-1 h-px bg-white/5 ml-1" />
     </div>
   );
 }

@@ -1,51 +1,166 @@
 "use client";
 
+import Link from "next/link";
 import { Icon } from "@iconify/react";
 import { cn } from "./utils";
 
+type Action = {
+  icon: string;
+  label: string;
+  desc: string;
+  href: string;
+  color: "emerald" | "sky" | "amber" | "violet" | "rose";
+  badge?: string | number;
+};
+
+const ACTIONS: Action[] = [
+  {
+    icon: "solar:home-add-bold-duotone",
+    label: "Tambah Listing",
+    desc: "Publikasikan properti baru ke marketplace",
+    href: "/dashboard/listings",
+    color: "emerald",
+  },
+  {
+    icon: "solar:user-plus-bold-duotone",
+    label: "Tambah Lead",
+    desc: "Catat lead baru dari WA, IG, atau referral",
+    href: "/dashboard/crm",
+    color: "sky",
+  },
+  {
+    icon: "solar:calendar-add-bold-duotone",
+    label: "Jadwalkan Viewing",
+    desc: "Atur kunjungan properti dengan klien",
+    href: "/dashboard/jadwal-acara",
+    color: "amber",
+  },
+  {
+    icon: "solar:document-add-bold-duotone",
+    label: "Buat Surat",
+    desc: "SPK, surat penawaran, atau dokumen legal",
+    href: "/dashboard/surat",
+    color: "violet",
+  },
+  {
+    icon: "solar:presentation-graph-bold-duotone",
+    label: "Lihat Project",
+    desc: "Deal aktif dan pipeline investasi",
+    href: "/dashboard/project",
+    color: "rose",
+  },
+  {
+    icon: "solar:checklist-bold-duotone",
+    label: "Kelola Tasks",
+    desc: "Follow-up dan reminder harian",
+    href: "/dashboard/tasks",
+    color: "emerald",
+  },
+];
+
+const colorMap = {
+  emerald: {
+    icon:    "border-emerald-400/25 bg-emerald-500/10 text-emerald-200",
+    hover:   "hover:border-emerald-400/30 hover:bg-emerald-500/[0.06]",
+    arrow:   "text-emerald-400/50 group-hover:text-emerald-300",
+    badge:   "bg-emerald-500/20 text-emerald-200",
+  },
+  sky: {
+    icon:    "border-sky-400/25 bg-sky-500/10 text-sky-200",
+    hover:   "hover:border-sky-400/30 hover:bg-sky-500/[0.06]",
+    arrow:   "text-sky-400/50 group-hover:text-sky-300",
+    badge:   "bg-sky-500/20 text-sky-200",
+  },
+  amber: {
+    icon:    "border-amber-400/25 bg-amber-500/10 text-amber-200",
+    hover:   "hover:border-amber-400/30 hover:bg-amber-500/[0.06]",
+    arrow:   "text-amber-400/50 group-hover:text-amber-300",
+    badge:   "bg-amber-500/20 text-amber-200",
+  },
+  violet: {
+    icon:    "border-violet-400/25 bg-violet-500/10 text-violet-200",
+    hover:   "hover:border-violet-400/30 hover:bg-violet-500/[0.06]",
+    arrow:   "text-violet-400/50 group-hover:text-violet-300",
+    badge:   "bg-violet-500/20 text-violet-200",
+  },
+  rose: {
+    icon:    "border-rose-400/25 bg-rose-500/10 text-rose-200",
+    hover:   "hover:border-rose-400/30 hover:bg-rose-500/[0.06]",
+    arrow:   "text-rose-400/50 group-hover:text-rose-300",
+    badge:   "bg-rose-500/20 text-rose-200",
+  },
+};
+
 export function AgentQuickActions({ onRefresh }: { onRefresh?: () => void }) {
-  const actions = [
-    { icon: "solar:home-add-bold-duotone", label: "Tambah Listing", hint: "Publikasikan properti baru", onClick: () => alert("TODO: route ke tambah listing") },
-    { icon: "solar:user-plus-bold-duotone", label: "Tambah Lead", hint: "Catat lead dari WA/IG", onClick: () => alert("TODO: route ke tambah lead") },
-    { icon: "solar:calendar-add-bold-duotone", label: "Jadwalkan Viewing", hint: "Atur kunjungan", onClick: () => alert("TODO: buka modal scheduling") },
-    { icon: "solar:chat-round-call-bold-duotone", label: "Broadcast WA", hint: "Follow-up massal", onClick: () => alert("TODO: broadcast tool") },
-  ];
-
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {actions.map((a, i) => (
-        <button
-          key={i}
-          type="button"
-          onClick={a.onClick}
-          className={cn(
-            "group text-left rounded-2xl border border-white/8 bg-[#07090f] p-4",
-            "hover:border-emerald-400/30 hover:bg-white/[0.03] transition-all",
-            "active:scale-[0.99]"
-          )}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="h-11 w-11 rounded-2xl border border-white/10 bg-black/30 flex items-center justify-center group-hover:border-emerald-400/30 group-hover:bg-emerald-500/10 transition">
-              <Icon icon={a.icon} className="text-2xl text-emerald-200" />
-            </div>
-            <Icon icon="solar:arrow-right-up-linear" className="text-lg text-slate-500 group-hover:text-emerald-200 transition" />
-          </div>
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Quick Actions</p>
+          <p className="text-sm font-semibold text-white">Akses Cepat</p>
+        </div>
+        {onRefresh && (
+          <button
+            type="button"
+            onClick={onRefresh}
+            className="flex items-center gap-1.5 rounded-xl border border-white/8 bg-black/20 px-3 py-2 text-xs text-slate-400 transition hover:border-white/15 hover:text-slate-200"
+          >
+            <Icon icon="solar:refresh-bold" className="text-sm text-emerald-300" />
+            Refresh
+          </button>
+        )}
+      </div>
 
-          <p className="mt-3 text-sm font-bold text-white">{a.label}</p>
-          <p className="mt-1 text-xs text-slate-400">{a.hint}</p>
-        </button>
-      ))}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        {ACTIONS.map((a) => {
+          const c = colorMap[a.color];
+          return (
+            <Link
+              key={a.label}
+              href={a.href}
+              className={cn(
+                "group relative flex flex-col rounded-2xl border border-white/8 bg-[#07090f] p-4 transition-all duration-150",
+                "active:scale-[0.98]",
+                c.hover,
+              )}
+            >
+              {/* Badge */}
+              {a.badge !== undefined && (
+                <span
+                  className={cn(
+                    "absolute right-3 top-3 rounded-full px-1.5 py-0.5 text-[10px] font-extrabold",
+                    c.badge,
+                  )}
+                >
+                  {a.badge}
+                </span>
+              )}
 
-      {onRefresh ? (
-        <button
-          type="button"
-          onClick={onRefresh}
-          className="sm:col-span-2 xl:col-span-4 rounded-2xl border border-white/8 bg-black/20 px-4 py-3 text-xs text-slate-300 hover:bg-white/[0.04] hover:border-white/15 transition flex items-center justify-center gap-2"
-        >
-          <Icon icon="solar:refresh-bold" className="text-base text-emerald-200" />
-          Refresh data
-        </button>
-      ) : null}
+              {/* Icon */}
+              <div
+                className={cn(
+                  "flex h-11 w-11 items-center justify-center rounded-2xl border transition",
+                  c.icon,
+                )}
+              >
+                <Icon icon={a.icon} className="text-[22px]" />
+              </div>
+
+              {/* Text */}
+              <p className="mt-3 text-sm font-bold text-white">{a.label}</p>
+              <p className="mt-0.5 text-[11px] leading-snug text-slate-400">{a.desc}</p>
+
+              {/* Arrow */}
+              <div className="mt-3 flex justify-end">
+                <Icon
+                  icon="solar:arrow-right-up-linear"
+                  className={cn("text-base transition", c.arrow)}
+                />
+              </div>
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }
