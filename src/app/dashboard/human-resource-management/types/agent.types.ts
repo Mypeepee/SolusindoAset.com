@@ -1,5 +1,5 @@
 // app/dashboard/hrm/types/agent.types.ts
-export type AgentStatus = "AKTIF" | "PENDING" | "NONAKTIF";
+export type AgentStatus = "AKTIF" | "PENDING" | "NONAKTIF" | "SUSPEND";
 export type AgentRole = "MANAGER" | "SALES LEAD" | "AGENT";
 
 export interface Agent {

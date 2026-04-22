@@ -1,56 +1,42 @@
 // app/dashboard/hrm/hooks/useAgents.ts
 "use client";
 
-import { useState, useEffect } from "react";
+import useSWR from "swr";
+import { useMemo } from "react";
 import toast from "react-hot-toast";
 import { Agent, AgentMetrics, AgentStatus } from "../types/agent.types";
 
+const fetcher = (url: string) =>
+  fetch(url).then((res) => {
+    if (!res.ok) throw new Error("Gagal mengambil data");
+    return res.json();
+  });
+
 export function useAgents() {
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [metrics, setMetrics] = useState<AgentMetrics | null>(null);
-
-  useEffect(() => {
-    loadAgents();
-  }, []);
-
-  const loadAgents = async () => {
-    try {
-      const res = await fetch("/api/dashboard/hrm");
-      if (!res.ok) throw new Error("Gagal mengambil data");
-      const json = await res.json();
-      const list = (json.agents || []) as Agent[];
-      setAgents(list);
-      calculateMetrics(list);
-    } catch (err) {
-      console.error(err);
-      toast.error("Gagal memuat data HRM.");
-    } finally {
-      setLoading(false);
+  const { data, error, isLoading, mutate } = useSWR<{ agents: Agent[] }>(
+    "/api/dashboard/hrm",
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 30_000,
     }
-  };
+  );
 
-  const calculateMetrics = (agentList: Agent[]) => {
-    const active = agentList.filter((a) => a.status_keanggotaan === "AKTIF");
-    const pending = agentList.filter((a) => a.status_keanggotaan === "PENDING");
-    const totalClosing = agentList.reduce(
-      (sum, a) => sum + a.jumlah_closing,
-      0
-    );
-    const totalOmset = agentList.reduce(
-      (sum, a) => sum + Number(a.total_omset || 0),
-      0
-    );
-    const avgRating = agentList.length
-      ? agentList.reduce((s, a) => s + Number(a.rating || 0), 0) /
-        agentList.length
-      : 0;
+  const agents: Agent[] = data?.agents ?? [];
+
+  const metrics = useMemo<AgentMetrics | null>(() => {
+    if (!agents.length) return null;
+
+    const active = agents.filter((a) => a.status_keanggotaan === "AKTIF");
+    const pending = agents.filter((a) => a.status_keanggotaan === "PENDING");
+    const totalClosing = agents.reduce((sum, a) => sum + a.jumlah_closing, 0);
+    const totalOmset = agents.reduce((sum, a) => sum + Number(a.total_omset || 0), 0);
+    const avgRating = agents.reduce((s, a) => s + Number(a.rating || 0), 0) / agents.length;
     const topPerformer =
-      agentList.slice().sort((a, b) => b.jumlah_closing - a.jumlah_closing)[0] ||
-      null;
+      agents.slice().sort((a, b) => b.jumlah_closing - a.jumlah_closing)[0] ?? null;
 
-    setMetrics({
-      totalAgents: agentList.length,
+    return {
+      totalAgents: agents.length,
       activeAgents: active.length,
       pendingAgents: pending.length,
       totalClosing,
@@ -58,15 +44,18 @@ export function useAgents() {
       avgRating,
       growthRate: 12.5,
       topPerformer,
-    });
-  };
+    };
+  }, [agents]);
+
+  if (error) {
+    toast.error("Gagal memuat data HRM.");
+  }
 
   const updateAgentStatus = async (
     id_agent: string,
     status: AgentStatus
   ): Promise<boolean> => {
     try {
-      // SESUAIKAN PATH DENGAN ROUTE KAMU
       const res = await fetch("/api/HRM/status", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -76,8 +65,12 @@ export function useAgents() {
       const json = await res.json();
       const updated = json.agent as Agent;
 
-      setAgents((prev) =>
-        prev.map((a) => (a.id_agent === updated.id_agent ? updated : a))
+      mutate(
+        (prev) =>
+          prev
+            ? { agents: prev.agents.map((a) => (a.id_agent === updated.id_agent ? updated : a)) }
+            : prev,
+        false
       );
       toast.success("Status agent diperbarui.");
       return true;
@@ -93,7 +86,6 @@ export function useAgents() {
     nama_kantor: string
   ): Promise<boolean> => {
     try {
-      // SESUAIKAN PATH DENGAN ROUTE KAMU
       const res = await fetch("/api/HRM/agent-office", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -103,8 +95,12 @@ export function useAgents() {
       const json = await res.json();
       const updated = json.agent as Agent;
 
-      setAgents((prev) =>
-        prev.map((a) => (a.id_agent === updated.id_agent ? updated : a))
+      mutate(
+        (prev) =>
+          prev
+            ? { agents: prev.agents.map((a) => (a.id_agent === updated.id_agent ? updated : a)) }
+            : prev,
+        false
       );
       toast.success("Nama kantor agent diperbarui.");
       return true;
@@ -117,10 +113,10 @@ export function useAgents() {
 
   return {
     agents,
-    loading,
+    loading: isLoading,
     metrics,
     updateAgentStatus,
     updateAgentOffice,
-    refetch: loadAgents,
+    refetch: () => mutate(),
   };
 }

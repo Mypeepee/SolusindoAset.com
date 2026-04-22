@@ -8,7 +8,19 @@ import { ProgressIndicator } from './components/listing/ProgressIndicator';
 import { AutoSaveIndicator } from './components/listing/AutoSaveIndicator';
 import { LivePreview } from './components/listing/LivePreview';
 import { Step1BasicInfo } from './components/listing/steps/Step1BasicInfo';
-import { Step2Location } from './components/listing/steps/Step2Location';
+import dynamic from 'next/dynamic';
+const Step2Location = dynamic(
+  () => import('./components/listing/steps/Step2Location').then(m => ({ default: m.Step2Location })),
+  {
+    loading: () => (
+      <div className="p-6 rounded-xl bg-slate-800 border border-slate-700 flex items-center gap-3">
+        <div className="h-5 w-5 rounded-full border-2 border-emerald-400 border-t-transparent animate-spin" />
+        <p className="text-slate-300">Loading peta...</p>
+      </div>
+    ),
+    ssr: false,
+  }
+);
 import { Step3Pricing } from './components/listing/steps/Step3Pricing';
 import { Step4Specifications } from './components/listing/steps/Step4Specifications';
 import { Step5Media } from './components/listing/steps/Step5Media';
@@ -365,7 +377,17 @@ function TambahPropertyContent() {
         router.push(detailUrl);
       } else {
         toast.success('Property berhasil ditambahkan! 🎉\n+10 poin untuk Anda!');
-        router.push(`/listing/${result.data.slug}`);
+
+        const created = result.data as {
+          id_property: number | string;
+          slug: string;
+          jenis_transaksi: 'PRIMARY' | 'SECONDARY' | 'LELANG' | 'SEWA';
+          id_agent: number | string;
+        };
+
+        const base = created.jenis_transaksi === 'LELANG' ? 'Lelang' : 'Jual';
+        const detailUrl = `/${base}/${created.slug}-${created.id_property}/${created.id_agent}`;
+        router.push(detailUrl);
       }
     } catch (error) {
       console.error('Submit error:', error);

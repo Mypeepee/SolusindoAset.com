@@ -323,7 +323,7 @@ export async function POST(request: NextRequest) {
         deskripsi: `Menambahkan listing: ${body.judul}`,
         poin: 10,
         tipe_transaksi: "DAPAT",
-        id_referensi: listing.id_property.toString(),
+        id_referensi: BigInt(listing.id_property),
         tabel_referensi: "listing",
         saldo_sebelum: agent.poin ?? 0,
         saldo_sesudah: newPoin,

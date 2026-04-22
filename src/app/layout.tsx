@@ -16,8 +16,6 @@ import NextAuthProvider from "@/providers/NextAuthProvider";
 import { Toaster } from "sonner";
 import LoadingBar from "@/components/LoadingBar";
 
-import "@/lib/cron";
-
 const dmSans = DM_Sans({
   subsets: ["latin"],
   display: "swap",

@@ -7,7 +7,7 @@ export async function GET(
   { params }: { params: { slug: string } }
 ) {
   try {
-    const listing = await prisma.listing.findUnique({
+    const listing = await prisma.listing.findFirst({
       where: { slug: params.slug },
       include: {
         agent: {
@@ -33,7 +33,7 @@ export async function GET(
 
     // Increment view count
     await prisma.listing.update({
-      where: { slug: params.slug },
+      where: { id_property: listing.id_property },
       data: { dilihat: { increment: 1 } },
     });
 

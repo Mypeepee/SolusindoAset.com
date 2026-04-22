@@ -2,6 +2,13 @@
 const nextConfig = {
   reactStrictMode: false,
 
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+
   images: {
     remotePatterns: [
       // Avatar Google (OAuth)

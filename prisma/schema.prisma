@@ -677,6 +677,7 @@ enum status_agent_enum {
   PENDING
   AKTIF
   SUSPEND
+  NONAKTIF
 }
 
 enum status_properti_enum {

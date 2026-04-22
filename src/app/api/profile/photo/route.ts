@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { PrismaClient } from "@prisma/client";
-import { authOptions } from "../../auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
@@ -231,7 +231,7 @@ export async function POST(req: Request) {
     const nama =
       (agent.nama && agent.nama.trim().length > 0
         ? agent.nama
-        : session.user.name || session.user.id) || session.user.id;
+        : session.user.name || session.user.id) || session.user.id || "user";
 
     const folderName = nama
       .toString()

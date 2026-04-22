@@ -7,7 +7,7 @@ function splitImages(gambar: any): string[] {
   const raw = (gambar ?? "").toString();
   return raw
     .split(",")
-    .map((x) => x.trim())
+    .map((x: string) => x.trim())
     .filter(Boolean);
 }
 

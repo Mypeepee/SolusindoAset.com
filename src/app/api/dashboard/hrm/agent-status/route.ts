@@ -1,8 +1,8 @@
 // src/app/api/dashboard/hrm/agent-status/route.ts
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { PrismaClient } from "@prisma/client";
-import { authOptions } from "../../../auth/[...nextauth]/route";
+import { PrismaClient, status_agent_enum } from "@prisma/client";
+import { authOptions } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
@@ -16,7 +16,7 @@ export async function PUT(req: Request) {
     const body = await req.json();
     const { id_agent, status_keanggotaan } = body as {
       id_agent?: string;
-      status_keanggotaan?: "AKTIF" | "NONAKTIF" | "PENDING";
+      status_keanggotaan?: status_agent_enum;
     };
 
     if (!id_agent || !status_keanggotaan) {
