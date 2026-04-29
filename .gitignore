@@ -38,3 +38,11 @@ next-env.d.ts
 /src/generated/prisma
 
 .env
+
+# credentials & keys
+backend/keys/
+*service-account*.json
+*credentials*.json
+
+# claude memory
+.claude/
