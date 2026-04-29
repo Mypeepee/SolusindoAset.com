@@ -1,15 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Icon } from "@iconify/react";
 import { motion, AnimatePresence } from "framer-motion";
-
-interface HolidayData {
-  tanggal: string;
-  tanggal_display: string;
-  keterangan: string;
-  is_cuti: boolean;
-}
+import { getHolidaysForMonth } from "@/lib/holidays-id";
 
 interface EventData {
   id_acara: string;
@@ -100,39 +94,13 @@ export default function Kalendar({
   onToday,
   onAddEvent,
 }: KalendarProps) {
-  const [holidays, setHolidays] = useState<HolidayData[]>([]);
-  const [loading, setLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showMobileInfo, setShowMobileInfo] = useState(false);
 
-  useEffect(() => {
-    const fetchHolidays = async () => {
-      setLoading(true);
-      try {
-        const year = currentDate.getFullYear();
-        const month = currentDate.getMonth() + 1;
-        
-        const response = await fetch(
-          `https://dayoffapi.vercel.app/api?month=${month}&year=${year}`,
-          { headers: { 'Accept': 'application/json' } }
-        );
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        setHolidays(Array.isArray(data) ? data : []);
-      } catch (error) {
-        console.error("Error fetching holidays:", error);
-        setHolidays([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchHolidays();
-  }, [currentDate]);
+  const holidays = useMemo(
+    () => getHolidaysForMonth(currentDate.getFullYear(), currentDate.getMonth() + 1),
+    [currentDate]
+  );
 
   const getDaysInMonth = () => {
     const year = currentDate.getFullYear();
@@ -518,12 +486,6 @@ export default function Kalendar({
           })}
         </div>
 
-        {/* Loading Overlay */}
-        {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-sm rounded-3xl z-[100]">
-            <Icon icon="solar:settings-linear" className="text-4xl text-emerald-400 animate-spin" />
-          </div>
-        )}
       </div>
 
       {/* Mobile Info Modal */}

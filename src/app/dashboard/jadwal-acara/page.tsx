@@ -140,9 +140,13 @@ export default function JadwalAcaraPage() {
           <div className="hidden sm:flex items-center gap-2">
             <div className="px-4 py-2 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30">
               <div className="flex items-center gap-2">
-                <Icon icon="solar:calendar-mark-bold" className="text-emerald-400" />
+                {loading ? (
+                  <Icon icon="solar:settings-linear" className="text-emerald-400 animate-spin" />
+                ) : (
+                  <Icon icon="solar:calendar-mark-bold" className="text-emerald-400" />
+                )}
                 <span className="text-xs font-bold text-emerald-300">
-                  {events.length} Acara
+                  {loading ? "Memuat..." : `${events.length} Acara`}
                 </span>
               </div>
             </div>
@@ -160,18 +164,6 @@ export default function JadwalAcaraPage() {
         </div>
       )}
 
-      {/* Loading Overlay */}
-      {loading && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3">
-            <Icon
-              icon="solar:settings-linear"
-              className="text-5xl text-emerald-400 animate-spin"
-            />
-            <span className="text-sm text-slate-300">Memuat data...</span>
-          </div>
-        </div>
-      )}
 
       {/* Main Layout: Calendar (3/4) + Todo List (1/4) */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6">
