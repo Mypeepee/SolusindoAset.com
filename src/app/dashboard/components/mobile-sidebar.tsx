@@ -12,6 +12,12 @@ type MobileSidebarProps = {
   onClose: () => void;
 };
 
+function isActive(pathname: string, href?: string) {
+  if (!href) return false;
+  if (href === "/dashboard") return pathname === href;
+  return pathname === href || pathname.startsWith(href + "/");
+}
+
 export default function MobileSidebar({ open, onClose }: MobileSidebarProps) {
   const pathname = usePathname();
 
@@ -61,7 +67,7 @@ export default function MobileSidebar({ open, onClose }: MobileSidebarProps) {
                 <MobileSidebarItem
                   key={item.label}
                   item={item}
-                  active={pathname === item.href}
+                  active={isActive(pathname, item.href)}
                   onClose={onClose}
                 />
               ))}
@@ -77,7 +83,7 @@ export default function MobileSidebar({ open, onClose }: MobileSidebarProps) {
                 <MobileSidebarItem
                   key={item.label}
                   item={item}
-                  active={pathname === item.href}
+                  active={isActive(pathname, item.href)}
                   onClose={onClose}
                 />
               ))}

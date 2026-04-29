@@ -7,6 +7,12 @@ import { Icon } from "@iconify/react";
 import { usePathname } from "next/navigation";
 import { homepageMenu, appsMenu, type MenuItem } from "./list-menu";
 
+function isActive(pathname: string, href?: string) {
+  if (!href) return false;
+  if (href === "/dashboard") return pathname === href;
+  return pathname === href || pathname.startsWith(href + "/");
+}
+
 export function OwnerSidebar() {
   const pathname = usePathname();
 
@@ -84,7 +90,7 @@ export function OwnerSidebar() {
           <SidebarItem
             key={item.label}
             item={item}
-            active={pathname === item.href}
+            active={isActive(pathname, item.href)}
           />
         ))}
       </nav>
@@ -95,10 +101,10 @@ export function OwnerSidebar() {
       <SectionLabel>Apps</SectionLabel>
       <nav className="mb-2 space-y-1.5">
         {appsMenu.map((item) => (
-          <SidebarItem 
-            key={item.label} 
+          <SidebarItem
+            key={item.label}
             item={item}
-            active={pathname === item.href}
+            active={isActive(pathname, item.href)}
           />
         ))}
       </nav>
