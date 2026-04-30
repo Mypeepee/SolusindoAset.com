@@ -8,7 +8,6 @@ import WalletGrid from "./wallet-grid";
 import CashflowTable from "./cashflow-table";
 import CashflowEntrySheet from "./cashflow-entry-sheet";
 import WalletDropdown from "./wallet-dropdown";
-import { exportArusKasToExcel } from "../lib/export-excel";
 
 function getRowTimestamp(row: unknown) {
   if (!row || typeof row !== "object") return 0;
@@ -51,6 +50,7 @@ export default function ManageFundScreen({
     useState<DbCashflow | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const idProject = data.project.id_project;
 
   const latestRows = useMemo(() => {
     const source = Array.isArray(data.transactions) ? data.transactions : [];
@@ -150,15 +150,16 @@ export default function ManageFundScreen({
     window.location.reload();
   }
 
-  async function handleExport() {
+  function handleExport() {
     setIsExporting(true);
-    try {
-      await exportArusKasToExcel(data);
-    } catch {
-      window.alert("Gagal mengekspor data. Coba lagi.");
-    } finally {
-      setIsExporting(false);
-    }
+    const link = document.createElement("a");
+    link.href = `/api/project/${idProject}/export-arus-kas`;
+    link.download = "";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    // Reset setelah delay singkat
+    setTimeout(() => setIsExporting(false), 2000);
   }
 
   return (
