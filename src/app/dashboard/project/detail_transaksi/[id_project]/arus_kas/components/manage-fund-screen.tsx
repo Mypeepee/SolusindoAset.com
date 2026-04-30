@@ -1,11 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ChevronDown, Plus, FileSpreadsheet } from "lucide-react";
 import type { DbCashflow, ManageFundData, WalletKey } from "../types";
 import WalletGrid from "./wallet-grid";
 import CashflowTable from "./cashflow-table";
 import CashflowEntrySheet from "./cashflow-entry-sheet";
+import { exportArusKasToExcel } from "../lib/export-excel";
 
 function getRowTimestamp(row: unknown) {
   if (!row || typeof row !== "object") return 0;
@@ -49,11 +51,13 @@ export default function ManageFundScreen({
 }: {
   data: ManageFundData;
 }) {
+  const router = useRouter();
   const [selectedWallet, setSelectedWallet] = useState<WalletKey | "all">("all");
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] =
     useState<DbCashflow | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const latestRows = useMemo(() => {
     const source = Array.isArray(data.transactions) ? data.transactions : [];
@@ -153,6 +157,17 @@ export default function ManageFundScreen({
     window.location.reload();
   }
 
+  async function handleExport() {
+    setIsExporting(true);
+    try {
+      await exportArusKasToExcel(data, latestRows, selectedWallet);
+    } catch {
+      window.alert("Gagal mengekspor data. Coba lagi.");
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
   return (
     <>
       <div className="space-y-8">
@@ -160,6 +175,7 @@ export default function ManageFundScreen({
           wallets={data.wallets}
           selectedWallet={selectedWallet}
           onSelectWallet={setSelectedWallet}
+          onBack={() => router.back()}
         />
 
         <section className="space-y-5 rounded-[30px] border border-white/10 bg-white/[0.03] p-5 sm:p-6">
@@ -218,8 +234,18 @@ export default function ManageFundScreen({
 
               <button
                 type="button"
+                onClick={handleExport}
+                disabled={isExporting}
+                className="inline-flex items-center gap-2 rounded-full border border-emerald-300/30 bg-emerald-400/10 px-4 py-2 text-sm font-medium text-emerald-100 transition hover:bg-emerald-400/16 disabled:opacity-50"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                {isExporting ? "Mengekspor..." : "Export Excel"}
+              </button>
+
+              <button
+                type="button"
                 onClick={handleOpenCreate}
-                className="inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-400/12 px-4 py-2 text-sm font-medium text-cyan-100 transition hover:bg-cyan-400/16"
+                className="hidden lg:inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-400/12 px-4 py-2 text-sm font-medium text-cyan-100 transition hover:bg-cyan-400/16"
               >
                 <Plus className="h-4 w-4" />
                 Catat transaksi
