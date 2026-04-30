@@ -153,7 +153,7 @@ export default function ManageFundScreen({
   async function handleExport() {
     setIsExporting(true);
     try {
-      await exportArusKasToExcel(data, latestRows, selectedWallet);
+      await exportArusKasToExcel(data);
     } catch {
       window.alert("Gagal mengekspor data. Coba lagi.");
     } finally {
