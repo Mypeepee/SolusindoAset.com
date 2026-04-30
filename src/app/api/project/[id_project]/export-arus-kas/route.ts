@@ -48,9 +48,20 @@ export async function GET(
       select: {
         id_project: true,
         nama_project: true,
+        alamat_property: true,
+        provinsi: true,
+        kota: true,
+        kecamatan: true,
+        kelurahan: true,
         status: true,
+        jenis_pendanaan: true,
+        tanggal_pembelian: true,
+        mulai_tanggal: true,
+        estimasi_selesai: true,
+        estimasi_bulan: true,
         target_pendanaan: true,
         total_pendanaan: true,
+        harga_pembelian: true,
         total_biaya_akuisisi: true,
         nilai_limit_lelang: true,
         spare_bidding: true,
@@ -61,6 +72,13 @@ export async function GET(
         estimasi_harga_jual: true,
         estimasi_profit_bersih: true,
         dibuat_tanggal: true,
+        pembuat: {
+          select: {
+            pengguna: {
+              select: { nama_lengkap: true },
+            },
+          },
+        },
       },
     }),
     prisma.projectArusKas.findMany({
@@ -85,12 +103,24 @@ export async function GET(
     return NextResponse.json({ error: "Project tidak ditemukan" }, { status: 404 });
   }
 
+  const lokasiParts = [project.kota, project.kecamatan, project.kelurahan, project.provinsi].filter(Boolean);
+  const namaAgen = project.pembuat?.pengguna?.nama_lengkap ?? "-";
+
   const p = {
     id_project: project.id_project,
     nama_project: project.nama_project,
+    alamat_property: project.alamat_property ?? "-",
+    lokasi: lokasiParts.length ? lokasiParts.join(", ") : "-",
     status: project.status ?? "-",
+    jenis_pendanaan: String(project.jenis_pendanaan ?? "-").replace(/_/g, " "),
+    tanggal_pembelian: project.tanggal_pembelian,
+    mulai_tanggal: project.mulai_tanggal,
+    estimasi_selesai: project.estimasi_selesai,
+    estimasi_bulan: project.estimasi_bulan ?? 0,
+    penanggung_jawab: namaAgen,
     target_pendanaan: n(project.target_pendanaan),
     total_pendanaan: n(project.total_pendanaan),
+    harga_pembelian: n(project.harga_pembelian),
     total_biaya_akuisisi: n(project.total_biaya_akuisisi),
     nilai_limit_lelang: n(project.nilai_limit_lelang),
     spare_bidding: n(project.spare_bidding),
@@ -151,15 +181,22 @@ export async function GET(
   const cover = S("Cover");
   set(cover, "D9",  p.id_project);
   set(cover, "D13", p.nama_project);
-  set(cover, "D17", fmtDate(p.dibuat_tanggal));
+  set(cover, "D14", p.alamat_property);
+  set(cover, "D15", p.lokasi);
+  set(cover, "D16", fmtDate(p.tanggal_pembelian));
+  set(cover, "D17", fmtDate(p.mulai_tanggal));
+  set(cover, "D18", fmtDate(p.estimasi_selesai));
+  set(cover, "D19", p.estimasi_bulan > 0 ? `${p.estimasi_bulan} bulan` : "-");
   set(cover, "D20", p.status);
-  set(cover, "B28", p.total_biaya_akuisisi);
+  set(cover, "D21", p.jenis_pendanaan);
+  set(cover, "D22", p.penanggung_jawab);
+  set(cover, "B28", p.harga_pembelian);
   set(cover, "D28", p.estimasi_harga_jual);
   set(cover, "F28", p.estimasi_profit_bersih);
 
   // ── 2. PROFIL PROYEK ────────────────────────────────────────
   const profil = S("Profil Proyek");
-  set(profil, "D9",  p.total_biaya_akuisisi);
+  set(profil, "D9",  p.harga_pembelian);
   set(profil, "D10", p.estimasi_harga_jual);
   set(profil, "D11", p.estimasi_profit_bersih);
   set(profil, "D15", p.nilai_limit_lelang);
