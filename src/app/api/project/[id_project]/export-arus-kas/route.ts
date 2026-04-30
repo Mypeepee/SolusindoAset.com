@@ -144,23 +144,25 @@ export async function GET(
     catatan: r.catatan ?? "",
   }));
 
-  // Budget per dompet
-  const budgetUtama    = p.nilai_limit_lelang + p.spare_bidding + p.biaya_eksekusi;
+  // Budget per dompet (Utama = limit + bidding SAJA, Eksekusi terpisah)
+  const budgetUtama    = p.nilai_limit_lelang + p.spare_bidding;
   const budgetDokumen  = p.biaya_balik_nama;
+  const budgetEksekusi = p.biaya_eksekusi;
   const budgetRenovasi = p.biaya_renov;
   const budgetCadangan = p.dana_cadangan;
-  const totalBudget    = budgetUtama + budgetDokumen + budgetRenovasi + budgetCadangan;
+  const totalBudget    = budgetUtama + budgetDokumen + budgetEksekusi + budgetRenovasi + budgetCadangan;
 
-  // Realisasi per dompet (pengeluaran saja sesuai template)
+  // Realisasi per dompet (pengeluaran saja)
   const realOf = (key: WalletKey) =>
     transactions.filter((t) => t.wallet_key === key && t.jenis_transaksi === "pengeluaran")
       .reduce((s, t) => s + t.nominal, 0);
 
-  const realUtama    = realOf("utama") + realOf("eksekusi");
+  const realUtama    = realOf("utama");
   const realDokumen  = realOf("dokumen");
+  const realEksekusi = realOf("eksekusi");
   const realRenovasi = realOf("renovasi");
   const realCadangan = realOf("cadangan");
-  const totalReal    = realUtama + realDokumen + realRenovasi + realCadangan;
+  const totalReal    = realUtama + realDokumen + realEksekusi + realRenovasi + realCadangan;
 
   const totalIncome  = transactions.filter((t) => t.jenis_transaksi === "pemasukan").reduce((s, t) => s + t.nominal, 0);
   const totalExpense = transactions.filter((t) => t.jenis_transaksi === "pengeluaran").reduce((s, t) => s + t.nominal, 0);
@@ -190,13 +192,13 @@ export async function GET(
   set(cover, "D20", p.status);
   set(cover, "D21", p.jenis_pendanaan);
   set(cover, "D22", p.penanggung_jawab);
-  set(cover, "B28", p.harga_pembelian);
+  set(cover, "B28", p.total_biaya_akuisisi);
   set(cover, "D28", p.estimasi_harga_jual);
   set(cover, "F28", p.estimasi_profit_bersih);
 
   // ── 2. PROFIL PROYEK ────────────────────────────────────────
   const profil = S("Profil Proyek");
-  set(profil, "D9",  p.harga_pembelian);
+  set(profil, "D9",  p.total_biaya_akuisisi);
   set(profil, "D10", p.estimasi_harga_jual);
   set(profil, "D11", p.estimasi_profit_bersih);
   set(profil, "D15", p.nilai_limit_lelang);
@@ -237,10 +239,11 @@ export async function GET(
 
   // ── 4. DOMPET SHEETS ────────────────────────────────────────
   const dompetCfg = [
-    { name: "Dompet Utama",    key: ["utama","eksekusi"] as WalletKey[], budget: budgetUtama,    real: realUtama    },
-    { name: "Dompet Dokumen",  key: ["dokumen"]           as WalletKey[], budget: budgetDokumen,  real: realDokumen  },
-    { name: "Dompet Renovasi", key: ["renovasi"]          as WalletKey[], budget: budgetRenovasi, real: realRenovasi },
-    { name: "Dompet Cadangan", key: ["cadangan"]          as WalletKey[], budget: budgetCadangan, real: realCadangan },
+    { name: "Dompet Utama",    key: ["utama"]    as WalletKey[], budget: budgetUtama,    real: realUtama    },
+    { name: "Dompet Dokumen",  key: ["dokumen"]  as WalletKey[], budget: budgetDokumen,  real: realDokumen  },
+    { name: "Dompet Eksekusi", key: ["eksekusi"] as WalletKey[], budget: budgetEksekusi, real: realEksekusi },
+    { name: "Dompet Renovasi", key: ["renovasi"] as WalletKey[], budget: budgetRenovasi, real: realRenovasi },
+    { name: "Dompet Cadangan", key: ["cadangan"] as WalletKey[], budget: budgetCadangan, real: realCadangan },
   ];
 
   for (const cfg of dompetCfg) {
@@ -282,26 +285,33 @@ export async function GET(
   set(ringkasan, "D12", totalExpense);
   set(ringkasan, "F12", totalBalance);
 
+  // 5 dompet rows 17-21, TOTAL row 22
   const dompetRows = [
-    { row: 17, budget: budgetUtama,    real: realUtama    },
-    { row: 18, budget: budgetDokumen,  real: realDokumen  },
-    { row: 19, budget: budgetRenovasi, real: realRenovasi },
-    { row: 20, budget: budgetCadangan, real: realCadangan },
+    { row: 17, label: "Utama",    src: "Limit Lelang + Spare Bidding",         budget: budgetUtama,    real: realUtama    },
+    { row: 18, label: "Dokumen",  src: "Biaya Balik Nama (Notaris, BPN, Pajak)", budget: budgetDokumen,  real: realDokumen  },
+    { row: 19, label: "Eksekusi", src: "Biaya Eksekusi",                        budget: budgetEksekusi, real: realEksekusi },
+    { row: 20, label: "Renovasi", src: "Renovasi & Peningkatan Properti",       budget: budgetRenovasi, real: realRenovasi },
+    { row: 21, label: "Cadangan", src: "Dana Cadangan / Kontingensi",           budget: budgetCadangan, real: realCadangan },
   ];
   for (const dr of dompetRows) {
-    const sisa2  = dr.budget - dr.real;
-    const p2     = dr.budget > 0 ? dr.real / dr.budget : 0;
+    const sisa2 = dr.budget - dr.real;
+    const p2    = dr.budget > 0 ? dr.real / dr.budget : 0;
+    set(ringkasan, `B${dr.row}`, dr.label);
+    set(ringkasan, `C${dr.row}`, dr.src);
     set(ringkasan, `D${dr.row}`, dr.budget);
     set(ringkasan, `E${dr.row}`, dr.real);
     set(ringkasan, `F${dr.row}`, sisa2);
     set(ringkasan, `G${dr.row}`, p2);
     set(ringkasan, `H${dr.row}`, status(p2));
   }
-  set(ringkasan, "D21", totalBudget);
-  set(ringkasan, "E21", totalReal);
-  set(ringkasan, "F21", sisaTotal);
-  set(ringkasan, "G21", penyerapanTotal);
-  set(ringkasan, "H21", status(penyerapanTotal));
+  // TOTAL di row 22 (geser 1 dari template asli yang di row 21)
+  set(ringkasan, "B22", "TOTAL");
+  set(ringkasan, "C22", "Seluruh Dompet");
+  set(ringkasan, "D22", totalBudget);
+  set(ringkasan, "E22", totalReal);
+  set(ringkasan, "F22", sisaTotal);
+  set(ringkasan, "G22", penyerapanTotal);
+  set(ringkasan, "H22", status(penyerapanTotal));
 
   const roi = p.total_biaya_akuisisi > 0
     ? ((p.estimasi_profit_bersih / p.total_biaya_akuisisi) * 100).toFixed(1) : "0.0";
@@ -312,26 +322,33 @@ export async function GET(
 
   // ── 6. ANGGARAN vs REALISASI ────────────────────────────────
   const avr = S("Anggaran vs Realisasi");
+  // 5 dompet rows 6-10, TOTAL row 11
   const avrRows = [
-    { row: 6, budget: budgetUtama,    real: realUtama    },
-    { row: 7, budget: budgetDokumen,  real: realDokumen  },
-    { row: 8, budget: budgetRenovasi, real: realRenovasi },
-    { row: 9, budget: budgetCadangan, real: realCadangan },
+    { row: 6,  label: "Utama",    src: "Limit Lelang + Spare Bidding",          budget: budgetUtama,    real: realUtama    },
+    { row: 7,  label: "Dokumen",  src: "Biaya Balik Nama (Notaris, BPN, Pajak)", budget: budgetDokumen,  real: realDokumen  },
+    { row: 8,  label: "Eksekusi", src: "Biaya Eksekusi",                         budget: budgetEksekusi, real: realEksekusi },
+    { row: 9,  label: "Renovasi", src: "Renovasi & Peningkatan Properti",        budget: budgetRenovasi, real: realRenovasi },
+    { row: 10, label: "Cadangan", src: "Dana Cadangan / Kontingensi",            budget: budgetCadangan, real: realCadangan },
   ];
   for (const ar of avrRows) {
     const v  = ar.budget - ar.real;
     const p3 = ar.budget > 0 ? ar.real / ar.budget : 0;
+    set(avr, `B${ar.row}`, ar.label);
+    set(avr, `C${ar.row}`, ar.src);
     set(avr, `D${ar.row}`, ar.budget);
     set(avr, `E${ar.row}`, ar.real);
     set(avr, `F${ar.row}`, v);
     set(avr, `G${ar.row}`, p3);
     set(avr, `H${ar.row}`, status(p3));
   }
-  set(avr, "D10", totalBudget);
-  set(avr, "E10", totalReal);
-  set(avr, "F10", sisaTotal);
-  set(avr, "G10", penyerapanTotal);
-  set(avr, "H10", status(penyerapanTotal));
+  // TOTAL row 11
+  set(avr, "B11", "TOTAL");
+  set(avr, "C11", "Seluruh Dompet");
+  set(avr, "D11", totalBudget);
+  set(avr, "E11", totalReal);
+  set(avr, "F11", sisaTotal);
+  set(avr, "G11", penyerapanTotal);
+  set(avr, "H11", status(penyerapanTotal));
 
   // ── 7. BREAKDOWN KATEGORI ───────────────────────────────────
   const bkSheet = S("Breakdown Kategori");
