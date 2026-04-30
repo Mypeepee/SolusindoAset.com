@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Plus, FileSpreadsheet } from "lucide-react";
+import { FileSpreadsheet, Plus } from "lucide-react";
 import type { DbCashflow, ManageFundData, WalletKey } from "../types";
 import WalletGrid from "./wallet-grid";
 import CashflowTable from "./cashflow-table";
 import CashflowEntrySheet from "./cashflow-entry-sheet";
+import WalletDropdown from "./wallet-dropdown";
 import { exportArusKasToExcel } from "../lib/export-excel";
 
 function getRowTimestamp(row: unknown) {
@@ -37,14 +38,6 @@ function getRowTimestamp(row: unknown) {
   return 0;
 }
 
-const WALLET_OPTIONS: Array<{ value: WalletKey | "all"; label: string }> = [
-  { value: "all", label: "Semua dompet" },
-  { value: "utama", label: "Dompet Utama" },
-  { value: "dokumen", label: "Dokumen" },
-  { value: "eksekusi", label: "Eksekusi" },
-  { value: "renovasi", label: "Renovasi" },
-  { value: "cadangan", label: "Cadangan" },
-];
 
 export default function ManageFundScreen({
   data,
@@ -194,62 +187,41 @@ export default function ManageFundScreen({
               </p>
             </div>
 
-            <div className="flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="relative min-w-[220px]">
-                  <select
-                    value={selectedWallet}
-                    onChange={(event) =>
-                      setSelectedWallet(event.target.value as WalletKey | "all")
-                    }
-                    className="h-11 w-full appearance-none rounded-full border border-white/10 bg-white/[0.04] px-4 pr-11 text-sm font-medium text-slate-200 outline-none transition hover:bg-white/[0.06] focus:border-cyan-300/35 focus:bg-white/[0.06]"
-                  >
-                    {WALLET_OPTIONS.map((option) => (
-                      <option
-                        key={option.value}
-                        value={option.value}
-                        className="bg-slate-950 text-white"
-                      >
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+            {/* Controls — satu baris di semua ukuran layar */}
+            <div className="flex items-center gap-2 flex-wrap xl:flex-nowrap xl:justify-end">
+              <WalletDropdown value={selectedWallet} onChange={setSelectedWallet} />
 
-                  <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/45" />
-                </div>
-
-                <div className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-300">
-                  {latestRows.length} transaksi
-                </div>
-
-                {editingTransaction ? (
-                  <div className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-2 text-sm text-cyan-100">
-                    Sedang edit:{" "}
-                    <span className="font-medium">
-                      {editingTransaction.judul_transaksi || "Transaksi"}
-                    </span>
-                  </div>
-                ) : null}
+              <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-400 whitespace-nowrap">
+                {latestRows.length} transaksi
               </div>
 
               <button
                 type="button"
                 onClick={handleExport}
                 disabled={isExporting}
-                className="inline-flex items-center gap-2 rounded-full border border-emerald-300/30 bg-emerald-400/10 px-4 py-2 text-sm font-medium text-emerald-100 transition hover:bg-emerald-400/16 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/25 bg-emerald-400/10 px-3 py-1.5 text-xs font-medium text-emerald-200 transition hover:bg-emerald-400/16 disabled:opacity-50 whitespace-nowrap"
               >
-                <FileSpreadsheet className="h-4 w-4" />
+                <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
                 {isExporting ? "Mengekspor..." : "Export Excel"}
               </button>
 
               <button
                 type="button"
                 onClick={handleOpenCreate}
-                className="hidden lg:inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-400/12 px-4 py-2 text-sm font-medium text-cyan-100 transition hover:bg-cyan-400/16"
+                className="hidden lg:inline-flex items-center gap-1.5 rounded-full border border-cyan-300/25 bg-cyan-400/10 px-3 py-1.5 text-xs font-medium text-cyan-200 transition hover:bg-cyan-400/16 whitespace-nowrap"
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-3.5 w-3.5 shrink-0" />
                 Catat transaksi
               </button>
+
+              {editingTransaction && (
+                <div className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1.5 text-xs text-cyan-200 whitespace-nowrap">
+                  Edit:{" "}
+                  <span className="font-medium">
+                    {editingTransaction.judul_transaksi || "Transaksi"}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
