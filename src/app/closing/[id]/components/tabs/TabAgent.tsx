@@ -27,6 +27,7 @@ type AgentRelation = {
   nama: string;
   kantor: string | null;
   jabatan?: string | null;
+  foto?: string | null;
 };
 
 type AgentRelationsResponse = {
@@ -167,7 +168,7 @@ function SectionHeader({
           {title}
         </h3>
         {subtitle ? (
-          <p className="mt-1 text-xs leading-5 text-white/45">{subtitle}</p>
+          <p className="mt-1 text-xs leading-5 text-zinc-400">{subtitle}</p>
         ) : null}
       </div>
     </div>
@@ -194,7 +195,7 @@ function HeroStat({
           : "bg-white/[0.04] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]"
       )}
     >
-      <div className="flex items-center gap-2 text-white/45">
+      <div className="flex items-center gap-2 text-zinc-400">
         {icon}
         <span className="text-[11px] font-semibold uppercase tracking-[0.16em]">
           {label}
@@ -222,7 +223,7 @@ function EmptyState({
   return (
     <div className="rounded-2xl bg-white/[0.03] px-4 py-10 text-center shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]">
       <div className="text-sm font-medium text-white/72">{title}</div>
-      <div className="mt-1 text-xs text-white/40">{subtitle}</div>
+      <div className="mt-1 text-xs text-zinc-400">{subtitle}</div>
     </div>
   );
 }
@@ -278,14 +279,14 @@ function RelationCard({
             >
               {person.nama}
             </div>
-            <div className="mt-1 text-sm text-white/45">{person.id_agent}</div>
+            <div className="mt-1 text-sm text-zinc-400">{person.id_agent}</div>
 
             <div className="mt-4 grid gap-2">
               <div className="rounded-xl bg-white/[0.04] px-3 py-2 text-sm text-white/75 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]">
-                <span className="text-white/40">Kantor:</span> {person.kantor ?? "-"}
+                <span className="text-zinc-400">Kantor:</span> {person.kantor ?? "-"}
               </div>
               <div className="rounded-xl bg-white/[0.04] px-3 py-2 text-sm text-white/75 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]">
-                <span className="text-white/40">Jabatan:</span> {person.jabatan ?? "-"}
+                <span className="text-zinc-400">Jabatan:</span> {person.jabatan ?? "-"}
               </div>
             </div>
           </div>
@@ -293,7 +294,7 @@ function RelationCard({
       ) : (
         <div className="mt-5 rounded-2xl bg-white/[0.03] px-4 py-8 text-center shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]">
           <div className="text-sm font-medium text-white/72">Belum ada data</div>
-          <div className="mt-1 text-xs text-white/40">
+          <div className="mt-1 text-xs text-zinc-400">
             Informasi belum tersedia.
           </div>
         </div>
@@ -312,7 +313,7 @@ function DownlineCard({ item }: { item: AgentRelation }) {
 
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold text-white">{item.nama}</div>
-          <div className="mt-1 text-xs text-white/40">{item.id_agent}</div>
+          <div className="mt-1 text-xs text-zinc-400">{item.id_agent}</div>
         </div>
 
         <span className="rounded-full bg-emerald-400/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.10)]">
@@ -320,15 +321,76 @@ function DownlineCard({ item }: { item: AgentRelation }) {
         </span>
       </div>
 
-      <div className="mt-4 rounded-xl bg-black/15 px-3 py-2 text-sm text-white/70">
-        <span className="text-white/35">Kantor:</span> {item.kantor ?? "-"}
+      <div className="mt-4 rounded-xl bg-black/15 px-3 py-2 text-sm text-zinc-300">
+        <span className="text-zinc-400">Kantor:</span> {item.kantor ?? "-"}
       </div>
     </div>
   );
 }
 
-function CommandDropdown({
-  label,
+/* ─── Avatar ─── */
+function Avatar({
+  person,
+  size = 44,
+  accent = false,
+}: {
+  person: AgentRelation;
+  size?: number;
+  accent?: boolean;
+}) {
+  const [imgFailed, setImgFailed] = useState(false);
+
+  const initials = person.nama
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? "")
+    .join("") || "—";
+
+  const showImg = !!person.foto && !imgFailed;
+
+  return (
+    <div
+      className={cn(
+        "relative shrink-0 overflow-hidden rounded-full font-bold",
+        accent
+          ? "ring-2 ring-emerald-500/50 shadow-[0_0_14px_rgba(16,185,129,0.30)]"
+          : "ring-1 ring-white/15"
+      )}
+      style={{ width: size, height: size }}
+    >
+      {/* initials background — always present */}
+      <div
+        className={cn(
+          "absolute inset-0 flex items-center justify-center",
+          accent
+            ? "bg-gradient-to-br from-emerald-400/30 to-emerald-600/20 text-emerald-200"
+            : "bg-gradient-to-br from-zinc-600/40 to-zinc-800/40 text-zinc-200"
+        )}
+        style={{ fontSize: size < 40 ? 11 : 14 }}
+      >
+        {initials}
+      </div>
+
+      {/* photo on top */}
+      {person.foto && (
+        <img
+          src={person.foto}
+          alt={person.nama}
+          className={cn(
+            "absolute inset-0 h-full w-full object-cover transition-opacity duration-200",
+            showImg ? "opacity-100" : "opacity-0"
+          )}
+          referrerPolicy="no-referrer"
+          onError={() => setImgFailed(true)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ─── AgentSelector — trigger is always a card, opens dropdown to change ─── */
+function AgentSelector({
   value,
   options,
   placeholder,
@@ -337,7 +399,6 @@ function CommandDropdown({
   disabled = false,
   accent = false,
 }: {
-  label: string;
   value: AgentRelation | null;
   options: AgentRelation[];
   placeholder: string;
@@ -349,162 +410,162 @@ function CommandDropdown({
   const [open, setOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (!wrapperRef.current) return;
-      if (!wrapperRef.current.contains(event.target as Node)) {
+    if (open) setTimeout(() => inputRef.current?.focus(), 50);
+  }, [open]);
+
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (!wrapperRef.current?.contains(e.target as Node)) {
         setOpen(false);
+        setKeyword("");
       }
     }
-
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") { setOpen(false); setKeyword(""); }
     }
-
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
     };
   }, []);
 
-  const filteredOptions = useMemo(() => {
+  const filtered = useMemo(() => {
     const q = keyword.trim().toLowerCase();
     if (!q) return options;
-
-    return options.filter((item) => {
-      return (
-        item.nama.toLowerCase().includes(q) ||
-        item.id_agent.toLowerCase().includes(q) ||
-        (item.kantor ?? "").toLowerCase().includes(q)
-      );
-    });
+    return options.filter((item) =>
+      `${item.nama} ${item.id_agent} ${item.kantor ?? ""}`.toLowerCase().includes(q)
+    );
   }, [keyword, options]);
 
   return (
     <div ref={wrapperRef} className={cn("relative", open && "z-[200]")}>
-      <label className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">
-        {label}
-      </label>
-
+      {/* ── Trigger ── */}
       <button
         type="button"
         disabled={disabled}
-        onClick={() => !disabled && setOpen((prev) => !prev)}
+        onClick={() => !disabled && setOpen((v) => !v)}
         className={cn(
-          "flex h-14 w-full items-center justify-between rounded-[22px] px-4 text-left transition",
-          "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]",
+          "flex w-full items-center gap-3 rounded-2xl p-3 text-left transition",
           disabled
-            ? "cursor-not-allowed bg-white/[0.03] text-white/30"
-            : accent
-            ? "bg-emerald-400/[0.08] text-white hover:bg-emerald-400/[0.10]"
-            : "bg-white/[0.05] text-white hover:bg-white/[0.065]"
+            ? "cursor-not-allowed opacity-40"
+            : "cursor-pointer hover:opacity-90",
+          accent
+            ? "bg-emerald-500/[0.08] shadow-[0_0_0_1px_rgba(16,185,129,0.18)]"
+            : "bg-white/[0.05] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07)]",
+          open && !accent && "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14)]",
+          open && accent && "shadow-[0_0_0_1px_rgba(16,185,129,0.35)]"
         )}
       >
-        <div className="min-w-0">
-          {value ? (
-            <>
-              <div className="truncate text-sm font-medium text-white">
+        {value ? (
+          <>
+            <Avatar person={value} size={44} accent={accent} />
+            <div className="min-w-0 flex-1">
+              <div className={cn("truncate text-sm font-semibold", accent ? "text-emerald-200" : "text-white")}>
                 {value.nama}
               </div>
-              <div className="truncate text-xs text-white/45">
-                {value.id_agent}
-                {value.kantor ? ` • ${value.kantor}` : ""}
+              <div className="mt-0.5 truncate text-[11px] text-zinc-400">
+                {value.id_agent}{value.kantor ? ` · ${value.kantor}` : ""}
               </div>
-            </>
-          ) : (
-            <div className="text-sm text-white/45">{placeholder}</div>
-          )}
-        </div>
-
+            </div>
+          </>
+        ) : (
+          <>
+            <div className={cn(
+              "flex h-11 w-11 shrink-0 items-center justify-center rounded-full",
+              accent ? "bg-emerald-500/10" : "bg-white/[0.04]"
+            )}>
+              <User2 size={18} className={accent ? "text-emerald-500/60" : "text-zinc-400"} />
+            </div>
+            <span className="text-sm text-zinc-400">{placeholder}</span>
+          </>
+        )}
         <ChevronDown
+          size={16}
           className={cn(
-            "ml-3 h-4 w-4 shrink-0 text-white/40 transition",
+            "ml-auto shrink-0 transition-transform duration-200",
+            accent ? "text-emerald-500/50" : "text-zinc-400",
             open && "rotate-180"
           )}
         />
       </button>
 
-      {open && !disabled ? (
-        <div className="absolute left-0 top-full z-[300] mt-3 w-full overflow-hidden rounded-[24px] bg-[#0d1211] shadow-[0_24px_80px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.03)]">
-          <div className="border-b border-white/5 p-3">
-            <div className="flex items-center gap-3 rounded-2xl bg-white/[0.04] px-3 py-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]">
-              <Search className="h-4 w-4 text-white/35" />
+      {/* ── Dropdown ── */}
+      {open && !disabled && (
+        <div className="absolute left-0 top-full z-[300] mt-2 w-full overflow-hidden rounded-2xl bg-[#0d1211] shadow-[0_24px_60px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,255,255,0.04)]">
+          {/* search */}
+          <div className="border-b border-white/[0.06] p-2.5">
+            <div className="flex items-center gap-2.5 rounded-xl bg-white/[0.04] px-3 py-2.5">
+              <Search size={14} className="shrink-0 text-zinc-400" />
               <input
-                autoFocus
+                ref={inputRef}
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
                 placeholder={searchPlaceholder}
-                className="w-full bg-transparent text-sm text-white placeholder:text-white/30 outline-none"
+                className="w-full bg-transparent text-sm text-white outline-none placeholder:text-zinc-400"
               />
             </div>
           </div>
 
-          <div className="max-h-80 overflow-y-auto p-2">
-            {filteredOptions.length > 0 ? (
-              <div className="space-y-1">
-                {filteredOptions.map((item) => {
-                  const selected = value?.id_agent === item.id_agent;
-
+          {/* list */}
+          <div className="max-h-72 overflow-y-auto p-1.5">
+            {filtered.length > 0 ? (
+              <div className="space-y-0.5">
+                {filtered.map((item) => {
+                  const sel = value?.id_agent === item.id_agent;
                   return (
                     <button
                       key={item.id_agent}
                       type="button"
-                      onClick={() => {
-                        onSelect(item);
-                        setOpen(false);
-                        setKeyword("");
-                      }}
+                      onClick={() => { onSelect(item); setOpen(false); setKeyword(""); }}
                       className={cn(
-                        "flex w-full items-start justify-between gap-3 rounded-2xl px-3 py-3 text-left transition",
-                        selected
-                          ? "bg-emerald-400/[0.10] shadow-[inset_0_0_0_1px_rgba(16,185,129,0.12)]"
+                        "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition",
+                        sel
+                          ? "bg-emerald-500/10 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.15)]"
                           : "hover:bg-white/[0.04]"
                       )}
                     >
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-medium text-white">
+                      <Avatar person={item} size={36} accent={sel} />
+                      <div className="min-w-0 flex-1">
+                        <div className={cn("truncate text-sm font-medium", sel ? "text-emerald-200" : "text-white")}>
                           {item.nama}
                         </div>
-                        <div className="mt-1 truncate text-xs text-white/40">
-                          {item.id_agent}
-                          {item.kantor ? ` • ${item.kantor}` : ""}
+                        <div className="truncate text-[11px] text-zinc-400">
+                          {item.id_agent}{item.kantor ? ` · ${item.kantor}` : ""}
                         </div>
                       </div>
-
-                      {selected ? (
-                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
-                      ) : null}
+                      {sel && <Check size={14} className="shrink-0 text-emerald-400" />}
                     </button>
                   );
                 })}
               </div>
             ) : (
-              <div className="px-3 py-8 text-center">
-                <div className="text-sm font-medium text-white/70">
-                  Tidak ada hasil
-                </div>
-                <div className="mt-1 text-xs text-white/40">
-                  Coba gunakan kata kunci lain.
-                </div>
+              <div className="py-8 text-center text-sm text-zinc-400">
+                Tidak ada hasil
               </div>
             )}
           </div>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
 
 export default function TabAgent({
   agent,
+  onNext,
+  onAgentChange,
+  onLeaderChange,
 }: {
   agent: Agent | null;
+  leader?: unknown;
+  onNext?: () => void;
+  onAgentChange?: (name: string) => void;
+  onLeaderChange?: (name: string) => void;
 }) {
   const [data, setData] = useState<AgentRelationsResponse>({
     agents: [],
@@ -706,29 +767,22 @@ export default function TabAgent({
     }
   }
 
-  async function handleSaveLeader() {
-    if (!selectedAgentId || !selectedLeaderId) return;
+  async function saveLeader(agentId: string, leaderId: string) {
+    if (!agentId || !leaderId) return;
 
     try {
       setSaving(true);
 
       const res = await fetch(`/api/closing/listing/${initialAgentId}/agent`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          agentId: selectedAgentId,
-          teamLeaderId: selectedLeaderId,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId, teamLeaderId: leaderId }),
       });
 
-      if (!res.ok) {
-        throw new Error("Gagal menyimpan team leader");
-      }
+      if (!res.ok) throw new Error("Gagal menyimpan team leader");
 
-      persistSelection(selectedAgentId, selectedLeaderId);
-      await fetchAgentRelations(selectedAgentId, selectedLeaderId);
+      persistSelection(agentId, leaderId);
+      await fetchAgentRelations(agentId, leaderId);
     } catch (error) {
       console.error(error);
     } finally {
@@ -738,173 +792,127 @@ export default function TabAgent({
 
   const displayedLeader = selectedLeaderObject;
 
+  // sync nama ke hero card ClosingShell
+  useEffect(() => {
+    onAgentChange?.(selectedAgentObject?.nama ?? "");
+  }, [selectedAgentObject?.nama]);
+
+  useEffect(() => {
+    onLeaderChange?.(displayedLeader?.nama ?? "");
+  }, [displayedLeader?.nama]);
+
   return (
-    <div className="space-y-4 sm:space-y-5">
-      <GlassCard glow className="relative z-40 overflow-visible p-4 sm:p-5">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.10)]">
-              <ShieldCheck size={13} />
-              Agent Structure
-            </div>
+    <div className="space-y-4">
+      {/* ── Selector card ── */}
+      <GlassCard glow className="relative z-40 overflow-visible p-5 sm:p-6">
 
-            <h2 className="mt-3 text-lg font-semibold tracking-[-0.02em] text-white sm:text-[22px]">
-              Struktur agent closing
-            </h2>
-
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-white/45">
-              Pilih agent, lihat relasinya, lalu tentukan team leader dengan
-              tampilan yang lebih professional dan nyaman di semua layar.
-            </p>
+        {/* label */}
+        <div className="mb-5 flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 ring-1 ring-emerald-500/20">
+            <ShieldCheck size={14} className="text-emerald-400" />
           </div>
+          <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-400/80">
+            Agent Structure
+          </span>
+        </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[620px]">
-            <CommandDropdown
-              label="Pilih Agent"
+        {/* two-column selectors */}
+        <div className="grid gap-4 sm:grid-cols-2">
+
+          {/* ─ Agent ─ */}
+          <div className="space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-300">
+              Agent Closing
+            </p>
+            <AgentSelector
               value={selectedAgentObject}
               options={data.agents}
-              placeholder="Pilih agent closing"
-              searchPlaceholder="Cari nama agent, ID, kantor..."
-              onSelect={(item) => {
-                handleChangeAgent(item.id_agent);
-              }}
+              placeholder="Cari & pilih agent..."
+              searchPlaceholder="Nama, ID, kantor..."
+              onSelect={(item) => handleChangeAgent(item.id_agent)}
             />
+          </div>
 
-            <CommandDropdown
-              label="Pilih Team Leader"
+          {/* ─ Team Leader ─ */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-300">
+                Team Leader
+              </p>
+              {saving && (
+                <span className="flex items-center gap-1.5 text-[10px] text-emerald-400/70">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+                  Menyimpan...
+                </span>
+              )}
+            </div>
+            <AgentSelector
               value={displayedLeader}
               options={data.teamLeaderOptions}
-              placeholder="Pilih team leader"
+              placeholder={selectedAgentId ? "Pilih team leader..." : "Pilih agent dulu"}
               searchPlaceholder="Cari team leader..."
               disabled={!selectedAgentId}
               accent
               onSelect={(item) => {
                 setSelectedLeaderId(item.id_agent);
                 persistSelection(selectedAgentId, item.id_agent);
+                saveLeader(selectedAgentId, item.id_agent);
               }}
             />
           </div>
         </div>
-
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap gap-2">
-            <span className="rounded-full bg-white/[0.04] px-3 py-1.5 text-xs text-white/58 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]">
-              Agent:{" "}
-              <span className="text-white/85">
-                {selectedAgentObject?.nama ?? agent?.nama ?? "-"}
-              </span>
-            </span>
-
-            <span className="rounded-full bg-emerald-400/10 px-3 py-1.5 text-xs text-emerald-300 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.10)]">
-              TL dipilih:{" "}
-              <span className="text-emerald-200">
-                {displayedLeader?.nama ?? "Belum dipilih"}
-              </span>
-            </span>
-
-            <span className="rounded-full bg-white/[0.04] px-3 py-1.5 text-xs text-white/58 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]">
-              Downline:{" "}
-              <span className="text-white/85">{data.downlines.length}</span>
-            </span>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleSaveLeader}
-            disabled={!selectedAgentId || !selectedLeaderId || saving}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-emerald-400 px-4 text-sm font-semibold text-[#06281f] transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50 shadow-[0_10px_30px_rgba(16,185,129,0.22)]"
-          >
-            <Save size={16} />
-            {saving ? "Menyimpan..." : "Simpan Team Leader"}
-          </button>
-        </div>
       </GlassCard>
 
+      {/* ── Upline | Downline ── */}
       {loading ? (
-        <div className="grid gap-4 lg:grid-cols-12">
-          <div className="lg:col-span-5">
-            <div className="h-[320px] animate-pulse rounded-[30px] bg-white/[0.035]" />
-          </div>
-          <div className="lg:col-span-7">
-            <div className="h-[320px] animate-pulse rounded-[30px] bg-white/[0.035]" />
-          </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="h-[180px] animate-pulse rounded-[30px] bg-white/[0.035]" />
+          <div className="h-[180px] animate-pulse rounded-[30px] bg-white/[0.035]" />
         </div>
       ) : (
-        <div className="relative z-0 grid gap-4 lg:grid-cols-12">
-          <div className="space-y-4 lg:col-span-5">
-            <HeroCard
-              title="Agent yang Closing"
-              subtitle="Profil utama dari agent yang sedang dipilih"
-              icon={<User2 size={20} />}
-              tone="emerald"
-            >
-              <div className="grid gap-3">
-                <HeroStat
-                  icon={<User2 size={14} />}
-                  label="Nama Agent"
-                  value={selectedAgentObject?.nama ?? "-"}
-                  accent
+        <div className="grid gap-4 sm:grid-cols-2">
+          <RelationCard
+            title="Upline"
+            subtitle="Agent yang mereferensikan"
+            person={data.upline}
+            icon={<GitBranch size={18} />}
+          />
+          <GlassCard className="overflow-hidden p-5">
+            <SectionHeader
+              icon={<Users size={18} />}
+              title="Downline"
+              subtitle={`${data.downlines.length} agent di bawah`}
+            />
+            <div className="mt-4">
+              {data.downlines.length > 0 ? (
+                <div className="space-y-2">
+                  {data.downlines.map((item) => (
+                    <DownlineCard key={item.id_agent} item={item} />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  title="Belum ada downline"
+                  subtitle="Agent ini belum memiliki downline."
                 />
-                <HeroStat
-                  icon={<BadgeCheck size={14} />}
-                  label="ID Agent"
-                  value={selectedAgentObject?.id_agent ?? "-"}
-                />
-                <HeroStat
-                  icon={<Building2 size={14} />}
-                  label="Kantor"
-                  value={selectedAgentObject?.kantor ?? "-"}
-                />
-                <HeroStat
-                  icon={<ShieldCheck size={14} />}
-                  label="Jabatan"
-                  value={selectedAgentObject?.jabatan ?? "-"}
-                />
-              </div>
-            </HeroCard>
-          </div>
-
-          <div className="space-y-4 lg:col-span-7">
-            <div className="grid gap-4 md:grid-cols-2">
-              <RelationCard
-                title="Upline"
-                subtitle="Agent yang mengajak / mereferensikan"
-                person={data.upline}
-                icon={<GitBranch size={18} />}
-              />
-
-              <RelationCard
-                title="Team Leader"
-                subtitle="Langsung mengikuti pilihan dari dropdown"
-                person={displayedLeader}
-                icon={<Crown size={18} />}
-                accent
-              />
+              )}
             </div>
+          </GlassCard>
+        </div>
+      )}
 
-            <GlassCard className="overflow-hidden p-5 sm:p-6">
-              <SectionHeader
-                icon={<Users size={18} />}
-                title="Downline Agent"
-                subtitle="Daftar agent yang berada di bawah agent ini"
-              />
-
-              <div className="mt-5">
-                {data.downlines.length > 0 ? (
-                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                    {data.downlines.map((item) => (
-                      <DownlineCard key={item.id_agent} item={item} />
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState
-                    title="Belum ada downline"
-                    subtitle="Agent ini belum memiliki downline yang terdaftar."
-                  />
-                )}
-              </div>
-            </GlassCard>
-          </div>
+      {/* ── Lanjut button — paling bawah ── */}
+      {onNext && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            disabled={!selectedAgentId || saving}
+            onClick={() => onNext()}
+            className="inline-flex h-11 items-center gap-2.5 rounded-xl bg-emerald-500 px-6 text-sm font-semibold text-white shadow-[0_0_24px_rgba(16,185,129,0.35)] transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Lanjut ke Transaksi
+            <ChevronDown size={16} className="-rotate-90" />
+          </button>
         </div>
       )}
     </div>

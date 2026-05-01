@@ -93,15 +93,40 @@ export default function ClosingShell({
   const alamat = safe((listing as any).alamat_lengkap) || "-";
   const judul = safe(listing.judul) || "Detail Closing";
 
-  const agentName =
+  const defaultAgentName =
     safe((agent as any)?.pengguna?.nama_lengkap) ||
     safe((agent as any)?.nama_kantor) ||
     "-";
 
-  const leaderName =
+  const defaultLeaderName =
     safe((leader as any)?.pengguna?.nama_lengkap) ||
     safe((leader as any)?.nama_kantor) ||
     "-";
+
+  const [agentName, setAgentName] = useState(defaultAgentName);
+  const [leaderName, setLeaderName] = useState(defaultLeaderName);
+
+  const [showRiwayat, setShowRiwayat] = useState(false);
+  const [riwayatData, setRiwayatData] = useState<any>(null);
+  const [riwayatLoading, setRiwayatLoading] = useState(false);
+
+  async function openRiwayat() {
+    setShowRiwayat(true);
+    if (riwayatData) return;
+    try {
+      setRiwayatLoading(true);
+      const res = await fetch(
+        `/api/closing/listing/${encodeURIComponent(String((listing as any).id_property))}/auction-history`,
+        { cache: "no-store" }
+      );
+      const json = await res.json();
+      setRiwayatData(json);
+    } catch {
+      setRiwayatData({ rows: [] });
+    } finally {
+      setRiwayatLoading(false);
+    }
+  }
 
   const priceMain = listing.harga_promo ?? listing.harga;
   const hasPromo = !!listing.harga_promo && Number(listing.harga_promo) > 0;
@@ -170,50 +195,43 @@ export default function ClosingShell({
     <div className="relative min-h-screen overflow-x-hidden bg-black text-white">
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute inset-0 bg-zinc-950" />
-        <div className="absolute -top-40 left-[-220px] h-[520px] w-[520px] rounded-full bg-emerald-500/20 blur-3xl" />
-        <div className="absolute -top-44 right-[-240px] h-[620px] w-[620px] rounded-full bg-cyan-500/15 blur-3xl" />
-        <div className="absolute bottom-[-260px] left-[20%] h-[520px] w-[520px] rounded-full bg-emerald-400/10 blur-3xl" />
+        <div className="absolute -top-40 left-[-220px] h-[520px] w-[520px] rounded-full bg-emerald-500/20" />
+        <div className="absolute -top-44 right-[-240px] h-[620px] w-[620px] rounded-full bg-cyan-500/15" />
+        <div className="absolute bottom-[-260px] left-[20%] h-[520px] w-[520px] rounded-full bg-emerald-400/10" />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/20 to-black/55" />
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-300/40 to-transparent" />
       </div>
 
-      <div className="mx-auto w-full max-w-[1180px] px-4 pb-8 pt-1 sm:px-5 sm:pt-2 lg:px-6 lg:pt-3">
-        {/* Top bar */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-400">
-              <span className="inline-flex shrink-0 items-center gap-1">
-                <Icon icon="solar:home-2-linear" className="text-sm" />
-                Dashboard
-              </span>
-              <span className="text-zinc-600">/</span>
-              <span className="truncate">Closing</span>
-              <span className="text-zinc-600">/</span>
-              <span className="truncate font-semibold text-zinc-200">
-                #{Number(listing.id_property)}
-              </span>
-            </div>
+      <div className="mx-auto w-full max-w-[1180px] overflow-hidden px-4 pb-8 pt-1 sm:px-5 sm:pt-2 lg:px-6 lg:pt-3">
+        {/* Top bar — desktop only */}
+        <div className="hidden lg:flex items-center gap-4">
+          {/* Kembali — kiri, selalu visible */}
+          <a
+            href="/dashboard/transaksi"
+            className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-zinc-300 transition hover:border-white/20 hover:bg-white/10 hover:text-white active:scale-[0.98]"
+          >
+            <Icon icon="solar:arrow-left-linear" className="text-base" />
+            <span className="hidden sm:inline">Kembali</span>
+          </a>
 
-            <div className="mt-1 text-[11px] leading-relaxed text-zinc-500">
-              Input dari kiri ke kanan:{" "}
-              <span className="text-zinc-300">Transaksi</span> →{" "}
-              <span className="text-zinc-300">Pembagian</span>
-            </div>
-          </div>
+          {/* Divider */}
+          <div className="h-5 w-px shrink-0 bg-white/10" />
 
-          <div className="hidden lg:flex items-center gap-2">
-            <a
-              href="/dashboard/transaksi"
-              className="inline-flex h-10 shrink-0 items-center gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-500/15 active:scale-[0.99]"
-            >
-              <Icon icon="solar:arrow-left-linear" className="text-base" />
-              Kembali
-            </a>
+          {/* Breadcrumb */}
+          <div className="flex min-w-0 flex-1 items-center gap-2 text-sm">
+            <Icon icon="solar:home-2-linear" className="shrink-0 text-base text-zinc-600" />
+            <span className="text-zinc-600">Dashboard</span>
+            <Icon icon="solar:alt-arrow-right-linear" className="shrink-0 text-xs text-zinc-700" />
+            <span className="text-zinc-500">Closing</span>
+            <Icon icon="solar:alt-arrow-right-linear" className="shrink-0 text-xs text-zinc-700" />
+            <span className="truncate font-semibold text-zinc-200">
+              #{Number(listing.id_property)}
+            </span>
           </div>
         </div>
 
         {/* Hero */}
-        <div className="mt-4 rounded-[28px] border border-white/10 bg-white/5 shadow-[0_30px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+        <div className="mt-4 rounded-[28px] border border-white/10 bg-white/5 shadow-[0_30px_80px_rgba(0,0,0,0.45)] ">
           <div className="h-[3px] w-full rounded-t-[28px] bg-gradient-to-r from-transparent via-emerald-300/50 to-transparent" />
 
           <div className="p-4 sm:p-5 lg:p-6">
@@ -258,6 +276,17 @@ export default function ClosingShell({
                         <Icon icon="solar:tag-linear" className="text-sm" />
                         {jenis}
                       </span>
+
+                      {isLelang && (
+                        <button
+                          type="button"
+                          onClick={openRiwayat}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/10 px-3 py-1 text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/15 active:scale-[0.97]"
+                        >
+                          <Icon icon="solar:history-bold-duotone" className="text-sm" />
+                          Riwayat Lelang
+                        </button>
+                      )}
                     </div>
 
                     <div className="mt-3 break-words text-[16px] font-semibold leading-snug text-white sm:text-[19px] lg:text-[21px]">
@@ -317,7 +346,7 @@ export default function ClosingShell({
                         className={[
                           "group relative flex w-full items-center justify-between gap-3 rounded-full border px-4 py-3 text-sm font-semibold",
                           "border-emerald-400/25 bg-gradient-to-r from-emerald-500/12 via-white/5 to-cyan-500/12 text-white",
-                          "backdrop-blur-xl transition hover:border-emerald-300/45",
+                          " transition hover:border-emerald-300/45",
                           "shadow-[0_12px_40px_rgba(0,0,0,0.45)]",
                           skemaOptions.length === 1
                             ? "cursor-default"
@@ -368,7 +397,7 @@ export default function ClosingShell({
                             }}
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <div className="overflow-hidden rounded-3xl border border-white/10 bg-zinc-950/92 shadow-[0_28px_90px_rgba(0,0,0,0.75)] backdrop-blur-2xl">
+                            <div className="overflow-hidden rounded-3xl border border-white/10 bg-zinc-950/92 shadow-[0_28px_90px_rgba(0,0,0,0.75)] ">
                               <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
                                 <div className="text-[12px] text-zinc-300">
                                   Pilih skema yang dipakai untuk closing
@@ -449,8 +478,8 @@ export default function ClosingShell({
               {/* RIGHT */}
               <div className="min-w-0">
                 <div className="relative overflow-hidden rounded-[26px] border border-emerald-400/15 bg-gradient-to-br from-emerald-500/12 via-white/5 to-cyan-500/10 p-4 sm:p-5">
-                  <div className="pointer-events-none absolute -top-16 -right-20 h-56 w-56 rounded-full bg-emerald-400/20 blur-3xl" />
-                  <div className="pointer-events-none absolute -bottom-24 -left-16 h-64 w-64 rounded-full bg-cyan-400/15 blur-3xl" />
+                  <div className="pointer-events-none absolute -top-16 -right-20 h-56 w-56 rounded-full bg-emerald-400/20" />
+                  <div className="pointer-events-none absolute -bottom-24 -left-16 h-64 w-64 rounded-full bg-cyan-400/15" />
                   <div className="pointer-events-none absolute inset-0 bg-zinc-950/20" />
 
                   <div className="relative">
@@ -508,7 +537,237 @@ export default function ClosingShell({
             agent={agent}
             leader={leader}
             skemaPenjualan={skema}
+            onAgentChange={(name) => setAgentName(name || "-")}
+            onLeaderChange={(name) => setLeaderName(name || "-")}
           />
+        </div>
+      </div>
+
+      {/* ── Riwayat Lelang Modal ── */}
+      {showRiwayat &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <RiwayatLelangModal
+            rows={riwayatData?.rows ?? []}
+            currentId={String((listing as any).id_property)}
+            loading={riwayatLoading}
+            onClose={() => setShowRiwayat(false)}
+          />,
+          document.body
+        )}
+    </div>
+  );
+}
+
+/* ================================================================
+   Riwayat Lelang Modal
+================================================================ */
+type RiwayatRow = {
+  id_property: string;
+  tanggal_lelang: string | null;
+  nilai_limit_lelang: string | null;
+  uang_jaminan: string | null;
+  agent_nama: string;
+  link: string | null;
+  imageUrl?: string;
+};
+
+function RiwayatLelangModal({
+  rows,
+  currentId,
+  loading,
+  onClose,
+}: {
+  rows: RiwayatRow[];
+  currentId: string;
+  loading: boolean;
+  onClose: () => void;
+}) {
+  const fmt = new Intl.NumberFormat("id-ID");
+  const fmtRp = (v: string | null) => {
+    if (!v) return "-";
+    const n = Number(v);
+    return Number.isFinite(n) ? "Rp " + fmt.format(n) : "-";
+  };
+  const fmtDate = (d: string | null) => {
+    if (!d) return "-";
+    return new Intl.DateTimeFormat("id-ID", {
+      day: "numeric", month: "short", year: "numeric",
+    }).format(new Date(d));
+  };
+
+  return (
+    <div className="fixed inset-0 z-[500] flex items-center justify-center p-4">
+      {/* overlay */}
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+
+      {/* card */}
+      <div
+        className="relative z-10 flex w-full max-w-[480px] flex-col overflow-hidden rounded-[24px]"
+        style={{
+          maxHeight: "calc(100dvh - 2rem)",
+          background: "#0f1117",
+          boxShadow: "0 0 0 1px rgba(255,255,255,0.07), 0 40px_100px rgba(0,0,0,0.80), inset 0 1px 0 rgba(255,255,255,0.05)",
+        }}
+      >
+        {/* amber accent line */}
+        <div className="h-[1px] w-full shrink-0 bg-gradient-to-r from-transparent via-amber-400/60 to-transparent" />
+
+        {/* header */}
+        <div className="flex shrink-0 items-center gap-3 px-5 py-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-amber-500/10 ring-1 ring-amber-500/20">
+            <Icon icon="solar:history-bold-duotone" className="text-xl text-amber-400" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[15px] font-bold text-white">Riwayat Lelang</div>
+            <div className="text-[11px] text-zinc-500">{rows.length} kali penawaran tercatat</div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.06] text-zinc-500 transition hover:bg-white/10 hover:text-white"
+          >
+            <Icon icon="solar:close-circle-bold" className="text-base" />
+          </button>
+        </div>
+
+        {/* divider */}
+        <div className="mx-5 h-px shrink-0 bg-white/[0.06]" />
+
+        {/* scrollable content */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4" style={{ scrollbarWidth: "none" }}>
+          {loading ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-amber-500/30 border-t-amber-400" />
+              <span className="text-[12px] text-zinc-600">Memuat riwayat...</span>
+            </div>
+          ) : rows.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+              <Icon icon="solar:history-bold-duotone" className="text-4xl text-zinc-800" />
+              <div className="text-sm font-medium text-zinc-500">Belum ada riwayat lelang</div>
+              <div className="text-[12px] text-zinc-700">Properti ini belum pernah ditawarkan sebelumnya.</div>
+            </div>
+          ) : (
+            <div className="relative">
+              {/* timeline line */}
+              <div className="absolute left-[19px] top-0 bottom-0 w-px bg-white/[0.06]" />
+
+              <div className="space-y-3">
+                {rows.map((row, idx) => {
+                  const isCurrent = row.id_property === currentId;
+                  const attempt = idx + 1;
+
+                  return (
+                    <div key={row.id_property} className="relative flex gap-4">
+                      {/* dot */}
+                      <div className={[
+                        "relative z-10 mt-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[12px] font-black",
+                        isCurrent
+                          ? "bg-amber-500 text-black shadow-[0_0_16px_rgba(245,158,11,0.50)]"
+                          : "bg-[#1a1e28] text-zinc-500 ring-1 ring-white/[0.08]",
+                      ].join(" ")}>
+                        {attempt}
+                      </div>
+
+                      {/* content card */}
+                      <div
+                        className={[
+                          "min-w-0 flex-1 overflow-hidden rounded-2xl p-4 transition",
+                          isCurrent
+                            ? "bg-amber-500/[0.08] ring-1 ring-amber-500/20"
+                            : "bg-white/[0.04] ring-1 ring-white/[0.05]",
+                        ].join(" ")}
+                      >
+                        {/* top row */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={[
+                                  "text-[11px] font-bold uppercase tracking-[0.14em]",
+                                  isCurrent ? "text-amber-400" : "text-zinc-500",
+                                ].join(" ")}>
+                                  Penawaran ke-{attempt}
+                                </span>
+                                <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-mono font-semibold text-zinc-500">
+                                  #{row.id_property}
+                                </span>
+                                {isCurrent && (
+                                  <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                                    Saat ini
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className={[
+                              "mt-1 text-[13px] font-semibold",
+                              isCurrent ? "text-white" : "text-zinc-300",
+                            ].join(" ")}>
+                              {fmtDate(row.tanggal_lelang)}
+                            </div>
+                          </div>
+
+                          {row.link && (
+                            <a
+                              href={row.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-zinc-500 transition hover:bg-white/10 hover:text-zinc-200"
+                            >
+                              <Icon icon="solar:link-minimalistic-2-linear" className="text-sm" />
+                            </a>
+                          )}
+                        </div>
+
+                        {/* stats */}
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                          <div className="rounded-xl bg-black/20 px-3 py-2.5">
+                            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
+                              Nilai Limit
+                            </div>
+                            <div className={[
+                              "mt-1 text-[13px] font-bold tabular-nums",
+                              isCurrent ? "text-amber-300" : "text-zinc-200",
+                            ].join(" ")}>
+                              {fmtRp(row.nilai_limit_lelang)}
+                            </div>
+                          </div>
+                          <div className="rounded-xl bg-black/20 px-3 py-2.5">
+                            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
+                              Uang Jaminan
+                            </div>
+                            <div className="mt-1 text-[13px] font-bold tabular-nums text-zinc-200">
+                              {fmtRp(row.uang_jaminan)}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* agent */}
+                        <div className="mt-2.5 flex items-center gap-2">
+                          <Icon icon="solar:user-rounded-linear" className="shrink-0 text-sm text-zinc-600" />
+                          <span className="truncate text-[12px] text-zinc-400">
+                            {row.agent_nama}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* footer */}
+        <div className="shrink-0 px-5 pb-4 pt-3">
+          <div className="mb-3 h-px bg-white/[0.05]" />
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-11 w-full items-center justify-center rounded-2xl bg-white/[0.06] text-sm font-semibold text-zinc-300 transition hover:bg-white/10"
+          >
+            Tutup
+          </button>
         </div>
       </div>
     </div>

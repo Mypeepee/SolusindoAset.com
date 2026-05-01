@@ -35,6 +35,7 @@ type Props = {
   listing: Listing;
   skemaPenjualan: SkemaPenjualan;
   onNextToPembagian?: () => void;
+  onBack?: () => void;
 };
 
 /* =========================================
@@ -118,15 +119,15 @@ function ShellCard({
     <div
       className={[
         "relative overflow-hidden rounded-[32px] border border-white/10",
-        "bg-white/[0.035] backdrop-blur-2xl",
+        "bg-white/[0.035] ",
         "shadow-[0_40px_120px_rgba(0,0,0,0.65)]",
         className,
       ].join(" ")}
     >
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute inset-0 opacity-[0.18] [background-image:linear-gradient(to_right,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.06)_1px,transparent_1px)] [background-size:32px_32px]" />
-        <div className="absolute -top-24 -left-24 h-64 w-64 rounded-full bg-white/5 blur-3xl" />
-        <div className="absolute -top-40 right-[-180px] h-[520px] w-[520px] rounded-full bg-emerald-500/10 blur-3xl" />
+        
+        
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/10 to-black/45" />
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-300/30 to-transparent" />
       </div>
@@ -232,7 +233,7 @@ function RpInput({
   return (
     <div
       className={[
-        "group relative overflow-hidden rounded-2xl border backdrop-blur-2xl",
+        "group relative overflow-hidden rounded-2xl border ",
         disabled
           ? "border-white/8 bg-white/[0.03] opacity-60"
           : "border-white/10 bg-white/[0.04] hover:border-white/15",
@@ -272,7 +273,7 @@ function PercentInput({
   return (
     <div
       className={[
-        "group relative overflow-hidden rounded-2xl border backdrop-blur-2xl",
+        "group relative overflow-hidden rounded-2xl border ",
         disabled
           ? "border-white/8 bg-white/[0.03] opacity-60"
           : "border-white/10 bg-white/[0.04] hover:border-white/15",
@@ -311,43 +312,45 @@ function Toggle({
   desc?: string;
   disabled?: boolean;
 }) {
+  const active = checked && !disabled;
+
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={() => !disabled && onChange(!checked)}
       className={[
-        "group w-full rounded-3xl border p-4 text-left transition backdrop-blur-2xl",
+        "group flex w-full items-center justify-between gap-4 rounded-2xl border p-4 text-left transition",
         disabled
-          ? "border-white/8 bg-white/[0.03] opacity-60 cursor-not-allowed"
-          : "border-white/10 bg-white/[0.04] hover:bg-white/[0.055] hover:border-white/15",
+          ? "cursor-not-allowed border-white/[0.05] bg-white/[0.02] opacity-50"
+          : active
+          ? "border-emerald-500/20 bg-emerald-500/[0.07] hover:bg-emerald-500/[0.10]"
+          : "border-white/[0.07] bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/[0.12]",
       ].join(" ")}
     >
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-white">{label}</div>
-          {desc ? (
-            <div className="mt-1 text-[12px] text-zinc-500">{desc}</div>
-          ) : null}
+      <div className="min-w-0 flex-1">
+        <div className={["text-sm font-semibold", active ? "text-emerald-100" : "text-zinc-200"].join(" ")}>
+          {label}
         </div>
+        {desc ? (
+          <div className="mt-0.5 text-[11px] text-zinc-500">{desc}</div>
+        ) : null}
+      </div>
 
-        <div
+      {/* track */}
+      <div
+        className={[
+          "relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200",
+          active ? "bg-emerald-500" : "bg-zinc-700/60",
+        ].join(" ")}
+      >
+        {/* thumb */}
+        <span
           className={[
-            "relative h-7 w-12 rounded-full border transition",
-            checked
-              ? "border-emerald-400/25 bg-emerald-500/15"
-              : "border-white/10 bg-black/25",
+            "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-all duration-200",
+            active ? "left-[22px]" : "left-0.5",
           ].join(" ")}
-        >
-          <div
-            className={[
-              "absolute top-1/2 -translate-y-1/2 h-5 w-5 rounded-full transition",
-              checked
-                ? "left-[26px] bg-emerald-200 shadow-[0_0_12px_rgba(16,185,129,0.45)]"
-                : "left-[4px] bg-white/70",
-            ].join(" ")}
-          />
-        </div>
+        />
       </div>
     </button>
   );
@@ -374,6 +377,7 @@ export default function TabTransaksi({
   listing,
   skemaPenjualan,
   onNextToPembagian,
+  onBack,
 }: Props) {
   const isLelang = listing.jenis_transaksi === "LELANG";
   const isSelisih = isLelang && skemaPenjualan === "SELISIH";
@@ -407,7 +411,8 @@ export default function TabTransaksi({
       if (raw) {
         const parsed = JSON.parse(raw) as PersistedState;
 
-        if (parsed?.step) setStep(parsed.step);
+        // step selalu mulai dari 1 (Harga & Komisi) setiap kali tab ini dibuka
+        setStep(1);
         setDeal(n(parsed.deal));
         setBidding(n(parsed.bidding));
         setKomisiStr(typeof parsed.komisiStr === "string" ? parsed.komisiStr : "2,5");
@@ -456,12 +461,18 @@ export default function TabTransaksi({
     return true;
   }, [isLelang, isSelisih, isPersen, deal, bidding, warnDealBelowLimit, warnBidBelowLimit, komisiPct]);
 
+  // untuk isPersen: pendapatanKotor = bidding × komisi%
+  const pendapatanKotor = useMemo(() => {
+    if (!isPersen) return 0;
+    return Math.round(nonNeg(bidding * komisiPct / 100));
+  }, [isPersen, bidding, komisiPct]);
+
   const selisihKotor = useMemo(() => {
     if (!isLelang) return 0;
     if (isSelisih) return nonNeg(deal - bidding);
-    if (isPersen) return nonNeg(bidding - limit);
+    if (isPersen) return pendapatanKotor;
     return 0;
-  }, [isLelang, isSelisih, isPersen, deal, bidding, limit]);
+  }, [isLelang, isSelisih, isPersen, deal, bidding, pendapatanKotor]);
 
   const selisihSebelumRoyalty = useMemo(() => {
     if (!isLelang) return 0;
@@ -473,17 +484,28 @@ export default function TabTransaksi({
     return Math.round(nonNeg(selisihSebelumRoyalty) * 0.003);
   }, [selisihSebelumRoyalty]);
 
+  // cobroke hanya mengurangi komisi agent, bukan selisih
   const selisihFinal = useMemo(() => {
-    return nonNeg(selisihSebelumRoyalty - royaltyFee - nonNeg(cobroke));
-  }, [selisihSebelumRoyalty, royaltyFee, cobroke]);
+    return nonNeg(selisihSebelumRoyalty - royaltyFee);
+  }, [selisihSebelumRoyalty, royaltyFee]);
 
-  const komisiAgent = useMemo(() => {
+  // komisi agent base (sebelum cobroke)
+  const komisiAgentBase = useMemo(() => {
+    if (isPersen) return Math.round(nonNeg(pendapatanKotor) * 0.4);
     return Math.round(nonNeg(selisihFinal) * 0.4);
-  }, [selisihFinal]);
+  }, [isPersen, pendapatanKotor, selisihFinal]);
 
+  // komisi agent net = base - cobroke (tidak bisa negatif)
+  const komisiAgent = useMemo(() => {
+    return nonNeg(komisiAgentBase - nonNeg(cobroke));
+  }, [komisiAgentBase, cobroke]);
+
+  // SELISIH: selisihFinal - komisiAgent - royaltyFee
+  // PERSENTASE: pendapatanKotor - royaltyFee - komisiAgent
   const pendapatanBersihKantor = useMemo(() => {
-    return Math.round(nonNeg(selisihFinal) * 0.392);
-  }, [selisihFinal]);
+    if (isPersen) return nonNeg(pendapatanKotor - royaltyFee - komisiAgent);
+    return nonNeg(selisihFinal - komisiAgent - royaltyFee);
+  }, [isPersen, pendapatanKotor, royaltyFee, komisiAgent, selisihFinal]);
 
   const kenaikanDariLimit = useMemo(() => {
     if (!isLelang || limit <= 0) return 0;
@@ -545,7 +567,12 @@ export default function TabTransaksi({
     selisihFinal,
   ]);
 
-  const next = () => setStep((s) => (s === 1 ? 2 : s === 2 ? 3 : 3));
+  const cardRef = useRef<HTMLDivElement | null>(null);
+
+  const next = () => {
+    setStep((s) => (s === 1 ? 2 : s === 2 ? 3 : 3));
+    setTimeout(() => cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  };
   const back = () => setStep((s) => (s === 3 ? 2 : s === 2 ? 1 : 1));
 
   const disableNext = step === 1 && !step1Valid;
@@ -556,105 +583,88 @@ export default function TabTransaksi({
   }, [step]);
 
   const Breakdown = () => {
-    const parts: Array<{
-      label: string;
-      value: number;
-      color: string;
-      show: boolean;
-      prefix?: string;
-    }> = [
+    const deductions = [
       {
         label: "Biaya Balik Nama",
-        value: includeBalikNama ? balikNama : 0,
+        value: balikNama,
         color: "text-amber-300",
         show: isSelisih && includeBalikNama && balikNama > 0,
-        prefix: "-",
       },
       {
         label: "Biaya Eksekusi",
-        value: includeEksekusi ? eksekusi : 0,
+        value: eksekusi,
         color: "text-rose-300",
         show: isSelisih && includeEksekusi && eksekusi > 0,
-        prefix: "-",
       },
       {
         label: "Royalty Fee",
         value: royaltyFee,
         color: "text-sky-300",
         show: royaltyFee > 0,
-        prefix: "-",
-      },
-      {
-        label: "Cobroke Fee",
-        value: cobroke,
-        color: "text-violet-300",
-        show: cobroke > 0,
-        prefix: "-",
       },
     ];
 
     return (
-      <div className="mt-4 rounded-3xl border border-white/10 bg-black/25 p-4">
-        <div className="flex items-center justify-between">
-          <div className="text-[12px] uppercase tracking-[0.14em] text-zinc-400">
-            Breakdown Selisih
-          </div>
-          <div className="text-[11px] text-zinc-500">
-            {isSelisih ? "Deal - Bidding" : "Bidding - Limit"}
-          </div>
-        </div>
-
-        <div className="mt-3">
-          <div className="text-xs text-zinc-400">Selisih</div>
-          <div className="mt-1 text-2xl font-semibold text-white">
-            <Money value={selisihFinal} />
+      <div className="mt-4 space-y-3">
+        {/* Breakdown selisih kantor */}
+        <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-4">
+          <div className="flex items-center justify-between">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
+              Breakdown Selisih Kantor
+            </div>
+            <div className="text-[11px] text-zinc-600">
+              {isSelisih ? "Deal − Bidding" : `Bidding × ${komisiPct}%`}
+            </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[12px] font-semibold text-zinc-200">
-              <span className="text-zinc-400">Base</span>
-              <Money value={selisihKotor} />
-            </span>
+          <div className="mt-3">
+            <div className="mt-1 text-2xl font-semibold text-white">
+              <Money value={selisihFinal} />
+            </div>
 
-            {parts
-              .filter((p) => p.show)
-              .map((p) => (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-[12px] font-semibold text-zinc-300">
+                <span className="text-zinc-500">Base</span>
+                <Money value={selisihKotor} />
+              </span>
+              {deductions.filter((d) => d.show).map((d) => (
                 <span
-                  key={p.label}
-                  className={[
-                    "inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[12px] font-semibold",
-                    p.color,
-                  ].join(" ")}
+                  key={d.label}
+                  className={["inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-[12px] font-semibold", d.color].join(" ")}
                 >
-                  <span className="text-zinc-400">{p.label}</span>
-                  <span className={p.color}>
-                    {p.prefix}
-                    <Money value={p.value} />
-                  </span>
+                  <span className="text-zinc-500">{d.label}</span>
+                  −<Money value={d.value} />
                 </span>
               ))}
-          </div>
+            </div>
 
-          <div className="mt-3 text-[12px] text-zinc-500">
-            {isSelisih ? (
-              <>
-                Selisih final = (Deal - Bidding)
-                {includeBalikNama ? " - Balik Nama" : ""}
-                {includeEksekusi ? " - Eksekusi" : ""}
-                {" - Royalty - Cobroke"}
-              </>
-            ) : (
-              <>Selisih final = (Bidding - Limit) - Royalty - Cobroke</>
-            )}
+            <div className="mt-2 text-[11px] text-zinc-600">
+              {isSelisih
+                ? `Selisih = (Deal − Bidding)${includeBalikNama ? " − Balik Nama" : ""}${includeEksekusi ? " − Eksekusi" : ""} − Royalty`
+                : `Selisih = (Bidding × ${komisiPct}%) − Royalty`}
+            </div>
           </div>
         </div>
+
+        {/* Cobroke — hanya mengurangi komisi agent */}
+        {cobroke > 0 && (
+          <div className="flex items-start gap-3 rounded-2xl border border-violet-500/15 bg-violet-500/[0.06] px-4 py-3">
+            <Icon icon="solar:users-group-two-rounded-linear" className="mt-0.5 shrink-0 text-base text-violet-400" />
+            <div className="min-w-0 text-[12px]">
+              <span className="font-semibold text-violet-300">Cobroke Fee </span>
+              <span className="text-zinc-400">sebesar </span>
+              <span className="font-semibold text-white"><Money value={cobroke} /></span>
+              <span className="text-zinc-400"> dikurangi dari komisi agent (bukan dari pendapatan kantor).</span>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-12">
-      <div className="lg:col-span-7 order-1">
+    <div ref={cardRef} className="grid gap-6 lg:grid-cols-12 min-w-0 w-full">
+      <div className="lg:col-span-7 order-1 min-w-0">
         <ShellCard>
           <Stepper step={step} />
 
@@ -739,11 +749,17 @@ export default function TabTransaksi({
               <div className="mt-6 sm:mt-8 flex items-center justify-between gap-3">
                 <button
                   type="button"
-                  disabled
-                  className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-zinc-500 cursor-not-allowed"
+                  onClick={onBack}
+                  disabled={!onBack}
+                  className={[
+                    "inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-semibold transition",
+                    onBack
+                      ? "border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
+                      : "border-white/10 bg-white/5 text-zinc-600 cursor-not-allowed",
+                  ].join(" ")}
                 >
                   <Icon icon="solar:arrow-left-linear" className="text-lg" />
-                  Back
+                  Pilih Agent
                 </button>
 
                 <button
@@ -800,7 +816,11 @@ export default function TabTransaksi({
                     }}
                     inputRef={refFirst}
                   />
-                  <Hint>{balikNamaMode === "AUTO" ? "Mode: Auto" : "Mode: Manual"}</Hint>
+                  <Hint>
+                    {balikNamaMode === "AUTO"
+                      ? "Auto: 8,5% dari harga + Rp 7.000.000"
+                      : "Mode manual — diisi sendiri"}
+                  </Hint>
                 </div>
 
                 <div>
@@ -810,26 +830,26 @@ export default function TabTransaksi({
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <Toggle
-                  checked={includeBalikNama}
+                  checked={isSelisih ? includeBalikNama : false}
                   onChange={setIncludeBalikNama}
                   label="Balik Nama termasuk transaksi"
                   desc={
                     isSelisih
                       ? "Jika ON, selisih akan berkurang."
-                      : "Tidak mempengaruhi selisih di skema persentase."
+                      : "Tidak berlaku untuk skema persentase."
                   }
                   disabled={!isSelisih}
                 />
                 <Toggle
-                  checked={includeEksekusi}
+                  checked={isSelisih ? includeEksekusi : false}
                   onChange={setIncludeEksekusi}
                   label="Eksekusi termasuk transaksi"
                   desc={
                     isSelisih
                       ? "Jika ON, selisih akan berkurang."
-                      : "Tidak mempengaruhi selisih di skema persentase."
+                      : "Tidak berlaku untuk skema persentase."
                   }
                   disabled={!isSelisih}
                 />
@@ -882,7 +902,7 @@ export default function TabTransaksi({
                 <div>
                   <Label>Cobroke Fee</Label>
                   <RpInput value={cobroke} onChange={setCobroke} inputRef={refFirst} />
-                  <Hint>Memotong selisih final.</Hint>
+                  <Hint>Mengurangi komisi agent, bukan pendapatan kantor.</Hint>
                 </div>
               </div>
 
@@ -914,7 +934,7 @@ export default function TabTransaksi({
         </ShellCard>
       </div>
 
-      <div className="lg:col-span-5 order-2">
+      <div className="lg:col-span-5 order-2 min-w-0">
         <div className="lg:sticky lg:top-4 space-y-6">
           <ShellCard className="p-0">
             <div className="p-5 sm:p-6">
@@ -932,15 +952,18 @@ export default function TabTransaksi({
               </div>
 
               <div className="mt-5 grid gap-3">
+                {/* Selisih Final (SELISIH) / Pendapatan Kotor Kantor (PERSENTASE) */}
                 <div className="rounded-3xl border border-white/10 bg-black/25 p-4">
                   <div className="text-[11px] uppercase tracking-[0.14em] text-zinc-400">
-                    Selisih Final
+                    {isPersen ? "Pendapatan Kotor Kantor" : "Selisih Final"}
                   </div>
                   <div className="mt-2 text-2xl font-semibold text-white">
-                    <Money value={selisihFinal} />
+                    <Money value={isPersen ? nonNeg(pendapatanKotor - royaltyFee) : selisihFinal} />
                   </div>
                   <div className="mt-2 text-[12px] text-zinc-500">
-                    {isSelisih
+                    {isPersen
+                      ? `(Bidding × ${komisiPct}%) − Royalty Fee`
+                      : isSelisih
                       ? "Dipengaruhi include biaya (balik nama/eksekusi)."
                       : "Tidak dipengaruhi toggle biaya."}
                   </div>
@@ -966,7 +989,9 @@ export default function TabTransaksi({
                     <Money value={komisiAgent} />
                   </div>
                   <div className="mt-1 text-[12px] text-zinc-500">
-                    40% × Selisih Final
+                    {isPersen
+                      ? `40% × (Bidding × ${komisiPct}%)`
+                      : "40% × Selisih Final"}
                   </div>
                 </div>
 
@@ -978,7 +1003,9 @@ export default function TabTransaksi({
                     <Money value={pendapatanBersihKantor} />
                   </div>
                   <div className="mt-1 text-[12px] text-zinc-400">
-                    39,2% × Selisih Final
+                    {isPersen
+                      ? "Pend. Kotor − Royalty − Komisi Agent"
+                      : "Selisih Final − Komisi − Royalty Fee"}
                   </div>
                 </div>
               </div>

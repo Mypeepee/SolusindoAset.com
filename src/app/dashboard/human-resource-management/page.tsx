@@ -1,7 +1,8 @@
 // app/dashboard/hrm/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAgents } from "./hooks/useAgents";
 import { useAgentFilters } from "./hooks/useAgentFilters";
 import { MetricsGrid } from "./components/overview/MetricsGrid";
@@ -12,13 +13,15 @@ import { AgentDetailDrawer } from "./components/agents/AgentDetailDrawer";
 import { Agent } from "./types/agent.types";
 import { Icon } from "@iconify/react";
 
-// helper: detect >= xl
 function isXlUp() {
   if (typeof window === "undefined") return false;
-  return window.matchMedia("(min-width: 1280px)").matches; // Tailwind xl
+  return window.matchMedia("(min-width: 1280px)").matches;
 }
 
-export default function HRMPage() {
+function HRMContent() {
+  const searchParams = useSearchParams();
+  const targetAgentId = searchParams.get("agent");
+
   const { agents, loading, metrics, updateAgentStatus, updateAgentOffice } =
     useAgents();
 
@@ -26,37 +29,62 @@ export default function HRMPage() {
 
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const autoSelectedRef = useRef<string | null>(null);
 
-  // UX: lock scroll saat drawer open (mobile/tablet only)
+  const handleSelectAgent = (agent: Agent) => {
+    setSelectedAgent(agent);
+    if (!isXlUp()) setDrawerOpen(true);
+  };
+
+  // Auto-select agent dari query param setelah data load
   useEffect(() => {
-    if (!drawerOpen) {
-      document.body.style.overflow = "";
-      return;
+    if (!targetAgentId || loading || agents.length === 0) return;
+    if (autoSelectedRef.current === targetAgentId) return; // sudah di-handle, skip
+    const match = agents.find((a) => a.id_agent === targetAgentId);
+    if (!match) return;
+    autoSelectedRef.current = targetAgentId;
+
+    // Reset semua filter agar card pasti ada di DOM
+    setFilters({ search: "", status: "", jabatan: "", kota: "" });
+    setSelectedAgent(match);
+
+    const isMobile = !window.matchMedia("(min-width: 1280px)").matches;
+
+    if (isMobile) {
+      // Mobile: scroll ke card dulu, baru buka drawer setelah card terlihat
+      setTimeout(() => {
+        document.getElementById(`agent-card-${match.id_agent}`)
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
+      setTimeout(() => {
+        setDrawerOpen(true);
+      }, 450); // tunggu scroll selesai
+    } else {
+      // Desktop: scroll ke card, panel kanan otomatis tampil karena selectedAgent di-set
+      setTimeout(() => {
+        document.getElementById(`agent-card-${match.id_agent}`)
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
     }
-    // drawer secara visual cuma muncul <xl, tapi lock scroll tetap aman
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agents, loading, targetAgentId]);
+
+  useEffect(() => {
+    if (!drawerOpen) { document.body.style.overflow = ""; return; }
     document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = "";
-    };
+    return () => { document.body.style.overflow = ""; };
   }, [drawerOpen]);
 
-  // UX: ESC untuk close drawer
   useEffect(() => {
     if (!drawerOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setDrawerOpen(false);
-    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setDrawerOpen(false); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [drawerOpen]);
 
-  // UX: kalau user resize jadi xl ke atas, tutup drawer (biar desktop balik normal)
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 1280px)");
-    const onChange = () => {
-      if (mq.matches) setDrawerOpen(false);
-    };
-    // dukung Safari lama
+    const onChange = () => { if (mq.matches) setDrawerOpen(false); };
     // @ts-ignore
     mq.addEventListener ? mq.addEventListener("change", onChange) : mq.addListener(onChange);
     return () => {
@@ -64,15 +92,6 @@ export default function HRMPage() {
       mq.removeEventListener ? mq.removeEventListener("change", onChange) : mq.removeListener(onChange);
     };
   }, []);
-
-  const handleSelectAgent = (agent: Agent) => {
-    setSelectedAgent(agent);
-
-    // ✅ hanya buka drawer kalau < xl
-    if (!isXlUp()) {
-      setDrawerOpen(true);
-    }
-  };
 
   if (loading) {
     return (
@@ -87,7 +106,6 @@ export default function HRMPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1">
           Human Resource Management
@@ -97,12 +115,9 @@ export default function HRMPage() {
         </p>
       </div>
 
-      {/* Metrics Overview */}
       <MetricsGrid metrics={metrics} />
 
-      {/* Agent List & Detail */}
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-5">
-        {/* List */}
         <div className="bg-[#05060A] border border-white/5 rounded-2xl p-5 space-y-4">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -111,28 +126,16 @@ export default function HRMPage() {
                 Menampilkan {filteredAgents.length} dari {agents.length} agent
               </p>
             </div>
-
-            {/* ✅ tombol hanya tampil <xl, dan hanya kalau sudah ada selected */}
-            {selectedAgent ? (
+            {selectedAgent && (
               <button
                 type="button"
                 onClick={() => setDrawerOpen(true)}
-                className="
-                  xl:hidden
-                  px-3 py-2 rounded-xl
-                  border border-white/10 bg-white/5 hover:bg-white/10
-                  text-xs text-white/90
-                  flex items-center gap-2
-                  transition
-                "
+                className="xl:hidden px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-white/90 flex items-center gap-2 transition"
               >
-                <Icon
-                  icon="solar:eye-bold"
-                  className="text-base text-emerald-200"
-                />
+                <Icon icon="solar:eye-bold" className="text-base text-emerald-200" />
                 Lihat Detail
               </button>
-            ) : null}
+            )}
           </div>
 
           <AgentFiltersComponent filters={filters} onFilterChange={setFilters} />
@@ -144,7 +147,6 @@ export default function HRMPage() {
           />
         </div>
 
-        {/* ✅ Desktop panel (tetep sama seperti punyamu): hanya xl+ */}
         <div className="hidden xl:block bg-[#05060A] border border-white/5 rounded-2xl p-5 sticky top-6 max-h-[calc(100vh-120px)] overflow-y-auto">
           <AgentDetailPanel
             agent={selectedAgent}
@@ -154,7 +156,6 @@ export default function HRMPage() {
         </div>
       </div>
 
-      {/* ✅ Drawer: hanya <xl (pastikan AgentDetailDrawer root punya xl:hidden) */}
       <AgentDetailDrawer
         open={drawerOpen}
         agent={selectedAgent}
@@ -163,5 +164,20 @@ export default function HRMPage() {
         onUpdateOffice={updateAgentOffice}
       />
     </div>
+  );
+}
+
+export default function HRMPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
+          <div className="w-12 h-12 border-4 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-slate-400">Memuat data HRM...</p>
+        </div>
+      }
+    >
+      <HRMContent />
+    </Suspense>
   );
 }

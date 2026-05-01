@@ -106,6 +106,7 @@ type Props = {
   agents?: AgentOption[];
   teamLeaderName?: string;
   onSave?: (payload: SavePayload) => void;
+  onBack?: () => void;
 };
 
 type AgentCatalogItem = {
@@ -155,6 +156,7 @@ type SnapshotTone =
 type AuctionHistoryRow = {
   id_property?: string | number | null;
   agent_nama?: string | null;
+  id_agent?: string | null;
 };
 
 type CopicDefinition = {
@@ -484,51 +486,61 @@ function normalizeAuctionRows(raw: any): AuctionHistoryRow[] {
   return source.map((item: any) => ({
     id_property: item?.id_property ?? null,
     agent_nama: item?.agent_nama ?? item?.nama ?? item?.agent ?? null,
+    id_agent: String(item?.id_agent ?? "").trim() || null,
   }));
 }
 
 function buildCopicDefinitions(
   auctionRows: AuctionHistoryRow[],
-  fallbackName: string
+  fallbackName: string,
+  fallbackAgentId: string = ""
 ): CopicDefinition[] {
-  const allNames = auctionRows
-    .map((row) => normalizeCopicName(String(row?.agent_nama ?? "")))
-    .filter((name) => name && name !== "-" && name !== "–");
+  // Dedup by id_agent (primary key). Jika tidak ada id_agent, fallback ke nama.
+  const countsMap = new Map<string, { agentId: string; name: string; count: number }>();
 
-  const effectiveNames = allNames.length
-    ? allNames
-    : normalizeCopicName(fallbackName)
-    ? [normalizeCopicName(fallbackName)]
-    : [];
+  for (const row of auctionRows) {
+    const agentId = String(row.id_agent ?? "").trim();
+    const name = normalizeCopicName(String(row.agent_nama ?? ""));
+    if (!agentId && (!name || name === "-" || name === "–")) continue;
 
-  if (!effectiveNames.length) return [];
-
-  const counts = new Map<string, { displayName: string; count: number }>();
-
-  for (const name of effectiveNames) {
-    const key = name.toLowerCase();
-    const existing = counts.get(key);
+    const key = agentId || name.toLowerCase(); // id_agent jadi key utama
+    const existing = countsMap.get(key);
     if (existing) {
       existing.count += 1;
     } else {
-      counts.set(key, {
-        displayName: name,
+      countsMap.set(key, {
+        agentId: agentId || copicSyntheticId(name),
+        name: name || agentId,
         count: 1,
       });
     }
   }
 
-  const totalOccurrences = effectiveNames.length;
+  // Fallback jika tidak ada data sama sekali
+  if (!countsMap.size) {
+    const fbId = fallbackAgentId.trim();
+    const fbName = normalizeCopicName(fallbackName);
+    if (fbId || fbName) {
+      const key = fbId || fbName.toLowerCase();
+      countsMap.set(key, {
+        agentId: fbId || copicSyntheticId(fbName),
+        name: fbName || fbId,
+        count: 1,
+      });
+    }
+  }
+
+  if (!countsMap.size) return [];
+
+  const totalOccurrences = Array.from(countsMap.values()).reduce((s, v) => s + v.count, 0);
   const TOTAL_COPIC_PERCENT = 0.25;
 
-  return Array.from(counts.values()).map((item, index) => ({
+  return Array.from(countsMap.values()).map((item, index) => ({
     code: `COPIC_${index + 1}`,
-    label: totalOccurrences > 1 ? `CO PIC ${index + 1}` : "CO PIC",
-    percent: Number(
-      ((item.count / totalOccurrences) * TOTAL_COPIC_PERCENT).toFixed(6)
-    ),
-    agentId: copicSyntheticId(item.displayName),
-    name: item.displayName,
+    label: countsMap.size > 1 ? `CO PIC ${index + 1}` : "CO PIC",
+    percent: Number(((item.count / totalOccurrences) * TOTAL_COPIC_PERCENT).toFixed(6)),
+    agentId: item.agentId,
+    name: item.name,
     count: item.count,
     shareCount: totalOccurrences,
   }));
@@ -850,6 +862,7 @@ export default function TabPembagian({
   agents = [],
   teamLeaderName = "",
   onSave,
+  onBack,
 }: Props) {
   void skemaPenjualan;
 
@@ -862,6 +875,7 @@ export default function TabPembagian({
   const [loadedPembagian, setLoadedPembagian] = useState(false);
   const [persisted, setPersisted] = useState<PersistedState | null>(null);
   const [rows, setRows] = useState<SplitRow[]>([]);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const [remoteAgents, setRemoteAgents] = useState<AgentOption[]>([]);
   const [isLoadingAgents, setIsLoadingAgents] = useState(false);
@@ -1157,22 +1171,27 @@ export default function TabPembagian({
     const currentAgentName =
       normalizeCopicName(String((listing as any)?.agent_nama ?? "")) ||
       normalizeCopicName(getAgentName(agent));
+    const currentAgentId = getAgentId(agent);
 
-    return buildCopicDefinitions(auctionRows, currentAgentName);
+    return buildCopicDefinitions(auctionRows, currentAgentName, currentAgentId);
   }, [auctionRows, listing, agent]);
 
   const copicSyntheticAgents = useMemo<AgentCatalogItem[]>(() => {
-    return copicDefinitions.map((item) => ({
-      id: item.agentId,
-      name: item.name,
-      office: `CO PIC • ${item.count}/${item.shareCount} tayang`,
-      jabatan: "CO PIC",
-      label: buildAgentLabel(
-        item.name,
-        `CO PIC • ${item.count}/${item.shareCount} tayang`,
-        item.agentId
-      ),
-    }));
+    // Hanya buat synthetic entry untuk agent yang belum ada di baseAgentCatalog
+    const knownIds = new Set(baseAgentCatalog.map((a) => a.id));
+    return copicDefinitions
+      .filter((item) => !knownIds.has(item.agentId))
+      .map((item) => ({
+        id: item.agentId,
+        name: item.name || item.agentId,
+        office: `CO PIC • ${item.count}/${item.shareCount} tayang`,
+        jabatan: "CO PIC",
+        label: buildAgentLabel(
+          item.name || item.agentId,
+          `CO PIC • ${item.count}/${item.shareCount} tayang`,
+          item.agentId
+        ),
+      }));
   }, [copicDefinitions]);
 
   const agentCatalog = useMemo<AgentCatalogItem[]>(() => {
@@ -1499,47 +1518,103 @@ export default function TabPembagian({
   }, [newLabel, newPercentInput, newAgentId, rows]);
 
   const handleSave = useCallback(() => {
-    if (!isInputPercentValid) {
-      alert("Total porsi harus tepat 100%.");
-      return;
-    }
+    if (!isInputPercentValid || !isEffectivePercentValid || !isTotalValid) return;
+    setShowConfirm(true);
+  }, [isInputPercentValid, isEffectivePercentValid, isTotalValid]);
 
-    if (!isEffectivePercentValid || !isTotalValid) {
-      alert("Total pembagian belum valid.");
-      return;
-    }
+  // Returns true jika berhasil (modal yang handle tutup), throws jika gagal
+  const handleConfirmSave = useCallback(async (): Promise<void> => {
+    // Ambil data transaksi dari persisted state
+    const deal       = n(persisted?.deal);
+    const bidding    = n(persisted?.bidding);
+    const komisiStr  = persisted?.komisiStr ?? "5";
+    const komisiPct  = Number(String(komisiStr).replace(",", ".")) || 0;
+    const balikNama  = n(persisted?.balikNama);
+    const eksekusi   = n(persisted?.eksekusi);
+    const cobroke    = n(persisted?.cobroke);
+    const royaltyFee = n(persisted?.royaltyFee);
+    const limit      = n((listing as any).nilai_limit_lelang);
 
-    const payload: SavePayload = {
-      selisihFinal,
-      rows: rowsCalculated.map((row) => {
-        const agentInfo = getAgentById(row.agentId);
-        return {
-          code: row.code,
-          label: row.label,
-          percent: row.effectivePercent,
-          nominal: row.nominal,
-          agentId: row.agentId,
-          agentName: agentInfo?.name ?? "",
-          agentOffice: agentInfo?.office ?? "",
-        };
-      }),
+    const isPersen = skemaPenjualan === "PERSENTASE";
+    const pendapatanKotor = isPersen ? Math.round(bidding * komisiPct / 100) : 0;
+    const komisiBase = isPersen
+      ? Math.round(pendapatanKotor * 0.4)
+      : Math.round(selisihFinal * 0.4);
+    const komisiAgent = Math.max(0, komisiBase - cobroke);
+    const pendapatanBersihKantor = isPersen
+      ? Math.max(0, pendapatanKotor - royaltyFee - komisiAgent)
+      : Math.max(0, selisihFinal - komisiAgent - royaltyFee);
+
+    const listingId = String(
+      (listing as any).id_property ?? (listing as any).id ?? ""
+    );
+
+    const apiBody = {
+      skema: skemaPenjualan,
+      agentId: closingAgentId,
+      deal,
+      bidding,
+      limit,
+      komisiPct,
+      balikNama,
+      eksekusi,
+      cobroke,
+      royaltyFee,
+      komisiAgent,
+      pendapatanBersihKantor,
+      jenis_transaksi: listing.jenis_transaksi,
+      rows: rowsCalculated.map((row) => ({
+        code: row.code,
+        label: row.label,
+        nominal: row.nominal,
+        agentId: row.agentId,
+      })),
     };
 
-    if (onSave) {
-      onSave(payload);
-      return;
-    }
+    try {
+      const res = await fetch(
+        `/api/closing/listing/${encodeURIComponent(listingId)}/save`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(apiBody),
+        }
+      );
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error ?? "Gagal menyimpan");
 
-    console.log("SAVE PEMBAGIAN", payload);
-    alert("Payload pembagian siap disimpan.");
+      // Callback ke parent jika ada
+      if (onSave) {
+        onSave({
+          selisihFinal,
+          rows: rowsCalculated.map((row) => {
+            const agentInfo = getAgentById(row.agentId);
+            return {
+              code: row.code,
+              label: row.label,
+              percent: row.effectivePercent,
+              nominal: row.nominal,
+              agentId: row.agentId,
+              agentName: agentInfo?.name ?? "",
+              agentOffice: agentInfo?.office ?? "",
+            };
+          }),
+        });
+      }
+      // simpan kode untuk ditampilkan di success state modal
+      (handleConfirmSave as any).__lastKode = json.kode;
+    } catch (err: any) {
+      throw err; // lempar ke modal supaya modal yang handle error state
+    }
   }, [
+    closingAgentId,
     getAgentById,
-    isEffectivePercentValid,
-    isInputPercentValid,
-    isTotalValid,
+    listing,
     onSave,
+    persisted,
     rowsCalculated,
     selisihFinal,
+    skemaPenjualan,
   ]);
 
   return (
@@ -1735,6 +1810,16 @@ export default function TabPembagian({
                 </div>
 
                 <div className="mt-5 flex flex-wrap gap-2">
+                  {onBack && (
+                    <ActionButton
+                      onClick={onBack}
+                      icon="solar:arrow-left-linear"
+                      tone="secondary"
+                    >
+                      Kembali ke Transaksi
+                    </ActionButton>
+                  )}
+
                   <ActionButton
                     onClick={resetTemplate}
                     icon="solar:restart-linear"
@@ -1835,6 +1920,19 @@ export default function TabPembagian({
         agentId={newAgentId}
         setAgentId={setNewAgentId}
         agents={agentCatalog}
+      />
+
+      <ConfirmSimpanModal
+        open={showConfirm}
+        onClose={() => setShowConfirm(false)}
+        onConfirm={handleConfirmSave}
+        listing={listing}
+        skemaPenjualan={skemaPenjualan}
+        selisihFinal={selisihFinal}
+        bidding={bidding}
+        agentName={getAgentById(closingAgentId)?.name ?? getAgentName(agent)}
+        rows={rowsCalculated}
+        getAgentById={getAgentById}
       />
     </>
   );
@@ -2398,6 +2496,282 @@ function ActionButton({
   );
 }
 
+/* =========================================
+  Confirm Simpan Modal
+========================================= */
+
+function ConfirmSimpanModal({
+  open,
+  onClose,
+  onConfirm,
+  listing,
+  skemaPenjualan,
+  selisihFinal,
+  bidding,
+  agentName,
+  rows,
+  getAgentById,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+  listing: Listing;
+  skemaPenjualan: SkemaPenjualan;
+  selisihFinal: number;
+  bidding: number;
+  agentName: string;
+  rows: CalculatedRow[];
+  getAgentById: (id: string) => { name: string; office: string } | undefined;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [savedKode, setSavedKode] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  if (!open) return null;
+
+  async function handleSave() {
+    setSaving(true);
+    setErrorMsg(null);
+    try {
+      await onConfirm();
+      const kode = (onConfirm as any).__lastKode ?? null;
+      setSavedKode(kode);
+      // tutup modal setelah singkat agar user lihat success state
+      setTimeout(() => { setSaving(false); setSavedKode(null); onClose(); }, 1800);
+    } catch (err: any) {
+      setErrorMsg(err?.message ?? "Terjadi kesalahan");
+      setSaving(false);
+    }
+  }
+
+  const fmt = new Intl.NumberFormat("id-ID");
+  const fmtRp = (v: number) => "Rp " + fmt.format(Math.trunc(v));
+
+  const validRows = rows.filter((r) => r.agentId && r.nominal > 0);
+  const skippedCount = rows.length - validRows.length;
+
+  const alamat =
+    String((listing as any).alamat_lengkap ?? (listing as any).judul ?? "").trim() || "-";
+
+  const jenisLabel = listing.jenis_transaksi;
+
+  const skemaLabel =
+    skemaPenjualan === "PERSENTASE" ? "Persentase Komisi" : "Selisih Harga";
+
+  const tglRaw = (listing as any).tanggal_lelang;
+  const tglLabel = tglRaw
+    ? new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(
+        new Date(tglRaw)
+      )
+    : null;
+
+  return (
+    <div className="fixed inset-0 z-[500] flex items-center justify-center p-4">
+      {/* overlay — tidak bisa ditutup saat saving */}
+      <div
+        className="absolute inset-0 bg-black/85 backdrop-blur-sm"
+        onClick={saving ? undefined : onClose}
+      />
+
+      {/* card */}
+      <div
+        className="relative z-10 flex w-full max-w-[460px] flex-col overflow-hidden rounded-[24px]"
+        style={{
+          maxHeight: "calc(100dvh - 2rem)",
+          background: "#0f1117",
+          boxShadow:
+            "0 0 0 1px rgba(255,255,255,0.07)," +
+            "0 32px 80px rgba(0,0,0,0.80)," +
+            "inset 0 1px 0 rgba(255,255,255,0.05)",
+        }}
+      >
+        {/* ── HEADER ── */}
+        <div className="flex items-start gap-3 p-5 pb-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-emerald-500/15 ring-1 ring-emerald-500/25">
+            <Icon icon="solar:diskette-bold-duotone" className="text-xl text-emerald-400" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[16px] font-bold text-white">Konfirmasi Simpan</div>
+            <div className="mt-0.5 text-[12px] leading-relaxed text-zinc-500">
+              Pastikan semua data sudah benar sebelum disimpan ke database.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={saving ? undefined : onClose}
+            disabled={saving}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-zinc-500 transition hover:bg-white/10 hover:text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <Icon icon="solar:close-circle-bold" className="text-base" />
+          </button>
+        </div>
+
+        {/* ── FIXED: property + stats ── */}
+        <div className="shrink-0 space-y-3 px-5 pt-1 pb-3">
+          {/* property card */}
+          <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.05)" }}>
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+              Properti
+            </div>
+            <div className="truncate text-[14px] font-bold text-white">{alamat}</div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-zinc-400">
+              <span className="font-semibold text-zinc-300">{jenisLabel}</span>
+              <span className="text-zinc-600">·</span>
+              <span>Skema: {skemaLabel}</span>
+              {tglLabel && (
+                <>
+                  <span className="text-zinc-600">·</span>
+                  <span>{tglLabel}</span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* stats 3-col */}
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: "Selisih Final", value: fmtRp(selisihFinal), color: "text-emerald-400" },
+              { label: "Harga Bidding", value: fmtRp(bidding), color: "text-white" },
+              { label: "Agent", value: agentName || "-", color: "text-cyan-400" },
+            ].map((s) => (
+              <div
+                key={s.label}
+                className="rounded-2xl p-3"
+                style={{ background: "rgba(255,255,255,0.05)" }}
+              >
+                <div className="text-[10px] text-zinc-500">{s.label}</div>
+                <div className={["mt-1 truncate text-[13px] font-bold", s.color].join(" ")}>
+                  {s.value}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* rows header */}
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+              Pembagian ({validRows.length} pos disimpan)
+            </div>
+            {skippedCount > 0 && (
+              <div className="text-[11px] font-semibold text-amber-400">
+                {skippedCount} pos dilewati
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── SCROLLABLE: hanya rows list ── */}
+        <div
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-3"
+          style={{ scrollbarWidth: "none" }}
+        >
+          <div
+            className="overflow-hidden rounded-2xl"
+            style={{ background: "rgba(255,255,255,0.04)" }}
+          >
+            {validRows.map((row, idx) => {
+              const agent = getAgentById(row.agentId);
+              return (
+                <div
+                  key={row.id}
+                  className="flex items-center justify-between gap-3 px-4 py-3"
+                  style={{
+                    borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.05)" : undefined,
+                  }}
+                >
+                  <div className="min-w-0 flex-1 flex items-baseline gap-2">
+                    <span className="text-[13px] font-semibold text-white shrink-0">
+                      {row.label}
+                    </span>
+                    {agent?.name && (
+                      <span className="text-[12px] text-zinc-400">{agent.name}</span>
+                    )}
+                  </div>
+                  <div className="shrink-0 text-[13px] font-semibold text-white tabular-nums">
+                    {fmtRp(row.nominal)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── WARNING (if skipped rows) ── */}
+        {skippedCount > 0 && (
+          <div className="mx-5 mb-4 mt-1 rounded-2xl border border-amber-500/20 bg-amber-500/[0.08] px-4 py-3">
+            <div className="flex items-start gap-2.5">
+              <Icon icon="solar:danger-triangle-bold-duotone" className="mt-0.5 shrink-0 text-base text-amber-400" />
+              <div className="min-w-0">
+                <p className="text-[12px] font-semibold text-amber-300">
+                  {skippedCount} pos dilewati
+                </p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-amber-200/70">
+                  Pos berikut tidak disimpan karena agent belum dipilih atau nominalnya nol:{" "}
+                  <span className="font-semibold text-amber-200">
+                    {rows
+                      .filter((r) => !r.agentId || r.nominal === 0)
+                      .map((r) => r.label)
+                      .join(", ")}
+                  </span>
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── ERROR MSG ── */}
+        {errorMsg && (
+          <div className="mx-4 mb-3 flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/[0.08] px-3 py-2.5">
+            <Icon icon="solar:danger-circle-bold-duotone" className="shrink-0 text-sm text-red-400" />
+            <p className="text-[11px] text-red-300">{errorMsg}</p>
+          </div>
+        )}
+
+        {/* ── ACTIONS ── */}
+        <div className="flex gap-2 p-4 pt-0">
+          <button
+            type="button"
+            onClick={saving ? undefined : onClose}
+            disabled={saving}
+            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-white/[0.06] text-sm font-semibold text-zinc-300 transition hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <Icon icon="solar:close-circle-bold" className="text-base" />
+            Batal
+          </button>
+          <button
+            type="button"
+            onClick={saving ? undefined : handleSave}
+            disabled={saving}
+            className="flex h-12 flex-[2] items-center justify-center gap-2 rounded-2xl text-sm font-bold text-white transition active:scale-[0.98] disabled:opacity-80"
+            style={{
+              background: "linear-gradient(135deg, #10b981, #059669)",
+              boxShadow: "0 0 0 1px rgba(16,185,129,0.4), 0 8px 24px rgba(16,185,129,0.28)",
+            }}
+          >
+            {saving && !savedKode ? (
+              <>
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                Menyimpan...
+              </>
+            ) : savedKode ? (
+              <>
+                <Icon icon="solar:check-circle-bold" className="text-lg" />
+                Tersimpan!
+              </>
+            ) : (
+              <>
+                <Icon icon="solar:diskette-bold-duotone" className="text-lg" />
+                Simpan Sekarang
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function AddPosModal({
   open,
   onClose,
@@ -2424,7 +2798,7 @@ function AddPosModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
       <div className="relative z-[120] w-full max-w-2xl overflow-visible rounded-[32px] bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.10),transparent_20%),radial-gradient(circle_at_top_right,rgba(56,189,248,0.10),transparent_20%),linear-gradient(180deg,#0e1521_0%,#090d15_100%)] shadow-[0_35px_120px_rgba(0,0,0,0.58)]">
         <div className="pointer-events-none absolute inset-0 opacity-[0.10] [background-image:linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] [background-size:34px_34px]" />
 

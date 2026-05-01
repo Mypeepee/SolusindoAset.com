@@ -1,6 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+function toDriveUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const id = raw.trim();
+  if (!id) return null;
+  // already a full URL
+  if (id.startsWith("http")) return id;
+  // treat as Drive file ID
+  return `https://drive.google.com/thumbnail?id=${id}&sz=w120`;
+}
+
 function mapAgent(agent: any) {
   if (!agent) return null;
 
@@ -9,6 +19,7 @@ function mapAgent(agent: any) {
     nama: agent.pengguna?.nama_lengkap ?? "-",
     kantor: agent.nama_kantor ?? "-",
     jabatan: agent.jabatan ?? "-",
+    foto: toDriveUrl(agent.foto_profil_url),
   };
 }
 

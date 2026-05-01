@@ -29,6 +29,7 @@ export function AgentCard({ agent, onClick, isSelected }: AgentCardProps) {
 
   return (
     <button
+      id={`agent-card-${agent.id_agent}`}
       onClick={onClick}
       className={`
         w-full text-left p-4 rounded-2xl border transition-all duration-200

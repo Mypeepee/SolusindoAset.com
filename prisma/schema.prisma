@@ -32,41 +32,37 @@ model Pengguna {
 }
 
 model Agent {
-  id_agent           String             @id @default(dbgenerated("('AG'::text || nextval('agent_code_seq'::regclass))")) @db.VarChar(20)
-  id_pengguna        String             @unique(map: "agent_id_pengguna_unique") @db.VarChar(20)
-  nama_kantor        String             @db.VarChar(100)
-  kota_area          String             @db.VarChar(50)
-  jabatan            jabatan_agent_enum @default(AGENT)
-  id_upline          String?            @db.VarChar(20)
-  id_team_leader     String?            @db.VarChar(20)
-  rating             Decimal?           @default(0.00) @db.Decimal(3, 2)
-  jumlah_closing     Int                @default(0)
-  total_omset        Decimal?           @default(0) @db.Decimal(18, 2)
-  nomor_whatsapp     String             @db.VarChar(20)
-  poin               Int                @default(0)
-  foto_ktp_url       String?
-  foto_npwp_url      String?
-  foto_profil_url    String?
-  nama_bank          String?            @db.VarChar(50)
-  nomor_rekening     String?            @db.VarChar(50)
-  atas_nama_rekening String?            @db.VarChar(100)
-  link_instagram     String?            @db.VarChar(100)
-  link_tiktok        String?            @db.VarChar(100)
-  link_facebook      String?            @db.VarChar(100)
-  status_keanggotaan status_agent_enum  @default(PENDING)
-  tanggal_gabung     DateTime?          @default(dbgenerated("CURRENT_DATE")) @db.Date
-  dibuat_pada        DateTime?          @default(now()) @db.Timestamptz(6)
-  diperbarui_pada    DateTime?          @default(now()) @db.Timestamptz(6)
-
-  acara    Acara[]
-  pengguna Pengguna @relation(fields: [id_pengguna], references: [id_pengguna], onDelete: Cascade)
-
-  upline    Agent?  @relation("AgentUpline", fields: [id_upline], references: [id_agent])
-  downlines Agent[] @relation("AgentUpline")
-
-  teamLeader        Agent?  @relation("AgentTeamLeader", fields: [id_team_leader], references: [id_agent])
-  teamLeaderMembers Agent[] @relation("AgentTeamLeader")
-
+  id_agent               String                   @id @default(dbgenerated("('AG'::text || nextval('agent_code_seq'::regclass))")) @db.VarChar(20)
+  id_pengguna            String                   @unique(map: "agent_id_pengguna_unique") @db.VarChar(20)
+  nama_kantor            String                   @db.VarChar(100)
+  kota_area              String                   @db.VarChar(50)
+  jabatan                jabatan_agent_enum       @default(AGENT)
+  id_upline              String?                  @db.VarChar(20)
+  rating                 Decimal?                 @default(0.00) @db.Decimal(3, 2)
+  jumlah_closing         Int                      @default(0)
+  total_omset            Decimal?                 @default(0) @db.Decimal(18, 2)
+  nomor_whatsapp         String                   @db.VarChar(20)
+  poin                   Int                      @default(0)
+  foto_ktp_url           String?
+  foto_npwp_url          String?
+  foto_profil_url        String?
+  nama_bank              String?                  @db.VarChar(50)
+  nomor_rekening         String?                  @db.VarChar(50)
+  atas_nama_rekening     String?                  @db.VarChar(100)
+  link_instagram         String?                  @db.VarChar(100)
+  link_tiktok            String?                  @db.VarChar(100)
+  link_facebook          String?                  @db.VarChar(100)
+  status_keanggotaan     status_agent_enum        @default(PENDING)
+  tanggal_gabung         DateTime?                @default(dbgenerated("CURRENT_DATE")) @db.Date
+  dibuat_pada            DateTime?                @default(now()) @db.Timestamptz(6)
+  diperbarui_pada        DateTime?                @default(now()) @db.Timestamptz(6)
+  id_team_leader         String?                  @db.VarChar(20)
+  acara                  Acara[]
+  pengguna               Pengguna                 @relation(fields: [id_pengguna], references: [id_pengguna], onDelete: Cascade)
+  teamLeader             Agent?                   @relation("AgentTeamLeader", fields: [id_team_leader], references: [id_agent])
+  teamLeaderMembers      Agent[]                  @relation("AgentTeamLeader")
+  upline                 Agent?                   @relation("AgentUpline", fields: [id_upline], references: [id_agent])
+  downlines              Agent[]                  @relation("AgentUpline")
   berita                 Berita[]
   detailTransaksi        DetailTransaksi[]
   listings               Listing[]
@@ -143,51 +139,44 @@ model Listing {
 }
 
 model Project {
-  id_project        String    @id @default(dbgenerated("('FLP'::text || lpad(nextval('project_code_seq'::regclass)::text, 4, '0'::text))")) @db.VarChar(20)
-  id_listing        BigInt
-  nama_project      String    @db.VarChar(255)
-  alamat_property   String?   @db.VarChar(500)
-  provinsi          String?   @db.VarChar(355)
-  kota              String?   @db.VarChar(355)
-  kecamatan         String?   @db.VarChar(355)
-  kelurahan         String?   @db.VarChar(355)
-  gambar_thumbnail  String?   @db.VarChar(500)
-  tanggal_pembelian DateTime? @db.Date
-
-  harga_pembelian        Decimal @default(0) @db.Decimal(20, 2)
-  estimasi_harga_jual    Decimal @default(0) @db.Decimal(20, 2)
-  estimasi_profit_bersih Decimal @default(0) @db.Decimal(20, 2)
-  target_pendanaan       Decimal @default(0) @db.Decimal(20, 2)
-  total_pendanaan        Decimal @default(0) @db.Decimal(20, 2)
-
-  jenis_pendanaan jenis_pendanaan_enum
-  status          status_project_enum  @default(pendanaan_terbuka)
-
-  mulai_tanggal          DateTime? @db.Date
-  estimasi_selesai       DateTime? @db.Date
-  estimasi_bulan         Int       @default(0)
-  pendanaan_ditutup_pada DateTime? @db.Date
-
-  deskripsi_project String?
-  dibuat_oleh       String  @db.VarChar(20)
-
-  nilai_limit_lelang   Decimal @default(0) @db.Decimal(20, 2)
-  spare_bidding        Decimal @default(0) @db.Decimal(20, 2)
-  biaya_eksekusi       Decimal @default(0) @db.Decimal(20, 2)
-  biaya_renov          Decimal @default(0) @db.Decimal(20, 2)
-  biaya_balik_nama     Decimal @default(0) @db.Decimal(20, 2)
-  total_biaya_akuisisi Decimal @default(0) @db.Decimal(20, 2)
-  dana_cadangan        Decimal @default(0) @db.Decimal(20, 2)
-
-  dibuat_tanggal   DateTime @default(now()) @db.Timestamptz(6)
-  diupdate_tanggal DateTime @default(now()) @db.Timestamptz(6)
-
-  listing         Listing           @relation(fields: [id_listing], references: [id_property], map: "project_listing_fk")
-  pembuat         Agent             @relation(fields: [dibuat_oleh], references: [id_agent], map: "project_dibuat_oleh_fk")
-  investorProject ProjectInvestor[]
-  cmaEntries      ProjectCma[]
-  arusKas         ProjectArusKas[]
-  projectSelesai  ProjectSelesai?
+  id_project             String               @id @default(dbgenerated("('FLP'::text || lpad((nextval('project_code_seq'::regclass))::text, 4, '0'::text))")) @db.VarChar(20)
+  id_listing             BigInt
+  nama_project           String               @db.VarChar(255)
+  alamat_property        String?              @db.VarChar(500)
+  provinsi               String?              @db.VarChar(355)
+  kota                   String?              @db.VarChar(355)
+  kecamatan              String?              @db.VarChar(355)
+  kelurahan              String?              @db.VarChar(355)
+  gambar_thumbnail       String?              @db.VarChar(500)
+  tanggal_pembelian      DateTime?            @db.Date
+  harga_pembelian        Decimal              @default(0) @db.Decimal(20, 2)
+  estimasi_harga_jual    Decimal              @default(0) @db.Decimal(20, 2)
+  estimasi_profit_bersih Decimal              @default(0) @db.Decimal(20, 2)
+  target_pendanaan       Decimal              @default(0) @db.Decimal(20, 2)
+  total_pendanaan        Decimal              @default(0) @db.Decimal(20, 2)
+  jenis_pendanaan        jenis_pendanaan_enum
+  status                 status_project_enum  @default(pendanaan_terbuka)
+  mulai_tanggal          DateTime?            @db.Date
+  estimasi_selesai       DateTime?            @db.Date
+  estimasi_bulan         Int                  @default(0)
+  pendanaan_ditutup_pada DateTime?            @db.Date
+  deskripsi_project      String?
+  dibuat_oleh            String               @db.VarChar(20)
+  nilai_limit_lelang     Decimal              @default(0) @db.Decimal(20, 2)
+  spare_bidding          Decimal              @default(0) @db.Decimal(20, 2)
+  biaya_eksekusi         Decimal              @default(0) @db.Decimal(20, 2)
+  biaya_renov            Decimal              @default(0) @db.Decimal(20, 2)
+  biaya_balik_nama       Decimal              @default(0) @db.Decimal(20, 2)
+  total_biaya_akuisisi   Decimal              @default(0) @db.Decimal(20, 2)
+  dana_cadangan          Decimal              @default(0) @db.Decimal(20, 2)
+  dibuat_tanggal         DateTime             @default(now()) @db.Timestamptz(6)
+  diupdate_tanggal       DateTime             @default(now()) @db.Timestamptz(6)
+  pembuat                Agent                @relation(fields: [dibuat_oleh], references: [id_agent], map: "project_dibuat_oleh_fk")
+  listing                Listing              @relation(fields: [id_listing], references: [id_property], map: "project_listing_fk")
+  arusKas                ProjectArusKas[]
+  cmaEntries             ProjectCma[]
+  investorProject        ProjectInvestor[]
+  projectSelesai         ProjectSelesai?
 
   @@index([id_listing], map: "idx_project_listing")
   @@index([dibuat_oleh], map: "idx_project_dibuat_oleh")
@@ -206,9 +195,8 @@ model ProjectInvestor {
   status                 status_pembayaran_project_enum @default(menunggu_pembayaran)
   dibuat_tanggal         DateTime                       @default(now()) @db.Timestamptz(6)
   diupdate_tanggal       DateTime                       @updatedAt @db.Timestamptz(6)
-
-  project Project @relation(fields: [id_project], references: [id_project], onDelete: Cascade, map: "project_investor_project_fk")
-  agent   Agent   @relation(fields: [id_agent], references: [id_agent], onDelete: Cascade, map: "project_investor_agent_fk")
+  agent                  Agent                          @relation(fields: [id_agent], references: [id_agent], onDelete: Cascade, map: "project_investor_agent_fk")
+  project                Project                        @relation(fields: [id_project], references: [id_project], onDelete: Cascade, map: "project_investor_project_fk")
 
   @@unique([id_project, id_agent], map: "project_investor_unique")
   @@index([id_project], map: "idx_project_investor_project")
@@ -218,26 +206,25 @@ model ProjectInvestor {
 }
 
 model ProjectSelesai {
-  id_project            String    @id @db.VarChar(20)
+  id_project            String                   @id @db.VarChar(20)
   id_listing            BigInt
-  tanggal_pembelian     DateTime? @db.Date
-  tanggal_terjual       DateTime  @db.Date
+  tanggal_pembelian     DateTime?                @db.Date
+  tanggal_terjual       DateTime                 @db.Date
   durasi_hari           Int
-  harga_jual            Decimal   @default(0) @db.Decimal(20, 2)
-  total_biaya_akuisisi  Decimal   @default(0) @db.Decimal(20, 2)
-  profit_kotor          Decimal   @default(0) @db.Decimal(20, 2)
-  pph_percent           Decimal   @default(0) @db.Decimal(5, 2)
-  ajb_percent           Decimal   @default(0) @db.Decimal(5, 2)
-  agent_fee_percent     Decimal   @default(0) @db.Decimal(5, 2)
-  total_biaya_transaksi Decimal   @default(0) @db.Decimal(20, 2)
-  profit_bersih         Decimal   @default(0) @db.Decimal(20, 2)
-  roi_bersih            Decimal   @default(0) @db.Decimal(10, 2)
-  dibuat_tanggal        DateTime  @default(now()) @db.Timestamptz(6)
-  diupdate_tanggal      DateTime  @updatedAt @db.Timestamptz(6)
-
-  project         Project                  @relation(fields: [id_project], references: [id_project], onDelete: Cascade, map: "project_selesai_project_fk")
-  listing         Listing                  @relation(fields: [id_listing], references: [id_property], onDelete: Restrict, map: "project_selesai_listing_fk")
-  investorSelesai ProjectSelesaiInvestor[]
+  harga_jual            Decimal                  @default(0) @db.Decimal(20, 2)
+  total_biaya_akuisisi  Decimal                  @default(0) @db.Decimal(20, 2)
+  profit_kotor          Decimal                  @default(0) @db.Decimal(20, 2)
+  pph_percent           Decimal                  @default(0) @db.Decimal(5, 2)
+  ajb_percent           Decimal                  @default(0) @db.Decimal(5, 2)
+  agent_fee_percent     Decimal                  @default(0) @db.Decimal(5, 2)
+  total_biaya_transaksi Decimal                  @default(0) @db.Decimal(20, 2)
+  profit_bersih         Decimal                  @default(0) @db.Decimal(20, 2)
+  roi_bersih            Decimal                  @default(0) @db.Decimal(10, 2)
+  dibuat_tanggal        DateTime                 @default(now()) @db.Timestamptz(6)
+  diupdate_tanggal      DateTime                 @updatedAt @db.Timestamptz(6)
+  listing               Listing                  @relation(fields: [id_listing], references: [id_property], map: "project_selesai_listing_fk")
+  project               Project                  @relation(fields: [id_project], references: [id_project], onDelete: Cascade, map: "project_selesai_project_fk")
+  investorSelesai       ProjectSelesaiInvestor[]
 
   @@index([id_listing], map: "idx_project_selesai_listing")
   @@index([tanggal_terjual], map: "idx_project_selesai_tanggal_terjual")
@@ -245,15 +232,14 @@ model ProjectSelesai {
 }
 
 model ProjectSelesaiInvestor {
-  id_project     String  @db.VarChar(20)
-  id_agent       String  @db.VarChar(20)
-  modal          Decimal @default(0) @db.Decimal(20, 2)
-  porsi_percent  Decimal @default(0) @db.Decimal(10, 6)
-  profit         Decimal @default(0) @db.Decimal(20, 2)
-  total_diterima Decimal @default(0) @db.Decimal(20, 2)
-
-  projectSelesai ProjectSelesai @relation(fields: [id_project], references: [id_project], onDelete: Cascade, map: "project_selesai_investor_project_fk")
+  id_project     String         @db.VarChar(20)
+  id_agent       String         @db.VarChar(20)
+  modal          Decimal        @default(0) @db.Decimal(20, 2)
+  porsi_percent  Decimal        @default(0) @db.Decimal(10, 6)
+  profit         Decimal        @default(0) @db.Decimal(20, 2)
+  total_diterima Decimal        @default(0) @db.Decimal(20, 2)
   agent          Agent          @relation(fields: [id_agent], references: [id_agent], onDelete: Cascade, map: "project_selesai_investor_agent_fk")
+  projectSelesai ProjectSelesai @relation(fields: [id_project], references: [id_project], onDelete: Cascade, map: "project_selesai_investor_project_fk")
 
   @@id([id_project, id_agent])
   @@index([id_agent], map: "idx_project_selesai_investor_agent")
@@ -269,8 +255,7 @@ model ProjectCma {
   catatan          String?
   dibuat_tanggal   DateTime @default(now()) @db.Timestamptz(6)
   diupdate_tanggal DateTime @default(now()) @db.Timestamptz(6)
-
-  project Project @relation(fields: [id_project], references: [id_project], onDelete: Cascade, map: "project_cma_project_fk")
+  project          Project  @relation(fields: [id_project], references: [id_project], onDelete: Cascade, map: "project_cma_project_fk")
 
   @@index([id_project], map: "idx_project_cma_project")
   @@map("project_cma")
@@ -279,7 +264,6 @@ model ProjectCma {
 model ProjectArusKas {
   id_project_arus_kas BigInt                 @id @default(autoincrement())
   id_project          String                 @db.VarChar(20)
-  wallet_key          wallet_key_enum
   tanggal_transaksi   DateTime               @db.Date
   jenis_transaksi     jenis_arus_kas_enum
   kategori_transaksi  kategori_arus_kas_enum
@@ -289,8 +273,8 @@ model ProjectArusKas {
   catatan             String?
   dibuat_tanggal      DateTime               @default(now()) @db.Timestamptz(6)
   diupdate_tanggal    DateTime               @updatedAt @db.Timestamptz(6)
-
-  project Project @relation(fields: [id_project], references: [id_project], onDelete: Cascade, map: "project_arus_kas_project_fk")
+  wallet_key          wallet_key_enum
+  project             Project                @relation(fields: [id_project], references: [id_project], onDelete: Cascade, map: "project_arus_kas_project_fk")
 
   @@index([id_project], map: "idx_project_arus_kas_project")
   @@index([wallet_key], map: "idx_project_arus_kas_wallet")
@@ -303,36 +287,37 @@ model ProjectArusKas {
 }
 
 model Transaksi {
-  id                  BigInt               @id @default(autoincrement())
-  kode_transaksi      String?              @unique @db.VarChar(20)
-  id_listing          BigInt
-  id_agent            String               @db.VarChar(20)
-  id_klien            String?              @db.VarChar(20)
-  jenis_transaksi     jenis_transaksi_enum
-  tipe_komisi         String               @db.VarChar(50)
-  harga_deal          BigInt
-  harga_promo_deal    BigInt?              @default(0)
-  harga_limit         Decimal?             @db.Decimal(20, 2)
-  harga_bidding       Decimal?             @db.Decimal(20, 2)
-  selisih             BigInt?
-  kenaikan_dari_limit Decimal?             @db.Decimal(10, 6)
-  persentase_komisi   Decimal?             @db.Decimal(10, 6)
-  basis_pendapatan    BigInt
-  biaya_baliknama     BigInt?
-  biaya_pengosongan   BigInt?
-  royalty_fee         BigInt               @default(0)
-  cobroke_fee         BigInt               @default(0)
-  status_transaksi    String               @default("CLOSING") @db.VarChar(50)
-  tanggal_transaksi   DateTime             @db.Date
-  rating              Int?
-  comment             String?              @db.VarChar(250)
-  catatan             String?
-  dibuat_pada         DateTime             @default(now()) @db.Timestamptz(6)
-  diperbarui_pada     DateTime             @default(now()) @db.Timestamptz(6)
-  detail              DetailTransaksi[]
-  agent               Agent                @relation("TransaksiAgent", fields: [id_agent], references: [id_agent], map: "transaksi_agent_fk")
-  klien               Pengguna?            @relation("TransaksiKlien", fields: [id_klien], references: [id_pengguna], map: "transaksi_klien_fk")
-  listing             Listing              @relation(fields: [id_listing], references: [id_property], map: "transaksi_listing_fk")
+  id                       BigInt               @id @default(autoincrement())
+  kode_transaksi           String?              @unique @db.VarChar(20)
+  id_listing               BigInt
+  id_agent                 String               @db.VarChar(20)
+  id_klien                 String?              @db.VarChar(20)
+  jenis_transaksi          jenis_transaksi_enum
+  tipe_komisi              String               @db.VarChar(50)
+  harga_deal               BigInt
+  harga_promo_deal         BigInt?              @default(0)
+  harga_limit              Decimal?             @db.Decimal(20, 2)
+  harga_bidding            Decimal?             @db.Decimal(20, 2)
+  selisih                  BigInt?
+  kenaikan_dari_limit      Decimal?             @db.Decimal(10, 6)
+  persentase_komisi        Decimal?             @db.Decimal(10, 6)
+  biaya_baliknama          BigInt?
+  biaya_pengosongan        BigInt?
+  royalty_fee              BigInt               @default(0)
+  cobroke_fee              BigInt               @default(0)
+  tanggal_transaksi        DateTime             @db.Date
+  rating                   Int?
+  comment                  String?              @db.VarChar(250)
+  catatan                  String?
+  dibuat_pada              DateTime             @default(now()) @db.Timestamptz(6)
+  diperbarui_pada          DateTime             @default(now()) @db.Timestamptz(6)
+  status_transaksi         String               @default("CLOSING") @db.VarChar(50)
+  pendapatan_bersih_kantor BigInt               @default(0)
+  thc_agent                BigInt               @default(0)
+  detail                   DetailTransaksi[]
+  agent                    Agent                @relation("TransaksiAgent", fields: [id_agent], references: [id_agent], map: "transaksi_agent_fk")
+  klien                    Pengguna?            @relation("TransaksiKlien", fields: [id_klien], references: [id_pengguna], map: "transaksi_klien_fk")
+  listing                  Listing              @relation(fields: [id_listing], references: [id_property], map: "transaksi_listing_fk")
 
   @@index([id_agent], map: "transaksi_agent_idx")
   @@index([id_listing], map: "transaksi_listing_idx")
@@ -540,16 +525,16 @@ model account {
   username         String?   @db.VarChar(50)
   email            String?   @db.VarChar(100)
   nama             String?   @db.VarChar(100)
-  tanggal_lahir    DateTime? @db.Date
   password         String?   @db.VarChar(255)
   kota             String?   @db.VarChar(100)
   kecamatan        String?   @db.VarChar(100)
   nomor_telepon    String?   @db.VarChar(15)
   roles            String?   @db.VarChar(255)
-  tanggal_dibuat   DateTime? @db.Timestamp(0)
-  tanggal_diupdate DateTime? @db.Timestamp(0)
   kode_referal     String?   @db.VarChar(10)
   provinsi         String?   @db.VarChar(100)
+  tanggal_lahir    DateTime? @db.Date
+  tanggal_dibuat   DateTime? @db.Timestamp(0)
+  tanggal_diupdate DateTime? @db.Timestamp(0)
 
   @@ignore
 }
@@ -778,10 +763,10 @@ enum kategori_arus_kas_enum {
   refund
   pemasukan_lain
   pembelian_aset
-  biaya_spare_bidding
   biaya_dokumen_balik_nama
   biaya_eksekusi_pengosongan
   biaya_renovasi
+  biaya_spare_bidding
   penggunaan_dana_cadangan
   pengeluaran_lain
 }

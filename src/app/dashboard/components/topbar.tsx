@@ -7,6 +7,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+import GlobalSearch from "./global-search";
 
 type DashboardTopbarProps = {
   onOpenMobileSidebar?: () => void;
@@ -39,17 +40,7 @@ export default function DashboardTopbar({
           <Icon icon="solar:hamburger-menu-linear" className="h-4 w-4" />
         </button>
 
-        <div className="flex flex-1 items-center rounded-full bg-[#0b0d11] px-4 py-2 border border-white/5">
-          <Icon
-            icon="solar:magnifer-linear"
-            className="mr-2 h-4 w-4 text-slate-500"
-          />
-          <input
-            type="text"
-            placeholder="Cari listing, agent, atau client..."
-            className="w-full border-0 bg-transparent text-sm outline-none placeholder:text-slate-500 text-slate-100"
-          />
-        </div>
+        <GlobalSearch />
       </div>
 
       {/* RIGHT: notif + profile */}
