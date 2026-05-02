@@ -1,11 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Icon } from "@iconify/react";
 import PilihListingView from "./PilihListingView";
+import ProgressTransaksiView from "./ProgressTransaksiView";
 
 export default function TransaksiPageClient() {
   const [tab, setTab] = useState<"pilih" | "progress">("pilih");
+  const [closingCount, setClosingCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch("/api/dashboard/transaksi/progress?take=1")
+      .then((r) => r.ok ? r.json() : null)
+      .then((json) => {
+        if (json?.stats?.total != null) setClosingCount(json.stats.total);
+      })
+      .catch(() => {});
+  }, []);
 
   const TabButton = (props: {
     active: boolean;
@@ -14,8 +25,9 @@ export default function TransaksiPageClient() {
     label: string;
     hint: string;
     accent: "emerald" | "cyan";
+    badge?: number | null;
   }) => {
-    const { active, onClick, icon, label, hint, accent } = props;
+    const { active, onClick, icon, label, hint, accent, badge } = props;
 
     const activeStyle =
       accent === "emerald"
@@ -39,13 +51,20 @@ export default function TransaksiPageClient() {
         `}
       >
         <div className="flex items-center gap-3">
-          <div
-            className={`
-              grid h-10 w-10 place-items-center rounded-2xl border
-              ${active ? "border-white/10 bg-white/5" : "border-zinc-800/70 bg-zinc-950/30"}
-            `}
-          >
-            <Icon icon={icon} className={`text-xl ${active ? iconActive : iconInactive}`} />
+          <div className="relative">
+            <div
+              className={`
+                grid h-10 w-10 place-items-center rounded-2xl border
+                ${active ? "border-white/10 bg-white/5" : "border-zinc-800/70 bg-zinc-950/30"}
+              `}
+            >
+              <Icon icon={icon} className={`text-xl ${active ? iconActive : iconInactive}`} />
+            </div>
+            {badge != null && badge > 0 && (
+              <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-black leading-none text-white shadow-[0_0_0_2px_rgba(0,0,0,0.85),0_0_8px_rgba(239,68,68,0.5)]">
+                {badge > 99 ? "99+" : badge}
+              </span>
+            )}
           </div>
 
           <div className="min-w-0 flex-1">
@@ -151,6 +170,7 @@ export default function TransaksiPageClient() {
               label="Progress Transaksi"
               hint="Pantau stage, timeline, dan status."
               accent="cyan"
+              badge={closingCount}
             />
           </div>
         </div>
@@ -161,45 +181,7 @@ export default function TransaksiPageClient() {
         {tab === "pilih" ? (
           <PilihListingView />
         ) : (
-          <div className="relative overflow-hidden rounded-[28px] border border-zinc-800 bg-zinc-950/40 p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.04)]">
-            <div className="pointer-events-none absolute -top-24 right-8 h-56 w-56 rounded-full bg-cyan-400/10 blur-3xl" />
-
-            <div className="flex items-start gap-3">
-              <div className="grid h-11 w-11 place-items-center rounded-2xl border border-white/10 bg-white/5">
-                <Icon icon="solar:diagram-up-bold-duotone" className="text-2xl text-cyan-200" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-white font-black">Progress Transaksi</div>
-                <div className="mt-1 text-sm text-zinc-400">
-                  Placeholder dulu. Nanti kita buat pipeline stage + timeline.
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <div className="text-[11px] font-black text-zinc-400">Stages</div>
-                <div className="mt-2 flex items-center gap-2 text-sm font-black text-white">
-                  <Icon icon="solar:layers-bold-duotone" className="text-lg text-cyan-200/90" />
-                  Coming soon
-                </div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <div className="text-[11px] font-black text-zinc-400">Timeline</div>
-                <div className="mt-2 flex items-center gap-2 text-sm font-black text-white">
-                  <Icon icon="solar:calendar-bold-duotone" className="text-lg text-cyan-200/90" />
-                  Coming soon
-                </div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <div className="text-[11px] font-black text-zinc-400">Insights</div>
-                <div className="mt-2 flex items-center gap-2 text-sm font-black text-white">
-                  <Icon icon="solar:bolt-bold-duotone" className="text-lg text-cyan-200/90" />
-                  Coming soon
-                </div>
-              </div>
-            </div>
-          </div>
+          <ProgressTransaksiView />
         )}
       </div>
     </div>
