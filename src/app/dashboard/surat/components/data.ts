@@ -463,4 +463,235 @@ export const suratTemplates: SuratTemplate[] = [
       },
     ],
   },
+
+  // ── Pengurusan Dokumen ────────────────────────────────────────────────────────
+  {
+    id: "permohonan-akte-grosse",
+    code: "PEN-001",
+    title: "Permohonan Akte Grosse",
+    category: "Pengurusan Notaris",
+    description:
+      "Template surat permohonan penerbitan akte grosse kepada notaris. Digunakan untuk meminta salinan resmi akte notariil seperti APHT, PPJB, atau akta kredit dalam rangka proses lelang atau eksekusi.",
+    status: "Baru",
+    updatedAt: "04 Mei 2026",
+    usedCount: 0,
+    icon: FileText,
+    templateFileName: "Template_Permohonan_Akte_Grosse.docx",
+    fields: [
+      // ── Data Surat ────────────────────────────────────────────────────────
+      {
+        key: "kota",
+        label: "Kota",
+        type: "text",
+        section: "surat",
+        required: true,
+        placeholder: "Contoh: Surabaya",
+      },
+      {
+        key: "tanggal_surat",
+        label: "Tanggal Surat",
+        type: "date",
+        section: "surat",
+        required: true,
+      },
+      {
+        key: "nomor_surat",
+        label: "Nomor Surat",
+        type: "text",
+        section: "surat",
+        placeholder: "Contoh: 012/SP/AG/V/2026",
+      },
+
+      // ── Data Kuasa ────────────────────────────────────────────────────────
+      {
+        key: "selected_kuasa_id",
+        label: "Pilih Kuasa",
+        type: "select",
+        section: "kuasa",
+        required: true,
+        options: kuasaOptions.map((item) => ({
+          label: item.label,
+          value: item.id,
+        })),
+      },
+      {
+        key: "nama_kuasa",
+        label: "Nama Kuasa",
+        type: "text",
+        section: "kuasa",
+        required: true,
+        readOnly: true,
+      },
+      {
+        key: "nik_kuasa",
+        label: "NIK Kuasa",
+        type: "text",
+        section: "kuasa",
+        readOnly: true,
+      },
+      {
+        key: "alamat_kuasa",
+        label: "Alamat Kuasa",
+        type: "textarea",
+        section: "kuasa",
+        readOnly: true,
+      },
+      {
+        key: "pekerjaan_kuasa",
+        label: "Pekerjaan Kuasa",
+        type: "text",
+        section: "kuasa",
+        readOnly: true,
+      },
+
+      // ── Data Pemohon (Bank / Kreditur) ────────────────────────────────────
+      {
+        key: "nama_pemohon",
+        label: "Nama Pemohon / Bank",
+        type: "text",
+        section: "pemohon",
+        required: true,
+        placeholder: "Contoh: PT Bank Rakyat Indonesia (Persero) Tbk",
+      },
+      {
+        key: "alamat_pemohon",
+        label: "Alamat Pemohon",
+        type: "textarea",
+        section: "pemohon",
+        placeholder: "Alamat lengkap kantor / bank",
+      },
+
+      // ── Data Notaris ──────────────────────────────────────────────────────
+      {
+        key: "nama_notaris",
+        label: "Nama Notaris",
+        type: "text",
+        section: "surat",
+        required: true,
+        placeholder: "Contoh: SITI RAHAYU, S.H., M.Kn.",
+      },
+      {
+        key: "alamat_notaris",
+        label: "Alamat Kantor Notaris",
+        type: "textarea",
+        section: "surat",
+        required: true,
+        placeholder: "Contoh: Jl. Diponegoro No. 88, Surabaya",
+      },
+
+      // ── Data Akta ─────────────────────────────────────────────────────────
+      {
+        key: "jenis_akta",
+        label: "Jenis Akta",
+        type: "select",
+        section: "surat",
+        required: true,
+        options: [
+          { label: "Akta Pemberian Hak Tanggungan (APHT)", value: "Akta Pemberian Hak Tanggungan (APHT)" },
+          { label: "Perjanjian Kredit (PK)", value: "Perjanjian Kredit (PK)" },
+          { label: "Pengakuan Hutang (PH)", value: "Pengakuan Hutang (PH)" },
+          { label: "Perjanjian Pengikatan Jual Beli (PPJB)", value: "Perjanjian Pengikatan Jual Beli (PPJB)" },
+          { label: "Lainnya", value: "Lainnya" },
+        ],
+      },
+      {
+        key: "nomor_akta_grosse",
+        label: "Nomor Akta",
+        type: "text",
+        section: "surat",
+        required: true,
+        placeholder: "Contoh: 25",
+      },
+      {
+        key: "tanggal_akta",
+        label: "Tanggal Akta",
+        type: "text",
+        section: "surat",
+        required: true,
+        placeholder: "Contoh: 15 Maret 2022",
+      },
+      {
+        key: "nomor_aktegrosse",
+        label: "Nomor Akte Grosse (jika ada)",
+        type: "text",
+        section: "surat",
+        placeholder: "Nomor salinan akte grosse sebelumnya",
+      },
+
+      // ── Data Debitur ──────────────────────────────────────────────────────
+      {
+        key: "nama_debitur",
+        label: "Nama Debitur",
+        type: "text",
+        section: "debitur",
+        required: true,
+        placeholder: "Nama lengkap debitur / pemilik agunan",
+      },
+      {
+        key: "nik_debitur",
+        label: "NIK Debitur",
+        type: "text",
+        section: "debitur",
+        placeholder: "16 digit NIK",
+      },
+      {
+        key: "alamat_debitur",
+        label: "Alamat Debitur",
+        type: "textarea",
+        section: "debitur",
+        placeholder: "Alamat sesuai KTP",
+      },
+
+      // ── Data Asset / Agunan ───────────────────────────────────────────────
+      {
+        key: "jenis_sertifikat",
+        label: "Jenis Sertifikat",
+        type: "text",
+        section: "asset",
+        required: true,
+        placeholder: "Contoh: Sertipikat Hak Milik",
+      },
+      {
+        key: "singkatan_sertifikat",
+        label: "Singkatan Sertifikat",
+        type: "text",
+        section: "asset",
+        required: true,
+        placeholder: "Contoh: SHM",
+      },
+      {
+        key: "nomor_nib",
+        label: "Nomor NIB / Sertifikat",
+        type: "text",
+        section: "asset",
+        required: true,
+        placeholder: "Nomor sertifikat tanah",
+      },
+      {
+        key: "lokasi_asset",
+        label: "Lokasi / Alamat Asset",
+        type: "textarea",
+        section: "asset",
+        required: true,
+        placeholder: "Alamat lengkap objek agunan",
+      },
+      {
+        key: "LT",
+        label: "Luas Tanah (m²)",
+        type: "number",
+        section: "asset",
+        placeholder: "Contoh: 120",
+      },
+
+      // ── Keperluan / Alasan ────────────────────────────────────────────────
+      {
+        key: "alasan_permohonan",
+        label: "Keperluan / Alasan Permohonan",
+        type: "textarea",
+        section: "lampiran",
+        placeholder: "Contoh: dalam rangka proses lelang eksekusi hak tanggungan berdasarkan Pasal 6 UUHT",
+        helperText: "Dijelaskan mengapa akte grosse dibutuhkan",
+      },
+    ],
+  },
 ];

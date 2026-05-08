@@ -1,25 +1,42 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export default function LoadingBar() {
   const pathname = usePathname();
   const [loading, setLoading] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Matikan loading setiap path berubah (navigasi selesai)
   useEffect(() => {
-    if (!pathname) return;
     setLoading(false);
+    if (timerRef.current) clearTimeout(timerRef.current);
   }, [pathname]);
 
-  // Hidupkan loading saat user klik (kasar tapi simple)
+  // Hanya nyalakan loading saat user klik link navigasi, bukan setiap klik
   useEffect(() => {
-    function handleClick() {
+    function handleClick(e: MouseEvent) {
+      const anchor = (e.target as HTMLElement).closest("a[href]") as HTMLAnchorElement | null;
+      if (!anchor) return;
+
+      const href = anchor.getAttribute("href") ?? "";
+      // Abaikan: hash link, external URL, javascript:, atau path yang sama
+      if (
+        !href ||
+        href.startsWith("#") ||
+        href.startsWith("javascript:") ||
+        href.startsWith("http://") ||
+        href.startsWith("https://") ||
+        href === window.location.pathname
+      ) return;
+
       setLoading(true);
-      // fallback off setelah 1.5 detik kalau navigasi sangat cepat
-      setTimeout(() => setLoading(false), 1500);
+      // Fallback: matikan setelah 4 detik jika navigasi tidak terjadi
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setLoading(false), 4000);
     }
+
     window.addEventListener("click", handleClick);
     return () => window.removeEventListener("click", handleClick);
   }, []);

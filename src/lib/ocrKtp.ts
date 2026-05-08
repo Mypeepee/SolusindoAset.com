@@ -1,5 +1,5 @@
-const OCR_API_BASE_URL =
-  process.env.NEXT_PUBLIC_OCR_API_URL || "http://localhost:8000";
+// OCR KTP Indonesia — pakai GPT-4o Vision via /api/surat/ocr-ktp
+// Tidak butuh service Python eksternal lagi.
 
 export type OcrKtpResult = {
   rawText: string;
@@ -23,6 +23,12 @@ export type OcrKtpResult = {
     statuskawin_pemohon: string;
     warga_negara: string;
   };
+  // Data tambahan dari KTP — provinsi, gol. darah, berlaku hingga
+  extra?: {
+    provinsi: string;
+    golongan_darah: string;
+    berlaku_hingga: string;
+  };
   score: number;
   status: "valid" | "review" | "invalid";
   warnings: string[];
@@ -32,14 +38,13 @@ export async function ocrKTP(file: File): Promise<OcrKtpResult> {
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch(`${OCR_API_BASE_URL}/api/ocr/ktp`, {
+  const res = await fetch("/api/surat/ocr-ktp", {
     method: "POST",
     body: formData,
   });
 
   if (!res.ok) {
     let message = "Gagal OCR KTP";
-
     try {
       const errJson = await res.json();
       message = errJson.detail || message;
@@ -47,7 +52,6 @@ export async function ocrKTP(file: File): Promise<OcrKtpResult> {
       const text = await res.text().catch(() => "");
       message = text || message;
     }
-
     throw new Error(message);
   }
 
@@ -75,6 +79,13 @@ export async function ocrKTP(file: File): Promise<OcrKtpResult> {
       statuskawin_pemohon: "",
       warga_negara: "Indonesia",
     },
+    extra: json.extracted_full
+      ? {
+          provinsi: json.extracted_full.provinsi || "",
+          golongan_darah: json.extracted_full.golongan_darah || "",
+          berlaku_hingga: json.extracted_full.berlaku_hingga || "",
+        }
+      : undefined,
     score: Number(json.score || 0),
     status: json.status || "invalid",
     warnings: Array.isArray(json.warnings) ? json.warnings : [],

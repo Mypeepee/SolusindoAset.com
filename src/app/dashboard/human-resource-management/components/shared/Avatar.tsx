@@ -1,7 +1,6 @@
 // app/dashboard/hrm/components/shared/Avatar.tsx
 "use client";
 
-import { Icon } from "@iconify/react";
 import { useState } from "react";
 
 interface AvatarProps {
@@ -11,102 +10,108 @@ interface AvatarProps {
   status?: "online" | "offline";
 }
 
-export function Avatar({ src, name, size = "md", status }: AvatarProps) {
-  const [imgError, setImgError] = useState(false);
+const SIZE = {
+  sm: { wrapper: "h-8 w-8",  text: "text-xs",  dot: "h-2.5 w-2.5" },
+  md: { wrapper: "h-10 w-10", text: "text-sm",  dot: "h-3 w-3" },
+  lg: { wrapper: "h-14 w-14", text: "text-base", dot: "h-3.5 w-3.5" },
+};
 
-  const sizeClasses = {
-    sm: "h-8 w-8 text-sm",
-    md: "h-10 w-10 text-base",
-    lg: "h-14 w-14 text-xl",
-  };
+// Warna background berdasarkan huruf pertama nama
+const PALETTE = [
+  "bg-emerald-500/30 text-emerald-200",
+  "bg-blue-500/30 text-blue-200",
+  "bg-violet-500/30 text-violet-200",
+  "bg-amber-500/30 text-amber-200",
+  "bg-rose-500/30 text-rose-200",
+  "bg-cyan-500/30 text-cyan-200",
+  "bg-pink-500/30 text-pink-200",
+  "bg-orange-500/30 text-orange-200",
+];
 
-  // ✅ Logic sama persis dengan Blade lama
-  const buildAgentImage = (fileIdOrUrl?: string | null) => {
-    const DEFAULT = "/images/default-profile.png";
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
 
-    if (!fileIdOrUrl || fileIdOrUrl.trim() === "") {
-      return {
-        thumb: DEFAULT,
-        full: DEFAULT,
-      };
-    }
+function getColor(name: string) {
+  const code = name.charCodeAt(0) || 0;
+  return PALETTE[code % PALETTE.length];
+}
 
-    const raw = fileIdOrUrl.trim();
-
-    // Kalau sudah URL lengkap (http/https)
-    if (raw.startsWith("http://") || raw.startsWith("https://")) {
-      try {
-        const url = new URL(raw);
-        // Ekstrak id dari query parameter (?id=...)
-        const idFromQuery = url.searchParams.get("id");
-        if (idFromQuery) {
-          return {
-            thumb: `https://drive.google.com/thumbnail?id=${idFromQuery}&sz=w64`,
-            full: `https://drive.google.com/uc?export=view&id=${idFromQuery}`,
-          };
-        }
-
-        // Ekstrak id dari path (/d/{id}/)
-        const match = raw.match(/\/d\/([^/]+)/);
-        if (match?.[1]) {
-          const id = match[1];
-          return {
-            thumb: `https://drive.google.com/thumbnail?id=${id}&sz=w64`,
-            full: `https://drive.google.com/uc?export=view&id=${id}`,
-          };
-        }
-
-        // Bukan Google Drive → pakai apa adanya
+function buildGoogleDriveUrl(raw: string): { thumb: string; full: string } | null {
+  if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    try {
+      const url = new URL(raw);
+      const idFromQuery = url.searchParams.get("id");
+      if (idFromQuery) {
         return {
-          thumb: raw,
-          full: raw,
-        };
-      } catch {
-        return {
-          thumb: DEFAULT,
-          full: DEFAULT,
+          thumb: `https://drive.google.com/thumbnail?id=${idFromQuery}&sz=w128`,
+          full:  `https://drive.google.com/uc?export=view&id=${idFromQuery}`,
         };
       }
+      const match = raw.match(/\/d\/([^/]+)/);
+      if (match?.[1]) {
+        return {
+          thumb: `https://drive.google.com/thumbnail?id=${match[1]}&sz=w128`,
+          full:  `https://drive.google.com/uc?export=view&id=${match[1]}`,
+        };
+      }
+      // URL lain langsung pakai
+      return { thumb: raw, full: raw };
+    } catch {
+      return null;
     }
+  }
 
-    // Kalau hanya fileId (seperti di Blade: $property->agent_picture)
-    const fileId = raw;
-    return {
-      thumb: `https://drive.google.com/thumbnail?id=${fileId}&sz=w64`,
-      full: `https://drive.google.com/uc?export=view&id=${fileId}`,
-    };
+  // Anggap sebagai Google Drive file ID
+  return {
+    thumb: `https://drive.google.com/thumbnail?id=${raw}&sz=w128`,
+    full:  `https://drive.google.com/uc?export=view&id=${raw}`,
   };
+}
 
-  const { thumb, full } = buildAgentImage(src);
+export function Avatar({ src, name, size = "md", status }: AvatarProps) {
+  const [imgFailed, setImgFailed] = useState(false);
+
+  const s = SIZE[size];
+  const initials = getInitials(name);
+  const colorClass = getColor(name);
+
+  const urls = src?.trim() ? buildGoogleDriveUrl(src.trim()) : null;
+  const showImg = urls && !imgFailed;
 
   return (
-    <div className="relative inline-block">
+    <div className="relative inline-block shrink-0">
       <div
-        className={`${sizeClasses[size]} rounded-full bg-slate-800 border-2 border-white/10 flex items-center justify-center overflow-hidden`}
+        className={`${s.wrapper} rounded-full border border-white/10 flex items-center justify-center overflow-hidden`}
       >
-        {thumb && !imgError ? (
+        {showImg ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={thumb}
+            src={urls.thumb}
             alt={name}
             className="h-full w-full object-cover"
             onError={(e) => {
-              // Fallback pertama: coba URL full
-              if (thumb !== full) {
-                (e.target as HTMLImageElement).src = full;
+              // Coba full URL dulu
+              if ((e.target as HTMLImageElement).src !== urls.full) {
+                (e.target as HTMLImageElement).src = urls.full;
               } else {
-                // Fallback terakhir: tampilkan icon
-                setImgError(true);
+                setImgFailed(true);
               }
             }}
           />
         ) : (
-          <Icon icon="solar:user-circle-bold" className="text-slate-500" />
+          // Fallback: initials dengan warna
+          <div className={`h-full w-full flex items-center justify-center font-bold ${s.text} ${colorClass}`}>
+            {initials}
+          </div>
         )}
       </div>
+
       {status && (
         <span
-          className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-[#05060A] ${
+          className={`absolute bottom-0 right-0 ${s.dot} rounded-full border-2 border-[#05060A] ${
             status === "online" ? "bg-emerald-400" : "bg-slate-500"
           }`}
         />

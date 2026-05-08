@@ -45,6 +45,15 @@ const config: Config = {
         '2': '2',
         '999': '999'
       },
+      keyframes: {
+        shimmer: {
+          "0%":   { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(200%)" },
+        },
+      },
+      animation: {
+        shimmer: "shimmer 1.5s infinite",
+      },
       colors: {
         primary: "#99E39E",
         secondary: "#1DC8CD",
