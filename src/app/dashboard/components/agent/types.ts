@@ -47,10 +47,24 @@ export type AgentListing = {
   status: ListingStatus;
 };
 
+export type YearlyMetric = {
+  thisYear: number;
+  lastYear: number;
+  monthly: number[]; // 12 bulan (Jan–Des), tahun berjalan
+};
+
+export type AgentYearlyComparison = {
+  pendapatan: YearlyMetric;   // komisi/pendapatan agen
+  omzet: YearlyMetric;        // total nilai properti terjual
+  totalTransaksi: YearlyMetric;
+  contacted: YearlyMetric;
+};
+
 export type AgentDashboardData = {
   kpis: AgentDashboardKpis;
   pipeline: AgentDashboardPipeline;
   tasks: AgentTask[];
   leads: AgentLead[];
   listings: AgentListing[];
+  yearlyComparison: AgentYearlyComparison;
 };

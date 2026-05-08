@@ -43,6 +43,28 @@ export async function GET() {
         { id: "p2", title: "Apartemen 2BR View Kota", area: "Denpasar", price: 1_150_000_000, inquiries7d: 4, views7d: 150, status: "ACTIVE" },
         { id: "p3", title: "Ruko Strategis Jalan Utama", area: "Surabaya Pusat", price: 3_900_000_000, inquiries7d: 2, views7d: 90, status: "DRAFT" },
       ],
+      yearlyComparison: {
+        pendapatan: {
+          thisYear:  148_500_000,
+          lastYear:  112_000_000,
+          monthly:   [8_200_000, 9_500_000, 11_000_000, 10_800_000, 13_500_000, 14_200_000, 12_800_000, 15_100_000, 16_400_000, 14_900_000, 11_600_000, 10_500_000],
+        },
+        omzet: {
+          thisYear:  4_250_000_000,
+          lastYear:  3_180_000_000,
+          monthly:   [280_000_000, 310_000_000, 390_000_000, 350_000_000, 420_000_000, 440_000_000, 380_000_000, 460_000_000, 510_000_000, 450_000_000, 360_000_000, 300_000_000],
+        },
+        totalTransaksi: {
+          thisYear:  37,
+          lastYear:  28,
+          monthly:   [2, 3, 4, 3, 4, 4, 3, 5, 4, 3, 2, 0],
+        },
+        contacted: {
+          thisYear:  214,
+          lastYear:  175,
+          monthly:   [14, 16, 20, 18, 22, 21, 17, 24, 23, 21, 16, 2],
+        },
+      },
     },
   });
 }
