@@ -1,355 +1,554 @@
 "use client";
+
+import React, { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { useRef, useState } from "react";
+import Link from "next/link";
+import { Icon } from "@iconify/react";
+import { motion } from "framer-motion";
 import Slider, { Settings } from "react-slick";
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
-import { Icon } from "@iconify/react";
-import { motion } from "framer-motion";
 
-// --- TIPE DATA ---
-type ListingType = "Primary" | "Secondary" | "Sewa" | "Lelang";
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-interface Property {
-  id: number;
-  title: string;
-  location: string;
-  price: number;
-  period?: string;
-  listingType: ListingType;
-  propertyType: string;
-  images: string[];
-  specs: {
-    lt: string;
-    lb?: string;
-    kt?: number;
-    km?: number;
-    date?: string;
-  };
-  agent: {
-    name: string;
-    photo: string;
-  };
+interface ListingItem {
+  id_property: string;
+  slug: string;
+  judul: string;
+  kota: string;
+  alamat_lengkap: string;
+  harga: number;
+  harga_promo: number | null;
+  jenis_transaksi: string;
+  kategori: string;
+  gambar: string;
+  foto_list: string[];
+  luas_tanah: number;
+  luas_bangunan: number;
+  kamar_tidur: number;
+  kamar_mandi: number;
+  tanggal_lelang: string | null;
+  agent_name: string;
+  agent_photo: string;
+  agent_office: string;
 }
 
-// --- DATA DUMMY ---
-const properties: Property[] = [
-  {
-    id: 1,
-    title: "Rumah Mewah Modern Classic",
-    location: "Jl. Metro Pondok Indah, Kebayoran Lama, Jakarta Selatan",
-    price: 12500000000,
-    listingType: "Secondary",
-    propertyType: "Rumah",
-    images: [
-      "/images/hero/banner-image.png",
-      "/images/hero/banner.jpg",
-      "/images/hero/banner-image.png"
-    ],
-    specs: { lt: "300m²", lb: "450m²", kt: 5, km: 4 },
-    agent: { name: "Budi Santoso", photo: "/images/user/user-01.png" }
-  },
-  {
-    id: 2,
-    title: "Gudang Logistik Cikupa",
-    location: "Kawasan Industri Cikupa Mas, Jl. Raya Serang Km 12, Tangerang",
-    price: 2100000000,
-    listingType: "Lelang",
-    propertyType: "Gudang",
-    images: ["/images/hero/banner-image.png", "/images/hero/banner.jpg"],
-    specs: { lt: "1.200m²", date: "25 Jan 2026" },
-    agent: { name: "Sari Wulandari", photo: "/images/user/user-02.png" }
-  },
-  {
-    id: 3,
-    title: "CitraGarden Serpong",
-    location: "Jl. Raya Cisauk, Serpong, Tangerang Selatan",
-    price: 980000000,
-    listingType: "Primary",
-    propertyType: "Rumah",
-    images: ["/images/hero/banner-image.png", "/images/hero/banner.jpg"],
-    specs: { lt: "72m²", lb: "60m²", kt: 3, km: 2 },
-    agent: { name: "Rian Pratama", photo: "/images/user/user-03.png" }
-  },
-  {
-    id: 4,
-    title: "Kost Eksklusif SCBD",
-    location: "Jl. Tulodong Atas, Senopati, Kebayoran Baru, Jakarta Selatan",
-    price: 4500000,
-    period: "bln",
-    listingType: "Sewa",
-    propertyType: "Kost",
-    images: ["/images/hero/banner-image.png"],
-    specs: { lt: "24m²", lb: "24m²", kt: 1, km: 1 },
-    agent: { name: "Admin Kosku", photo: "/images/user/user-01.png" }
-  },
-  {
-    id: 5,
-    title: "Tanah Kavling Ubud View",
-    location: "Jl. Raya Andong, Ubud, Gianyar, Bali",
-    price: 850000000,
-    listingType: "Lelang",
-    propertyType: "Tanah",
-    images: ["/images/hero/banner-image.png", "/images/hero/banner.jpg"],
-    specs: { lt: "500m²", date: "10 Feb 2026" },
-    agent: { name: "Wayan Gede", photo: "/images/user/user-02.png" }
-  },
-];
+// ─── Utils ────────────────────────────────────────────────────────────────────
 
-// --- UTILS ---
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
+const formatCurrency = (v: number) =>
+  new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
     maximumFractionDigits: 0,
-  }).format(value);
+  }).format(v);
+
+const formatDateShort = (date?: string | null) => {
+  if (!date) return "-";
+  return new Date(date).toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 };
 
-const getBadgeColor = (type: ListingType) => {
-  switch (type) {
-    case "Lelang": return "bg-rose-500 shadow-rose-500/20";
-    case "Sewa": return "bg-emerald-500 shadow-emerald-500/20";
-    case "Primary": return "bg-blue-500 shadow-blue-500/20";
-    default: return "bg-violet-500 shadow-violet-500/20";
-  }
+const daysUntil = (date?: string | null) => {
+  if (!date) return null;
+  const diff = new Date(date).getTime() - Date.now();
+  return Math.ceil(diff / (1000 * 60 * 60 * 24));
 };
 
-// --- CUSTOM ARROWS (Panah Samping Utama) ---
-// Note: z-index ditingkatkan agar selalu di atas konten
-const CustomPrevArrow = (props: any) => {
-  const { onClick } = props;
-  return (
-    <button
-      onClick={onClick}
-      className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 md:-translate-x-6 z-30 w-10 h-10 lg:w-14 lg:h-14 rounded-full bg-[#1A1A1A] border border-white/20 text-white hover:bg-primary hover:text-black hover:border-primary transition-all flex items-center justify-center shadow-[0_0_20px_rgba(0,0,0,0.5)] active:scale-90"
-      aria-label="Previous Slide"
-    >
-      <Icon icon="solar:arrow-left-linear" className="text-xl lg:text-2xl" />
-    </button>
-  );
+const PROPERTY_ICONS: Record<string, string> = {
+  RUMAH: "solar:home-2-bold-duotone",
+  APARTEMEN: "solar:buildings-2-bold-duotone",
+  GUDANG: "solar:box-minimalistic-bold-duotone",
+  TANAH: "solar:map-point-wave-bold-duotone",
+  PABRIK: "solar:garage-bold-duotone",
+  RUKO: "solar:shop-2-bold-duotone",
+  TOKO: "solar:shop-bold-duotone",
+  HOTEL_DAN_VILLA: "solar:bed-bold-duotone",
 };
 
-const CustomNextArrow = (props: any) => {
-  const { onClick } = props;
-  return (
-    <button
-      onClick={onClick}
-      className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-2 md:translate-x-6 z-30 w-10 h-10 lg:w-14 lg:h-14 rounded-full bg-[#1A1A1A] border border-white/20 text-white hover:bg-primary hover:text-black hover:border-primary transition-all flex items-center justify-center shadow-[0_0_20px_rgba(0,0,0,0.5)] active:scale-90"
-      aria-label="Next Slide"
-    >
-      <Icon icon="solar:arrow-right-linear" className="text-xl lg:text-2xl" />
-    </button>
-  );
+const getPropertyIcon = (k: string) =>
+  PROPERTY_ICONS[k?.trim().toUpperCase()] ?? "solar:home-2-bold-duotone";
+
+const getBadgeColor = (type: string) => {
+  const t = type?.toUpperCase();
+  if (t === "PRIMARY") return "bg-blue-500 shadow-blue-500/20";
+  if (t === "SECONDARY") return "bg-violet-500 shadow-violet-500/20";
+  if (t === "LELANG") return "bg-amber-500 shadow-amber-500/20";
+  if (t === "SEWA") return "bg-emerald-500 shadow-emerald-500/20";
+  return "bg-gray-500";
 };
 
+const getDetailUrl = (item: ListingItem) => {
+  const t = item.jenis_transaksi?.toUpperCase();
+  if (t === "LELANG") return `/Lelang/${item.slug}-${item.id_property}`;
+  if (t === "SEWA") return `/Sewa/${item.slug}-${item.id_property}`;
+  return `/Jual/${item.slug}-${item.id_property}`;
+};
 
-// --- SUB-COMPONENT: PROPERTY CARD ---
-const PropertyCard = ({ item }: { item: Property }) => {
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+// ─── Image gallery mini ───────────────────────────────────────────────────────
 
-  const nextImage = (e: React.MouseEvent) => {
+function MiniGallery({
+  images,
+  alt,
+  height = "h-64",
+}: {
+  images: string[];
+  alt: string;
+  height?: string;
+}) {
+  const [idx, setIdx] = useState(0);
+  const next = (e: React.MouseEvent) => {
+    e.preventDefault();
     e.stopPropagation();
-    setCurrentImageIndex((prev) => (prev + 1) % item.images.length);
+    setIdx((p) => (p + 1) % images.length);
+  };
+  const prev = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIdx((p) => (p - 1 + images.length) % images.length);
   };
 
-  const prevImage = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setCurrentImageIndex((prev) => (prev - 1 + item.images.length) % item.images.length);
-  };
+  return (
+    <div className={`relative w-full ${height} overflow-hidden`}>
+      <Image
+        key={images[idx]}
+        src={images[idx]}
+        alt={alt}
+        fill
+        className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.05]"
+        sizes="(max-width: 768px) 100vw, 33vw"
+      />
+      {images.length > 1 && (
+        <>
+          <button
+            onClick={prev}
+            className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/60 hover:bg-black/90 text-white rounded-full flex items-center justify-center z-20 opacity-0 group-hover:opacity-100 transition-all"
+          >
+            <Icon icon="solar:alt-arrow-left-linear" className="text-lg" />
+          </button>
+          <button
+            onClick={next}
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/60 hover:bg-black/90 text-white rounded-full flex items-center justify-center z-20 opacity-0 group-hover:opacity-100 transition-all"
+          >
+            <Icon icon="solar:alt-arrow-right-linear" className="text-lg" />
+          </button>
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-20">
+            {images.map((_, i) => (
+              <div
+                key={i}
+                className={`h-1.5 rounded-full transition-all ${
+                  i === idx ? "bg-white w-4" : "bg-white/40 w-2"
+                }`}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Card: Jual (PRIMARY / SECONDARY / SEWA) ──────────────────────────────────
+
+function JualCard({ item }: { item: ListingItem }) {
+  const images =
+    item.foto_list?.length > 0
+      ? item.foto_list
+      : [item.gambar || "/images/hero/banner.jpg"];
+
+  const hasDiscount =
+    item.harga_promo != null &&
+    item.harga_promo > 0 &&
+    item.harga_promo < item.harga;
+  const discountPct = hasDiscount
+    ? Math.round(((item.harga - item.harga_promo!) / item.harga) * 100)
+    : 0;
+  const mainPrice = hasDiscount ? item.harga_promo! : item.harga;
 
   return (
-    <div className="bg-[#151515] border border-white/5 rounded-3xl overflow-hidden group hover:border-primary/50 transition-all duration-300 relative flex flex-col h-full hover:shadow-[0_10px_40px_-10px_rgba(74,222,128,0.15)] mx-2">
+    <div className="bg-[#111111] border border-white/5 rounded-3xl overflow-hidden group transition-all duration-300 flex flex-col h-full hover:border-emerald-400/70 hover:shadow-[0_24px_70px_-30px_rgba(16,185,129,0.7)]">
+      {/* IMAGE */}
+      <div className="relative">
+        <MiniGallery images={images} alt={item.judul} height="h-64 md:h-72" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/0 pointer-events-none" />
 
-      {/* IMAGE SECTION */}
-      <div className="relative h-60 md:h-64 w-full overflow-hidden group/image">
-        <Image
-          src={item.images[currentImageIndex]}
-          alt={item.title}
-          fill
-          className="object-cover transition-transform duration-500 group-hover:scale-105"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#151515] via-transparent to-transparent opacity-60"></div>
+        {/* Badge row */}
+        <div className="absolute top-3 left-3 right-3 z-20 flex items-center gap-2">
+          <span
+            className={`${getBadgeColor(item.jenis_transaksi)} text-white text-[10px] font-semibold px-3 py-1.5 rounded-full shadow-md uppercase tracking-wide inline-flex items-center gap-1`}
+          >
+            <Icon icon="solar:star-bold-duotone" className="text-xs opacity-90" />
+            {item.jenis_transaksi}
+          </span>
+          <span className="ml-auto bg-black/70 backdrop-blur-sm border border-white/10 text-white text-[10px] font-semibold px-3 py-1.5 rounded-full inline-flex items-center gap-1.5">
+            <Icon icon={getPropertyIcon(item.kategori)} className="text-sm opacity-90" />
+            {item.kategori}
+          </span>
+        </div>
 
-        {/* Mini Gallery Arrows (Internal) */}
-        {item.images.length > 1 && (
-          <>
-            <button
-              onClick={prevImage}
-              className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/50 hover:bg-primary hover:text-black text-white rounded-full flex items-center justify-center opacity-0 group-hover/image:opacity-100 transition-all z-20"
-            >
-              <Icon icon="solar:alt-arrow-left-linear" />
-            </button>
-            <button
-              onClick={nextImage}
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/50 hover:bg-primary hover:text-black text-white rounded-full flex items-center justify-center opacity-0 group-hover/image:opacity-100 transition-all z-20"
-            >
-              <Icon icon="solar:alt-arrow-right-linear" />
-            </button>
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1 z-20">
-              {item.images.map((_, idx) => (
-                <div key={idx} className={`w-1.5 h-1.5 rounded-full transition-all ${idx === currentImageIndex ? 'bg-primary w-3' : 'bg-white/50'}`}></div>
-              ))}
+        {hasDiscount && (
+          <div className="absolute bottom-4 right-3 z-20">
+            <div className="absolute inset-0 blur-xl bg-gradient-to-r from-rose-500/40 via-orange-500/40 to-amber-400/40 opacity-70 animate-pulse pointer-events-none" />
+            <span className="absolute -top-2 -right-1 w-3 h-3 rounded-full bg-amber-300 animate-ping" />
+            <div className="relative bg-gradient-to-r from-rose-600 via-orange-500 to-amber-400 text-white px-3.5 py-1.5 rounded-full text-[11px] font-extrabold tracking-wide shadow-[0_0_20px_rgba(248,113,113,0.9)] flex items-center gap-1.5">
+              <Icon icon="solar:fire-bold-duotone" className="text-sm" />
+              -{discountPct}%
             </div>
-          </>
+          </div>
         )}
-
-        <div className="absolute top-4 left-4 z-10">
-            <span className={`${getBadgeColor(item.listingType)} text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-lg uppercase tracking-wide flex items-center gap-1`}>
-                {item.listingType === 'Lelang' && <Icon icon="solar:hammer-bold"/>}
-                {item.listingType}
-            </span>
-        </div>
-
-        <div className="absolute top-4 right-4 z-10">
-            <span className="bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1.5 rounded-full border border-white/10 flex items-center gap-1.5">
-                <Icon icon={item.propertyType === 'Gudang' ? "solar:box-bold" : "solar:home-bold"} className="text-primary"/>
-                {item.propertyType}
-            </span>
-        </div>
       </div>
 
-      {/* CONTENT SECTION */}
-      <div className="p-5 flex flex-col flex-grow">
-        <div className="mb-2">
-            <div className="flex items-baseline gap-1">
-                <h3 className="text-white text-xl font-extrabold tracking-tight truncate">
-                    {formatCurrency(item.price)}
+      {/* CONTENT */}
+      <div className="p-5 md:p-6 flex flex-col flex-grow gap-3">
+        <div className="space-y-1">
+          {hasDiscount ? (
+            <>
+              <div className="flex items-center gap-2">
+                <h3 className="text-white text-xl font-black tracking-tight">
+                  {formatCurrency(mainPrice)}
                 </h3>
-                {item.period && (
-                    <span className="text-gray-400 text-xs font-medium">/{item.period}</span>
-                )}
-            </div>
+                <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                  Hemat {formatCurrency(item.harga - mainPrice)}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 line-through decoration-rose-400/80">
+                {formatCurrency(item.harga)}
+              </p>
+            </>
+          ) : (
+            <h3 className="text-white text-xl font-black tracking-tight">
+              {formatCurrency(mainPrice)}
+            </h3>
+          )}
         </div>
 
-        <h4 className="text-gray-200 text-lg font-bold truncate mb-2 group-hover:text-primary transition-colors cursor-pointer" title={item.title}>
-            {item.title}
+        <h4
+          className="text-gray-100 text-sm md:text-base font-semibold line-clamp-2 group-hover:text-primary transition-colors"
+          title={item.judul}
+        >
+          {item.judul}
         </h4>
 
-        <div className="flex items-start gap-2 mb-4">
-            <Icon icon="solar:map-point-wave-bold" className="text-primary text-lg shrink-0 mt-0.5" />
-            <span className="text-gray-400 font-medium text-sm line-clamp-1" title={item.location}>
-              {item.location}
-            </span>
+        <div className="flex items-start gap-2 text-xs text-gray-400">
+          <Icon icon="solar:map-point-wave-bold" className="text-primary text-base shrink-0 mt-0.5" />
+          <span className="line-clamp-1">{item.kota}</span>
         </div>
 
-        <div className="bg-white/5 rounded-xl p-3 mb-5 border border-white/5">
-            {item.listingType === 'Lelang' ? (
-                <div className="flex justify-between items-center px-1">
-                    <div className="flex items-center gap-2">
-                        <Icon icon="solar:ruler-angular-bold" className="text-gray-400"/>
-                        <div className="flex flex-col">
-                            <span className="text-[10px] text-gray-500 uppercase">Luas Tanah</span>
-                            <span className="text-white text-xs font-bold">{item.specs.lt}</span>
-                        </div>
-                    </div>
-                    <div className="w-[1px] h-8 bg-white/10"></div>
-                    <div className="flex items-center gap-2">
-                        <Icon icon="solar:calendar-date-bold" className="text-red-400"/>
-                        <div className="flex flex-col">
-                            <span className="text-[10px] text-gray-500 uppercase">Lelang</span>
-                            <span className="text-white text-xs font-bold">{item.specs.date}</span>
-                        </div>
-                    </div>
-                </div>
-            ) : (
-                <div className="grid grid-cols-4 divide-x divide-white/10 text-center">
-                    <div>
-                        <span className="text-[10px] text-gray-500 block mb-1">KT</span>
-                        <span className="text-white text-xs font-bold flex justify-center items-center gap-1">
-                            <Icon icon="solar:bed-bold" className="text-xs text-gray-400"/> {item.specs.kt}
-                        </span>
-                    </div>
-                    <div>
-                        <span className="text-[10px] text-gray-500 block mb-1">KM</span>
-                        <span className="text-white text-xs font-bold flex justify-center items-center gap-1">
-                            <Icon icon="solar:bath-bold" className="text-xs text-gray-400"/> {item.specs.km}
-                        </span>
-                    </div>
-                    <div>
-                        <span className="text-[10px] text-gray-500 block mb-1">LT</span>
-                        <span className="text-white text-xs font-bold">{item.specs.lt}</span>
-                    </div>
-                    <div>
-                        <span className="text-[10px] text-gray-500 block mb-1">LB</span>
-                        <span className="text-white text-xs font-bold">{item.specs.lb}</span>
-                    </div>
-                </div>
-            )}
-        </div>
-
-        <div className="mt-auto pt-4 border-t border-dashed border-white/10 flex items-center justify-between">
-            <div className="flex items-center gap-3 group/agent cursor-pointer">
-                <div className="relative w-9 h-9 rounded-full p-[1px] bg-gradient-to-tr from-primary to-transparent">
-                    <div className="w-full h-full rounded-full overflow-hidden border-2 border-[#151515] relative">
-                        <Image src={item.agent.photo} alt={item.agent.name} fill className="object-cover" />
-                    </div>
-                </div>
-                <div className="flex flex-col">
-                    <span className="text-xs font-bold text-white group-hover/agent:text-primary transition-colors">{item.agent.name}</span>
-                    <span className="text-[10px] text-gray-500">Brighton Agent</span>
-                </div>
+        {/* Specs */}
+        <div className="bg-white/5 rounded-2xl p-3 border border-white/5">
+          <div className="grid grid-cols-4 gap-2 text-center text-[11px]">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-gray-500">KT</span>
+              <span className="text-white font-semibold inline-flex justify-center items-center gap-1">
+                <Icon icon="solar:bed-bold" className="text-xs text-gray-400" />
+                {item.kamar_tidur || "-"}
+              </span>
             </div>
-
-            <button className="bg-[#25D366] hover:bg-[#20bd70] text-white text-xs font-bold px-4 py-2 rounded-full flex items-center gap-2 transition-all shadow-lg shadow-green-500/20 active:scale-95">
-                <Icon icon="logos:whatsapp-icon" className="text-sm bg-white rounded-full p-[1px]"/>
-                Hubungi
-            </button>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-gray-500">KM</span>
+              <span className="text-white font-semibold inline-flex justify-center items-center gap-1">
+                <Icon icon="solar:bath-bold" className="text-xs text-gray-400" />
+                {item.kamar_mandi || "-"}
+              </span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-gray-500">LT</span>
+              <span className="text-white font-semibold">
+                {item.luas_tanah ? `${item.luas_tanah}m²` : "-"}
+              </span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-gray-500">LB</span>
+              <span className="text-white font-semibold">
+                {item.luas_bangunan ? `${item.luas_bangunan}m²` : "-"}
+              </span>
+            </div>
+          </div>
         </div>
 
+        {/* Agent */}
+        <div className="mt-auto pt-3 flex items-center justify-between gap-3 border-t border-white/5">
+          <div className="flex items-center gap-2.5">
+            <div className="relative w-8 h-8 rounded-full overflow-hidden border border-white/15 shrink-0">
+              <Image src={item.agent_photo} alt="Agent" fill className="object-cover" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[11px] font-semibold text-gray-100 leading-tight">{item.agent_name}</span>
+              <span className="text-[10px] text-gray-500 leading-tight">{item.agent_office}</span>
+            </div>
+          </div>
+          <span className="text-[11px] font-semibold text-primary flex items-center gap-1 shrink-0">
+            Lihat detail
+            <Icon icon="solar:arrow-right-linear" className="text-sm" />
+          </span>
+        </div>
       </div>
     </div>
   );
-};
+}
 
-// --- MAIN COMPONENT ---
+// ─── Badge countdown for LELANG ───────────────────────────────────────────────
+
+function LelangCountdownBadge({ tanggal_lelang }: { tanggal_lelang?: string | null }) {
+  const days = daysUntil(tanggal_lelang);
+  if (days === null) return null;
+
+  if (days <= 0) {
+    return (
+      <span className="relative inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-amber-50">
+        <span className="absolute inset-0 rounded-full bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 opacity-80 blur-[3px]" />
+        <span className="absolute inset-[1px] rounded-full bg-gradient-to-r from-[#18181b] via-[#030712] to-[#111827] border border-amber-300/80 shadow-[0_0_22px_rgba(250,204,21,0.75)]" />
+        <span className="relative inline-flex items-center gap-1.5 px-1">
+          <Icon icon="solar:cup-star-bold-duotone" className="text-sm text-amber-200" />
+          <span className="text-[10px] tracking-[0.24em]">PELUANG EMAS</span>
+        </span>
+      </span>
+    );
+  }
+  if (days > 20) {
+    return (
+      <span className="relative inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-sky-50">
+        <span className="absolute inset-0 rounded-full bg-gradient-to-r from-sky-500 via-cyan-400 to-emerald-400 opacity-70 blur-[3px]" />
+        <span className="absolute inset-[1px] rounded-full bg-gradient-to-r from-[#020617] via-[#020617] to-[#022c22] border border-sky-300/70 shadow-[0_0_18px_rgba(56,189,248,0.7)]" />
+        <span className="relative inline-flex items-center gap-1.5 px-1">
+          <Icon icon="solar:eye-bold-duotone" className="text-sm text-sky-200" />
+          <span className="text-[10px] tracking-[0.22em]">JANGAN LEWATKAN</span>
+        </span>
+      </span>
+    );
+  }
+  if (days > 10) {
+    return (
+      <span className="relative inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] text-white">
+        <span className="absolute inset-0 rounded-full bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 opacity-80 blur-[2px]" />
+        <span className="absolute inset-0 rounded-full bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 animate-pulse opacity-70" />
+        <span className="relative inline-flex items-center gap-1.5 px-1">
+          <Icon icon="solar:fire-bold-duotone" className="text-sm text-yellow-100" />
+          {days} hari lagi
+        </span>
+      </span>
+    );
+  }
+  return (
+    <span className="relative inline-flex items-center gap-1.5 px-5 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.16em] text-white">
+      <span className="absolute inset-0 rounded-full bg-[conic-gradient(at_top,_#22c55e,_#f97316,_#ef4444,_#22c55e)] opacity-90 blur-[3px]" />
+      <span className="absolute inset-[1px] rounded-full bg-gradient-to-r from-black/80 via-black/70 to-black/80 border border-red-400/80 shadow-[0_0_26px_rgba(248,113,113,0.8)]" />
+      <span className="relative inline-flex items-center gap-1.5 px-1">
+        <Icon icon="solar:fire-bold-duotone" className="text-sm text-yellow-100" />
+        <span className="flex items-center gap-1 text-[10px]">
+          <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-ping" />
+          {days} hari lagi
+        </span>
+      </span>
+    </span>
+  );
+}
+
+// ─── Card: Lelang ─────────────────────────────────────────────────────────────
+
+function LelangCard({ item }: { item: ListingItem }) {
+  const images =
+    item.foto_list?.length > 0
+      ? item.foto_list
+      : [item.gambar || "/images/hero/banner.jpg"];
+
+  return (
+    <div className="bg-[#050608] border border-white/10 rounded-3xl overflow-hidden group relative flex flex-col h-full shadow-[0_18px_60px_rgba(0,0,0,0.9)] before:content-[''] before:absolute before:inset-px before:rounded-[22px] before:border before:border-white/5 before:pointer-events-none hover:border-emerald-400/60 hover:shadow-[0_22px_70px_rgba(34,197,94,0.3)] transition-all duration-300">
+      {/* IMAGE */}
+      <div className="relative after:content-[''] after:absolute after:inset-x-6 after:bottom-0 after:h-px after:bg-gradient-to-r after:from-transparent after:via-emerald-400/40 after:to-transparent after:opacity-70">
+        <MiniGallery images={images} alt={item.judul} height="h-64" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-70 pointer-events-none" />
+
+        {/* Badge kiri: kategori */}
+        <div className="absolute top-4 left-4 z-10">
+          <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-black/80 text-emerald-300 text-[11px] font-semibold border border-emerald-400/40 backdrop-blur-sm">
+            <Icon icon={getPropertyIcon(item.kategori)} className="text-base" />
+            {item.kategori}
+          </span>
+        </div>
+
+        {/* Badge kanan: countdown */}
+        <div className="absolute top-4 right-4 z-10">
+          <LelangCountdownBadge tanggal_lelang={item.tanggal_lelang} />
+        </div>
+      </div>
+
+      {/* CONTENT */}
+      <div className="p-5 flex flex-col flex-grow bg-gradient-to-b from-slate-900/80 via-slate-950/90 to-black border-t border-slate-800 backdrop-blur-sm">
+        <div className="mb-2">
+          <h3 className="text-white text-xl font-extrabold tracking-tight truncate">
+            {formatCurrency(item.harga)}
+          </h3>
+        </div>
+
+        <h4
+          className="text-gray-200 text-base font-bold line-clamp-2 mb-2 group-hover:text-primary transition-colors cursor-pointer"
+          title={item.judul}
+        >
+          {item.judul}
+        </h4>
+
+        <div className="flex items-start gap-2 mb-4">
+          <Icon icon="solar:map-point-wave-bold" className="text-primary text-lg shrink-0 mt-0.5" />
+          <span className="text-gray-400 font-medium text-sm line-clamp-1" title={item.alamat_lengkap}>
+            {item.alamat_lengkap}
+          </span>
+        </div>
+
+        {/* Specs box */}
+        <div className="bg-gradient-to-r from-slate-900/90 via-slate-900/80 to-slate-950/90 rounded-2xl p-3 mb-5 border border-slate-700 shadow-[0_12px_35px_rgba(0,0,0,0.8)]">
+          <div className="flex justify-between items-center px-1">
+            <div className="flex items-center gap-2">
+              <Icon icon="solar:ruler-angular-bold" className="text-gray-400" />
+              <div className="flex flex-col">
+                <span className="text-[10px] text-gray-500 uppercase">Luas Tanah</span>
+                <span className="text-white text-xs font-bold">
+                  {item.luas_tanah ? `${item.luas_tanah}m²` : "-"}
+                </span>
+              </div>
+            </div>
+            <div className="w-[1px] h-8 bg-white/10" />
+            <div className="flex items-center gap-2">
+              <Icon icon="solar:calendar-date-bold" className="text-red-400" />
+              <div className="flex flex-col items-start">
+                <span className="flex items-center gap-1 text-[10px] text-gray-500 uppercase">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Lelang
+                </span>
+                <span className="text-white text-xs font-bold">
+                  {formatDateShort(item.tanggal_lelang)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Agent + CTA */}
+        <div className="mt-auto pt-4 flex items-center justify-between border-t border-slate-800 bg-gradient-to-r from-transparent via-slate-900/70 to-transparent -mx-5 px-5 pb-3 rounded-b-3xl">
+          <div className="flex items-center gap-3">
+            <div className="relative w-9 h-9 rounded-full p-[1px] bg-gradient-to-tr from-primary to-transparent">
+              <div className="w-full h-full rounded-full overflow-hidden border-2 border-[#151515] relative">
+                <Image src={item.agent_photo} alt={item.agent_name} fill className="object-cover" />
+              </div>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-white group-hover:text-primary transition-colors">
+                {item.agent_name}
+              </span>
+              <span className="text-[10px] text-gray-500">{item.agent_office}</span>
+            </div>
+          </div>
+
+          <span className="bg-emerald-400/5 hover:bg-emerald-400 text-emerald-200 hover:text-black border border-emerald-400/60 shadow-[0_0_18px_rgba(34,197,94,0.6)] text-xs font-bold px-4 py-2 rounded-full flex items-center gap-2 transition-all active:scale-95">
+            Detail
+            <Icon icon="solar:arrow-right-up-bold-duotone" className="text-sm" />
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Skeleton card ────────────────────────────────────────────────────────────
+
+function SkeletonCard() {
+  return (
+    <div className="bg-[#111111] rounded-3xl border border-white/5 overflow-hidden animate-pulse mx-2">
+      <div className="h-64 bg-white/5" />
+      <div className="p-5 space-y-3">
+        <div className="h-6 bg-white/10 rounded w-2/3" />
+        <div className="h-4 bg-white/5 rounded w-3/4" />
+        <div className="h-4 bg-white/5 rounded w-1/2" />
+        <div className="h-14 bg-white/5 rounded-2xl mt-2" />
+        <div className="h-8 bg-white/5 rounded-2xl mt-4" />
+      </div>
+    </div>
+  );
+}
+
+// ─── Slider Arrows ────────────────────────────────────────────────────────────
+
+const PrevArrow = ({ onClick }: any) => (
+  <button
+    onClick={onClick}
+    className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 md:-translate-x-6 z-30 w-10 h-10 lg:w-14 lg:h-14 rounded-full bg-[#1A1A1A] border border-white/20 text-white hover:bg-primary hover:text-black hover:border-primary transition-all flex items-center justify-center shadow-[0_0_20px_rgba(0,0,0,0.5)] active:scale-90"
+  >
+    <Icon icon="solar:arrow-left-linear" className="text-xl lg:text-2xl" />
+  </button>
+);
+
+const NextArrow = ({ onClick }: any) => (
+  <button
+    onClick={onClick}
+    className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-2 md:translate-x-6 z-30 w-10 h-10 lg:w-14 lg:h-14 rounded-full bg-[#1A1A1A] border border-white/20 text-white hover:bg-primary hover:text-black hover:border-primary transition-all flex items-center justify-center shadow-[0_0_20px_rgba(0,0,0,0.5)] active:scale-90"
+  >
+    <Icon icon="solar:arrow-right-linear" className="text-xl lg:text-2xl" />
+  </button>
+);
+
+// ─── Main Section ─────────────────────────────────────────────────────────────
+
 const Recommendation = () => {
   const sliderRef = useRef<Slider>(null);
+  const [listings, setListings] = useState<ListingItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const settings: Settings = {
+  useEffect(() => {
+    fetch("/api/property/populer")
+      .then((r) => r.json())
+      .then((data) => {
+        setListings(Array.isArray(data) ? data : []);
+        setIsLoading(false);
+      })
+      .catch(() => setIsLoading(false));
+  }, []);
+
+  const count = listings.length;
+  const useSlider = count > 3;
+
+  const sliderSettings: Settings = {
     dots: true,
     infinite: false,
     speed: 500,
-    // DESKTOP: Cukup 3 saja sesuai request
-    slidesToShow: 3, 
+    slidesToShow: 3,
     slidesToScroll: 1,
-    arrows: true, 
-    nextArrow: <CustomNextArrow />,
-    prevArrow: <CustomPrevArrow />,
+    arrows: true,
+    nextArrow: <NextArrow />,
+    prevArrow: <PrevArrow />,
     cssEase: "cubic-bezier(0.87, 0, 0.13, 1)",
     responsive: [
+      { breakpoint: 1280, settings: { slidesToShow: 3 } },
+      { breakpoint: 1024, settings: { slidesToShow: 2 } },
       {
-        breakpoint: 1280, 
-        settings: {
-          slidesToShow: 3,
-        }
-      },
-      {
-        breakpoint: 1024, 
-        settings: {
-          slidesToShow: 2,
-        }
-      },
-      {
-        // MOBILE VIEW ( < 640px )
         breakpoint: 640,
         settings: {
           slidesToShow: 1,
           dots: true,
-          arrows: true, // WAJIB TRUE agar panah muncul di mobile
-          // Pastikan panah custom tetap dirender
-          nextArrow: <CustomNextArrow />,
-          prevArrow: <CustomPrevArrow />,
-        }
-      }
-    ]
+          arrows: true,
+          nextArrow: <NextArrow />,
+          prevArrow: <PrevArrow />,
+        },
+      },
+    ],
   };
 
+  const renderCard = (item: ListingItem) => (
+    <Link href={getDetailUrl(item)} className="block h-full">
+      {item.jenis_transaksi?.toUpperCase() === "LELANG" ? (
+        <LelangCard item={item} />
+      ) : (
+        <JualCard item={item} />
+      )}
+    </Link>
+  );
+
   return (
-    // PADDING: py-16 (Standar Compact) | BG: #0F0F0F
-    <section className="py-16 bg-[#0F0F0F] relative overflow-hidden group/slider-container">
+    <section className="py-10 bg-[#0F0F0F] relative overflow-hidden">
       <div className="container mx-auto px-4 lg:max-w-screen-xl relative z-10">
 
-        {/* HEADER */}
+        {/* Header */}
         <div className="mb-10">
           <motion.span
             initial={{ opacity: 0, y: 10 }}
@@ -366,21 +565,51 @@ const Recommendation = () => {
             viewport={{ once: true }}
             className="text-white text-3xl md:text-4xl font-extrabold"
           >
-            Properti <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-green-300">Populer</span>
+            Properti{" "}
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-green-300">
+              Populer
+            </span>
           </motion.h2>
         </div>
 
-        {/* SLIDER WRAPPER */}
-        {/* Padding horizontal ditambah (px-8) agar panah tidak menutupi konten di mobile */}
-        <div className="relative px-4 md:px-8 -mx-4">
-          <Slider ref={sliderRef} {...settings} className="property-slider">
-            {properties.map((item) => (
-              <div key={item.id} className="px-2 md:px-4 h-full py-6">
-                <PropertyCard item={item} />
-              </div>
-            ))}
-          </Slider>
-        </div>
+        {/* Content */}
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3].map((i) => <SkeletonCard key={i} />)}
+          </div>
+        ) : listings.length === 0 ? (
+          <div className="text-center py-20 text-gray-500">
+            Belum ada hot deal tersedia.
+          </div>
+        ) : useSlider ? (
+          /* >3 items → pakai slider */
+          <div className="relative px-4 md:px-8 -mx-4">
+            <Slider ref={sliderRef} {...sliderSettings} className="property-slider">
+              {listings.map((item) => (
+                <div key={item.id_property} className="px-2 md:px-3 h-full py-4">
+                  {renderCard(item)}
+                </div>
+              ))}
+            </Slider>
+          </div>
+        ) : (
+          /* ≤3 items → grid centered, max-width sesuai jumlah card */
+          <div className="flex justify-center">
+            <div
+              className="grid gap-6 w-full"
+              style={{
+                gridTemplateColumns: `repeat(${count}, minmax(0, 380px))`,
+              }}
+            >
+              {listings.map((item) => (
+                <div key={item.id_property} className="py-4">
+                  {renderCard(item)}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
       </div>
     </section>
   );

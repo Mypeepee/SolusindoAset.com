@@ -26,7 +26,7 @@ const Partnership = () => {
     // pt-4 (Jarak atas diperkecil drastis biar nempel sama section atas)
     // pb-20 (Jarak bawah diperbesar biar lega)
     // bg-[#0F0F0F] (Sesuai request)
-    <section className="pt-4 pb-20 bg-[#0F0F0F] overflow-hidden relative border-t border-white/5 z-20">
+    <section className="pt-4 pb-10 bg-[#0F0F0F] overflow-hidden relative border-t border-white/5 z-20">
       
       {/* Container Header */}
       {/* mb-12: Memberi jarak antara judul "Dipercaya oleh" dengan Logo Brand dibawahnya */}

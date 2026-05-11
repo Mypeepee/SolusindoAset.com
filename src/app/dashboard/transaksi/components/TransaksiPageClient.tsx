@@ -1,12 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Icon } from "@iconify/react";
 import PilihListingView from "./PilihListingView";
 import ProgressTransaksiView from "./ProgressTransaksiView";
 
 export default function TransaksiPageClient() {
-  const [tab, setTab] = useState<"pilih" | "progress">("pilih");
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab") === "progress" ? "progress" : "pilih";
+  const [tab, setTab] = useState<"pilih" | "progress">(initialTab);
   const [closingCount, setClosingCount] = useState<number | null>(null);
 
   useEffect(() => {

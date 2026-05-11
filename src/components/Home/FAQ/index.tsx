@@ -38,7 +38,7 @@ const FAQ = () => {
   return (
     // REVISI PADDING: py-16 (Standar Compact yang kita sepakati)
     // BG: #0F0F0F (Abu gelap premium, sama dengan section WhyKosku & Types)
-    <section className="py-16 bg-[#0F0F0F] relative z-10" id="faq">
+    <section className="py-10 bg-[#0F0F0F] relative z-10" id="faq">
       <div className="container mx-auto lg:max-w-screen-xl px-4">
         <div className="grid lg:grid-cols-12 gap-10 items-start">
           

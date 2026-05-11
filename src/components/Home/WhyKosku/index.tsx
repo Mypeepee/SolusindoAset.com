@@ -8,7 +8,7 @@ const WhyKosku = () => {
   return (
     // PADDING: py-16 (Standar Compact & Rapi)
     // BG: #0F0F0F (Menyatu dengan section Recommendation sebelumnya)
-    <section className="py-16 bg-[#0F0F0F] relative overflow-hidden">
+    <section className="py-10 bg-[#0F0F0F] relative overflow-hidden">
       
       <div className="container mx-auto px-4 max-w-screen-xl relative z-10">
         

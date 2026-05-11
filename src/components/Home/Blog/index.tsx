@@ -40,7 +40,7 @@ const Blog = () => {
   return (
     // PADDING: py-16 (Standar Compact)
     // BG: #0F0F0F (Konsisten dengan section FAQ & WhyKosku)
-    <section className="py-16 bg-[#0F0F0F] relative z-10" id="blog">
+    <section className="py-10 bg-[#0F0F0F] relative z-10" id="blog">
       <div className="container mx-auto lg:max-w-screen-xl px-4">
         
         {/* HEADER SECTION */}

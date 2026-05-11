@@ -41,7 +41,7 @@ const Hero = () => {
     <div className="relative w-full bg-darkmode">
       
       {/* --- BAGIAN 1: BANNER UTAMA (CENTERED) --- */}
-      <section className="relative w-full h-[85vh] min-h-[600px] flex items-center justify-center overflow-hidden" id="main-banner">
+      <section className="relative w-full h-[75vh] min-h-[560px] flex items-center justify-center overflow-hidden" id="main-banner">
         
         {/* Background Image */}
         <div className="absolute inset-0 z-0">
@@ -112,7 +112,7 @@ const Hero = () => {
 
       {/* --- BAGIAN 2: FILTER PENCARIAN (FLOATING / OVERLAP) --- */}
       {/* Margin negatif (-mt-32) membuat elemen ini naik ke atas menutupi banner */}
-      <div className="container mx-auto px-4 relative z-20 -mt-32 mb-20">
+      <div className="container mx-auto px-4 relative z-20 -mt-32 mb-6">
         <CardSlider />
       </div>
 

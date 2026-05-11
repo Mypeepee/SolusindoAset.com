@@ -239,7 +239,7 @@ export const authOptions: AuthOptions = {
             email: true,
             peran: true,
             status_akun: true,
-            agent: { select: { id_agent: true, status_keanggotaan: true } },
+            agent: { select: { id_agent: true, status_keanggotaan: true, foto_profil_url: true } },
           },
         });
 
@@ -260,6 +260,9 @@ export const authOptions: AuthOptions = {
           // optional: bisa dipakai UI
           token.agentStatus = dbUser.agent?.status_keanggotaan ?? null;
           token.status_akun = dbUser.status_akun ?? null;
+
+          // foto profil dari tabel agent (kalau ada)
+          if (dbUser.agent?.foto_profil_url) token.picture = dbUser.agent.foto_profil_url;
         } else {
           // user hilang dari DB
           token.peran = "USER";
@@ -298,6 +301,9 @@ export const authOptions: AuthOptions = {
         // optional untuk UI
         session.user.agentStatus = token.agentStatus ?? null;
         session.user.status_akun = token.status_akun ?? null;
+
+        // foto profil: DB > Google OAuth > null
+        session.user.image = token.picture ?? session.user.image ?? null;
       }
       return session;
     },

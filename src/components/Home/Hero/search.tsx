@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Icon } from "@iconify/react";
 import toast from "react-hot-toast";
 
@@ -213,14 +214,21 @@ const CardSlider = () => {
                 setFormData(prev => ({ ...prev, type: "" }));
               }}
               className={`
-                flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-bold transition-all duration-300 whitespace-nowrap
-                ${activeTab === tab.id 
-                  ? "bg-primary text-darkmode shadow-[0_0_20px_rgba(74,222,128,0.4)]" 
-                  : "text-gray-400 hover:text-white hover:bg-white/10"}
+                relative flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors duration-200
+                ${activeTab === tab.id ? "text-darkmode" : "text-gray-400 hover:text-white"}
               `}
             >
-              <Icon icon={tab.icon} className="text-lg" />
-              {tab.label}
+              {activeTab === tab.id && (
+                <motion.span
+                  layoutId="activeTabPill"
+                  className="absolute inset-0 rounded-full bg-primary shadow-[0_0_20px_rgba(74,222,128,0.45)]"
+                  transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                />
+              )}
+              <span className="relative z-10 flex items-center gap-2">
+                <Icon icon={tab.icon} className="text-lg" />
+                {tab.label}
+              </span>
             </button>
           ))}
         </div>

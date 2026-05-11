@@ -1,5 +1,7 @@
 "use client";
 
+import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Icon } from "@iconify/react";
 import {
   AreaCompareChart,
@@ -89,11 +91,192 @@ function deltaColor(delta: number | null) {
 }
 
 /* ────────────────────────────────────────────────────────────────────
+   Pendapatan History Modal
+   ──────────────────────────────────────────────────────────────────── */
+
+type HistoriItem = {
+  id: string;
+  role: string;
+  pendapatan: number;
+  kode: string;
+  status: string;
+  tanggal: string;
+  alamat: string;
+  foto: string;
+};
+
+function roleLabel(raw: string): string {
+  const key = raw.toUpperCase().replace(/[\s-]/g, "_");
+  const map: Record<string, string> = {
+    MGMT_FUND1: "Management Fund 1",
+    MGMT_FUND2: "Management Fund 2",
+    MGMT_FUND3: "Management Fund 3",
+    MGMT: "Management",
+    PRINC: "Principal",
+    PRINCIPAL: "Principal",
+    INV: "Investor",
+    INVESTOR: "Investor",
+    CONS: "Consultant",
+    CONSULTANT: "Consultant",
+    PROMO: "Promotion",
+    PROMOTION: "Promotion",
+    UP_1: "Upline 1",
+    UP_2: "Upline 2",
+    UPLINE_1: "Upline 1",
+    UPLINE_2: "Upline 2",
+    THC: "Take Home Pay",
+    THC_AGENT: "Take Home Pay",
+    EMP: "Employee Incentive",
+    EMPLOYEE: "Employee Incentive",
+    AGENT: "Agent",
+    COBROKE: "Co-Broke",
+  };
+  return map[key] ?? raw;
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  SELESAI: "Selesai",
+  CLOSING: "Closing",
+  AJB: "AJB",
+  VERIFIKASI_DOKUMEN: "Verif. Dok",
+  PENGURUSAN_DOKUMEN: "Urus Dok",
+  EKSEKUSI_PENGOSONGAN: "Pengosongan",
+  BATAL: "Batal",
+};
+
+const STATUS_COLOR: Record<string, string> = {
+  SELESAI: "bg-emerald-500/15 text-emerald-300 border-emerald-400/25",
+  CLOSING: "bg-violet-500/15 text-violet-300 border-violet-400/25",
+  BATAL: "bg-rose-500/15 text-rose-300 border-rose-400/25",
+  AJB: "bg-sky-500/15 text-sky-300 border-sky-400/25",
+};
+
+function PendapatanModal({ onClose }: { onClose: () => void }) {
+  const [items, setItems] = useState<HistoriItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/dashboard/agent/pendapatan-histori")
+      .then((r) => r.json())
+      .then((json) => {
+        if (json?.ok && json.data) {
+          setItems(json.data);
+          setTotal(json.totalPendapatan ?? 0);
+        } else {
+          setError(json?.message ?? "Gagal memuat data");
+        }
+        setLoading(false);
+      })
+      .catch(() => {
+        setError("Gagal terhubung ke server");
+        setLoading(false);
+      });
+  }, []);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      {/* backdrop */}
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+
+      <div
+        className="relative w-full max-w-md overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-b from-[#0d1a14] to-[#070a0b] shadow-[0_0_0_1px_rgba(52,211,153,0.12),0_40px_120px_rgba(0,0,0,0.9)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* top hairline glow */}
+        <div className="pointer-events-none absolute top-0 left-6 right-6 h-px bg-gradient-to-r from-transparent via-emerald-400/40 to-transparent" />
+
+        {/* header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-3">
+          <div>
+            <h2 className="text-base font-bold text-white tracking-tight">Histori Pendapatan</h2>
+            {!loading && !error && (
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                {items.length} transaksi · Total {formatIDRCompact(total)}
+              </p>
+            )}
+          </div>
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-slate-400 hover:text-white hover:bg-white/[0.08] transition"
+          >
+            <Icon icon="solar:close-bold" className="text-base" />
+          </button>
+        </div>
+
+        {/* total strip */}
+        {!loading && !error && items.length > 0 && (
+          <div className="mx-4 mb-3 flex items-center gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.07] px-4 py-2.5">
+            <Icon icon="solar:wallet-money-bold-duotone" className="text-xl text-emerald-300 flex-shrink-0" />
+            <div className="flex-1 leading-tight">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wide">Total Pendapatanmu</p>
+              <p className="text-sm font-extrabold text-emerald-200">{formatIDRCompact(total)}</p>
+            </div>
+          </div>
+        )}
+
+        {/* list */}
+        <div className="max-h-[380px] overflow-y-auto px-4 pb-5 space-y-2">
+          {loading ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-10 rounded-xl bg-white/[0.04] animate-pulse" />
+            ))
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-10 text-rose-400">
+              <Icon icon="solar:danger-bold-duotone" className="text-4xl mb-2" />
+              <p className="text-sm">{error}</p>
+            </div>
+          ) : items.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-slate-500">
+              <Icon icon="solar:inbox-bold-duotone" className="text-4xl mb-2 text-slate-600" />
+              <p className="text-sm">Belum ada data pendapatan</p>
+            </div>
+          ) : (
+            items.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5 hover:bg-white/[0.05] transition"
+              >
+                {/* foto properti */}
+                <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-lg border border-white/[0.08] bg-white/[0.04]">
+                  {item.foto ? (
+                    <img src={item.foto} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center">
+                      <Icon icon="solar:home-2-bold-duotone" className="text-base text-slate-600" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-white">{roleLabel(item.role)}</p>
+                  <p className="truncate text-[11px] text-slate-500">{item.alamat || item.kode}</p>
+                </div>
+
+                <div className="flex-shrink-0 text-right">
+                  <p className="text-sm font-bold text-emerald-300">{formatIDRCompact(item.pendapatan)}</p>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────────
    1. TODAY'S PERFORMANCE  +  4 live KPI tiles
    ──────────────────────────────────────────────────────────────────── */
 
 function TodayPerformanceCard() {
   const { loading, data } = useAgentKpiCards();
+  const router = useRouter();
+  const [showPendapatanModal, setShowPendapatanModal] = useState(false);
 
   type Tile = {
     icon: string;
@@ -106,7 +289,11 @@ function TodayPerformanceCard() {
     iconGrad: string;
     iconText: string;
     valueText: string;
+    glowColor: string;
     span2?: boolean;
+    onClick?: () => void;
+    clickable?: boolean;
+    clickHint?: string;
   };
 
   const tiles: Tile[] = [
@@ -120,7 +307,11 @@ function TodayPerformanceCard() {
       iconGrad: "linear-gradient(135deg,#34d399,#059669)",
       iconText: "text-white",
       valueText: "text-emerald-100",
+      glowColor: "rgba(52,211,153,0.25)",
       span2: true,
+      clickable: true,
+      clickHint: "Lihat histori →",
+      onClick: () => setShowPendapatanModal(true),
     },
     {
       icon: "solar:medal-star-bold-duotone",
@@ -133,6 +324,10 @@ function TodayPerformanceCard() {
       iconGrad: "linear-gradient(135deg,#a78bfa,#7c3aed)",
       iconText: "text-white",
       valueText: "text-violet-100",
+      glowColor: "rgba(167,139,250,0.25)",
+      clickable: true,
+      clickHint: "Progress transaksi →",
+      onClick: () => router.push("/dashboard/transaksi?tab=progress"),
     },
     {
       icon: "solar:home-2-bold-duotone",
@@ -144,6 +339,10 @@ function TodayPerformanceCard() {
       iconGrad: "linear-gradient(135deg,#38bdf8,#0284c7)",
       iconText: "text-white",
       valueText: "text-sky-100",
+      glowColor: "rgba(56,189,248,0.25)",
+      clickable: true,
+      clickHint: "Lihat listings →",
+      onClick: () => router.push("/dashboard/listings"),
     },
     {
       icon: "solar:user-plus-bold-duotone",
@@ -155,70 +354,96 @@ function TodayPerformanceCard() {
       iconGrad: "linear-gradient(135deg,#fbbf24,#d97706)",
       iconText: "text-white",
       valueText: "text-amber-100",
+      glowColor: "rgba(251,191,36,0.2)",
     },
   ];
 
   return (
-    <Card className="h-full">
-      <CardHeader
-        title="Performa Keseluruhan"
-        subtitle="Data real-time dari database"
-        right={<ExportBtn />}
-      />
-      <div className="grid grid-cols-2 gap-3 px-6 pb-6 lg:grid-cols-5">
-        {tiles.map((t, i) => (
-          <div
-            key={t.label}
-            style={{ background: t.bg }}
-            className={`relative overflow-hidden rounded-2xl border border-white/[0.1] p-4 ${t.span2 ? "lg:col-span-2" : ""}`}
-          >
-            {/* ambient blob */}
+    <>
+      {showPendapatanModal && <PendapatanModal onClose={() => setShowPendapatanModal(false)} />}
+      <Card className="h-full">
+        <CardHeader
+          title="Performa Keseluruhan"
+          subtitle="Data real-time dari database"
+          right={<ExportBtn />}
+        />
+        <div className="grid grid-cols-2 gap-3 px-6 pb-6 lg:grid-cols-5">
+          {tiles.map((t) => (
             <div
-              className="pointer-events-none absolute -top-6 -right-6 h-24 w-24 rounded-full blur-2xl"
-              style={{ background: t.blob }}
-            />
-            {/* top hairline */}
-            <div className="pointer-events-none absolute top-0 left-4 right-4 h-px bg-white/20" />
-
-            {/* icon */}
-            <div
-              className="flex h-10 w-10 items-center justify-center rounded-xl shadow-lg"
-              style={{ background: t.iconGrad }}
+              key={t.label}
+              role={t.clickable ? "button" : undefined}
+              tabIndex={t.clickable ? 0 : undefined}
+              onClick={t.onClick}
+              onKeyDown={t.onClick ? (e) => { if (e.key === "Enter" || e.key === " ") t.onClick!(); } : undefined}
+              style={Object.assign(
+                { background: t.bg } as React.CSSProperties,
+                t.clickable ? { "--tile-glow": t.glowColor } as React.CSSProperties : {},
+              )}
+              className={[
+                "group relative overflow-hidden rounded-2xl border border-white/[0.1] p-4",
+                t.span2 ? "lg:col-span-2" : "",
+                t.clickable
+                  ? "cursor-pointer select-none transition-all duration-300 hover:scale-[1.03] hover:border-white/[0.22] hover:shadow-[0_8px_40px_var(--tile-glow,rgba(0,0,0,0.3))] active:scale-[0.98]"
+                  : "transition-all duration-300 hover:scale-[1.015] hover:border-white/[0.18]",
+              ].join(" ")}
             >
-              <Icon icon={t.icon} className={`text-lg ${t.iconText}`} />
-            </div>
+              {/* ambient blob */}
+              <div
+                className="pointer-events-none absolute -top-6 -right-6 h-24 w-24 rounded-full blur-2xl transition-all duration-500 group-hover:h-32 group-hover:w-32 group-hover:opacity-130"
+                style={{ background: t.blob }}
+              />
+              {/* top hairline */}
+              <div className="pointer-events-none absolute top-0 left-4 right-4 h-px bg-white/20 transition-all duration-300 group-hover:bg-white/35" />
+              {/* bottom shine on hover */}
+              {t.clickable && (
+                <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/0 to-transparent transition-all duration-300 group-hover:via-white/20" />
+              )}
 
-            {loading ? (
-              <>
-                <div className="mt-3 h-7 w-28 rounded-lg bg-white/10 animate-pulse" />
-                <div className="mt-2 h-3 w-20 rounded bg-white/[0.07] animate-pulse" />
-                <div className="mt-1.5 h-3 w-32 rounded bg-white/[0.05] animate-pulse" />
-              </>
-            ) : (
-              <>
-                <p className={`mt-3 text-xl font-extrabold tracking-tight leading-none ${t.valueText} ${t.span2 ? "lg:text-2xl" : ""}`}>
-                  {t.value}
-                </p>
-                <p className="mt-1.5 text-xs font-semibold text-white/70">{t.label}</p>
-                {t.sublabel ? (
-                  <p className="mt-1 text-[10px] font-medium text-white/50">{t.sublabel}</p>
-                ) : (
-                  <div className={`mt-1 flex items-center gap-1 text-[10px] font-medium ${deltaColor(t.delta)}`}>
-                    {t.delta !== null && (
-                      <Icon
-                        icon={t.delta >= 0 ? "solar:arrow-up-bold" : "solar:arrow-down-bold"}
-                        className="text-[9px]"
-                      />
-                    )}
-                    {deltaLabel(t.delta)}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        ))}
-      </div>
-    </Card>
+              {/* icon */}
+              <div
+                className="flex h-10 w-10 items-center justify-center rounded-xl shadow-lg transition-transform duration-300 group-hover:scale-110"
+                style={{ background: t.iconGrad }}
+              >
+                <Icon icon={t.icon} className={`text-lg ${t.iconText}`} />
+              </div>
+
+              {loading ? (
+                <>
+                  <div className="mt-3 h-7 w-28 rounded-lg bg-white/10 animate-pulse" />
+                  <div className="mt-2 h-3 w-20 rounded bg-white/[0.07] animate-pulse" />
+                  <div className="mt-1.5 h-3 w-32 rounded bg-white/[0.05] animate-pulse" />
+                </>
+              ) : (
+                <>
+                  <p className={`mt-3 text-xl font-extrabold tracking-tight leading-none ${t.valueText} ${t.span2 ? "lg:text-2xl" : ""}`}>
+                    {t.value}
+                  </p>
+                  <p className="mt-1.5 text-xs font-semibold text-white/70">{t.label}</p>
+                  {t.sublabel ? (
+                    <p className="mt-1 text-[10px] font-medium text-white/50">{t.sublabel}</p>
+                  ) : (
+                    <div className={`mt-1 flex items-center gap-1 text-[10px] font-medium ${deltaColor(t.delta)}`}>
+                      {t.delta !== null && (
+                        <Icon
+                          icon={t.delta >= 0 ? "solar:arrow-up-bold" : "solar:arrow-down-bold"}
+                          className="text-[9px]"
+                        />
+                      )}
+                      {deltaLabel(t.delta)}
+                    </div>
+                  )}
+                  {t.clickHint && (
+                    <p className="mt-2 text-[9px] font-semibold text-white/30 transition-all duration-200 group-hover:text-white/60 tracking-wide uppercase">
+                      {t.clickHint}
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </Card>
+    </>
   );
 }
 
