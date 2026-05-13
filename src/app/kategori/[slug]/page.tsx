@@ -46,7 +46,7 @@ type Props = {
 
 export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const slug = params.slug;
-  const label = KATEGORI_LABEL[slug];
+  const label = slug === "semua" ? "Semua Kategori" : KATEGORI_LABEL[slug];
   if (!label) return { title: "Kategori Properti | Kosku" };
 
   const tipe = typeof searchParams.tipe === "string" ? searchParams.tipe : undefined;
@@ -104,10 +104,11 @@ function normalizeAgentPhoto(fileId: string | null | undefined): string {
 // --- SERVER COMPONENT ---
 export default async function KategoriPage({ params, searchParams }: Props) {
   const slug = params.slug;
+  const isSemua = slug === "semua";
   const kategori = SLUG_TO_KATEGORI[slug];
-  if (!kategori) notFound();
+  if (!kategori && !isSemua) notFound();
 
-  const label = KATEGORI_LABEL[slug];
+  const label = isSemua ? "Semua Kategori" : KATEGORI_LABEL[slug];
 
   // Parse searchParams
   const page   = typeof searchParams.page === "string"  ? Number(searchParams.page)  : 1;
@@ -126,7 +127,7 @@ export default async function KategoriPage({ params, searchParams }: Props) {
   };
 
   const whereClause: Prisma.ListingWhereInput = {
-    kategori,
+    ...(kategori && { kategori }),
     status_tayang: "TERSEDIA",
     jenis_transaksi: transaksiFilter(),
     ...(kota && { kota: { contains: kota, mode: "insensitive" } }),
@@ -185,10 +186,10 @@ export default async function KategoriPage({ params, searchParams }: Props) {
     };
   });
 
-  // Hitung tab counts (semua transaksi untuk kategori ini)
+  // Hitung tab counts
   const tabCounts = await prisma.listing.groupBy({
     by: ["jenis_transaksi"],
-    where: { kategori, status_tayang: "TERSEDIA" },
+    where: { ...(kategori && { kategori }), status_tayang: "TERSEDIA" },
     _count: { jenis_transaksi: true },
   });
 

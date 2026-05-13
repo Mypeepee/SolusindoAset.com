@@ -7,20 +7,26 @@ export const headerData: HeaderItem[] = [
     href: "/PrimarySecondary", // Fallback link jika menu utama diklik
     submenu: [
       {
-        label: "Jual Beli (Primary & Second)", 
-        href: "/Jual", // Mengarah ke: src/app/PrimarySecondary/page.tsx
+        label: "Semua Kategori",
+        href: "/kategori/semua",
+        description: "Jelajahi semua jenis properti sekaligus",
+        icon: "solar:map-point-rotate-bold-duotone",
+      },
+      {
+        label: "Jual Beli (Primary & Second)",
+        href: "/Jual",
         description: "Proyek baru developer & rumah siap huni",
-        icon: "solar:home-smile-bold", 
+        icon: "solar:home-smile-bold",
       },
       {
         label: "Aset Lelang",
-        href: "/Lelang", // Mengarah ke: src/app/Lelang/page.tsx
+        href: "/Lelang",
         description: "Aset investasi di bawah harga pasar",
         icon: "solar:tag-price-bold",
       },
       {
         label: "Sewa",
-        href: "/Sewa", // Mengarah ke: src/app/sewa/page.tsx (Pastikan folder ini ada)
+        href: "/Sewa",
         description: "Pilihan properti sewa",
         icon: "solar:key-minimalistic-square-bold",
       },

@@ -16,13 +16,12 @@ const PROPERTY_ICONS: Record<string, string> = {
   "Pabrik": "solar:garage-bold-duotone",
   "Ruko": "solar:shop-2-bold-duotone",
   "Toko": "solar:shop-bold-duotone",
-  "Hotel": "solar:bed-bold-duotone",
-  "Villa": "solar:star-fall-bold-duotone",
+  "Hotel & Villa": "solar:bed-bold-duotone",
 };
 
 // Daftar Tipe Properti Khusus BELI
 const BUY_TYPES = sortAlpha([
-  "Rumah", "Tanah", "Gudang", "Apartemen", "Pabrik", "Ruko", "Toko", "Hotel", "Villa"
+  "Rumah", "Tanah", "Gudang", "Apartemen", "Pabrik", "Ruko", "Toko", "Hotel & Villa"
 ]);
 
 interface Region {

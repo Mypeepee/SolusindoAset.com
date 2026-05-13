@@ -1,0 +1,919 @@
+"use client";
+
+import React, { useRef, useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
+import { Icon } from "@iconify/react";
+import { motion, AnimatePresence } from "framer-motion";
+import toast from "react-hot-toast";
+import type { TabCounts } from "../types";
+
+// ─── PORTAL DROPDOWN ─────────────────────────────────────────────────────────
+// Renders children directly into document.body to escape any stacking context
+function PortalDropdown({
+  triggerRef,
+  open,
+  children,
+}: {
+  triggerRef: React.RefObject<HTMLDivElement>;
+  open: boolean;
+  children: React.ReactNode;
+}) {
+  const [rect, setRect] = useState<DOMRect | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const update = () => {
+      if (triggerRef.current) setRect(triggerRef.current.getBoundingClientRect());
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [open, triggerRef]);
+
+  if (!open || !rect || typeof document === "undefined") return null;
+
+  return createPortal(
+    <div
+      data-search-portal="true"
+      style={{
+        position: "fixed",
+        top: rect.bottom + 12,
+        left: rect.left,
+        zIndex: 99999,
+        pointerEvents: "auto",
+      }}
+    >
+      {children}
+    </div>,
+    document.body
+  );
+}
+
+// ─── COUNT-UP ─────────────────────────────────────────────────────────────────
+function useCountUp(target: number, duration = 1100): number {
+  const [val, setVal] = useState(0);
+  const raf  = useRef<number>(0);
+  const done = useRef(false);
+  useEffect(() => {
+    done.current = false;
+    setVal(0);
+    if (target === 0) return;
+    const t0 = performance.now();
+    const run = (now: number) => {
+      const p = Math.min((now - t0) / duration, 1);
+      setVal(Math.round((1 - Math.pow(1 - p, 3)) * target));
+      if (p < 1) raf.current = requestAnimationFrame(run);
+      else done.current = true;
+    };
+    raf.current = requestAnimationFrame(run);
+    return () => cancelAnimationFrame(raf.current);
+  }, [target, duration]);
+  return val;
+}
+
+// ─── KATEGORI DATA ────────────────────────────────────────────────────────────
+const KATEGORI_LIST = [
+  { key: "SEMUA",           label: "Semua",         slug: "semua",           icon: "solar:map-point-rotate-bold-duotone", color: "#6366f1", desc: "Semua jenis properti" },
+  { key: "RUMAH",           label: "Rumah",         slug: "rumah",           icon: "solar:home-smile-bold-duotone",     color: "#34d399", desc: "Hunian nyaman & strategis" },
+  { key: "APARTEMEN",       label: "Apartemen",     slug: "apartemen",       icon: "solar:city-bold-duotone",           color: "#60a5fa", desc: "Unit modern di pusat kota" },
+  { key: "RUKO",            label: "Ruko",          slug: "ruko",            icon: "solar:shop-bold-duotone",           color: "#fbbf24", desc: "Bisnis & residensial" },
+  { key: "TANAH",           label: "Tanah",         slug: "tanah",           icon: "solar:map-point-wave-bold-duotone", color: "#f472b6", desc: "Kavling & lahan investasi" },
+  { key: "GUDANG",          label: "Gudang",        slug: "gudang",          icon: "solar:box-bold-duotone",            color: "#a78bfa", desc: "Logistik & pergudangan" },
+  { key: "HOTEL_DAN_VILLA", label: "Hotel & Villa", slug: "hotel-dan-villa", icon: "solar:bed-bold-duotone",            color: "#fb923c", desc: "Resor & penginapan mewah" },
+  { key: "TOKO",            label: "Toko",          slug: "toko",            icon: "solar:bag-heart-bold-duotone",      color: "#e879f9", desc: "Retail & komersial" },
+  { key: "PABRIK",          label: "Pabrik",        slug: "pabrik",          icon: "solar:garage-bold-duotone",         color: "#94a3b8", desc: "Industri & manufaktur" },
+];
+
+const N = KATEGORI_LIST.length;
+const LOOPED_LIST = [
+  ...KATEGORI_LIST.map((k, i) => ({ ...k, uid: `a-${i}` })),
+  ...KATEGORI_LIST.map((k, i) => ({ ...k, uid: `b-${i}` })),
+  ...KATEGORI_LIST.map((k, i) => ({ ...k, uid: `c-${i}` })),
+];
+
+const CARD_W  = 152;
+const CARD_GAP = 10;
+const STRIDE  = CARD_W + CARD_GAP;
+const ONE_SET = N * STRIDE;
+
+// ─── SEARCH CONFIG ────────────────────────────────────────────────────────────
+const sortAlpha = (arr: string[]) => [...arr].sort((a, b) => a.localeCompare(b));
+
+const PROPERTY_ICONS: Record<string, string> = {
+  "Rumah":       "solar:home-2-bold-duotone",
+  "Apartemen":   "solar:buildings-2-bold-duotone",
+  "Gudang":      "solar:box-minimalistic-bold-duotone",
+  "Tanah":       "solar:map-point-wave-bold-duotone",
+  "Pabrik":      "solar:garage-bold-duotone",
+  "Ruko":        "solar:shop-2-bold-duotone",
+  "Toko":        "solar:shop-bold-duotone",
+  "Hotel & Villa": "solar:bed-bold-duotone",
+};
+
+const PROPERTY_TYPES = {
+  beli:   sortAlpha(["Rumah","Tanah","Gudang","Apartemen","Pabrik","Ruko","Toko","Hotel & Villa"]),
+  sewa:   sortAlpha(["Rumah","Tanah","Gudang","Apartemen","Pabrik","Ruko","Toko"]),
+  lelang: sortAlpha(["Rumah","Tanah","Gudang","Apartemen","Pabrik","Ruko","Toko","Hotel & Villa"]),
+};
+
+type TabType = "beli" | "sewa" | "lelang";
+
+interface Region { id: string; name: string; level: "provinsi"|"kota"|"kecamatan"|"kelurahan" }
+interface ApiRegion { id: string; nama: string }
+interface SearchState {
+  locations: Region[]; type: string;
+  minPrice: string; maxPrice: string;
+  minLt: string; maxLt: string;
+  minLb: string; maxLb: string;
+}
+
+const BASE_API = "https://ibnux.github.io/data-indonesia";
+
+const PARTICLES = [
+  { x:  8, y: 22, s: 2,   d: 3.1, delay: 0   },
+  { x: 18, y: 65, s: 1.5, d: 4.2, delay: 0.6 },
+  { x: 30, y: 12, s: 2.5, d: 3.8, delay: 1.2 },
+  { x: 55, y: 35, s: 2,   d: 3.5, delay: 1.8 },
+  { x: 72, y: 18, s: 2,   d: 3.2, delay: 2.1 },
+  { x: 88, y: 72, s: 2,   d: 3.6, delay: 1.5 },
+];
+
+// ─── STAT ROW (count-up per baris) ────────────────────────────────────────────
+function StatRow({ label, count, color }: { label: string; count: number; color: string }) {
+  const animated = useCountUp(count);
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-[9px] font-semibold text-white/30 uppercase tracking-[0.12em]">{label}</span>
+      <span className="text-[11px] font-black tabular-nums" style={{ color }}>
+        {animated.toLocaleString("id-ID")}
+      </span>
+    </div>
+  );
+}
+
+// ─── KATEGORI CARD ────────────────────────────────────────────────────────────
+function KategoriCard({ item, isActive, tabCounts, scrollRef }: {
+  item: typeof LOOPED_LIST[0];
+  isActive: boolean;
+  tabCounts?: TabCounts;
+  scrollRef: React.RefObject<HTMLDivElement>;
+}) {
+  const router  = useRouter();
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  const handleClick = () => {
+    if (cardRef.current && scrollRef.current) {
+      const container = scrollRef.current;
+      const cardRect  = cardRef.current.getBoundingClientRect();
+      const contRect  = container.getBoundingClientRect();
+      const delta     = (cardRect.left - contRect.left) - (container.offsetWidth / 2 - CARD_W / 2);
+      container.scrollTo({ left: container.scrollLeft + delta, behavior: "smooth" });
+      setTimeout(() => router.push(`/kategori/${item.slug}`), 260);
+    } else {
+      router.push(`/kategori/${item.slug}`);
+    }
+  };
+
+  return (
+    <div ref={cardRef} className="shrink-0 flex cursor-pointer" style={{ width: CARD_W }} onClick={handleClick}>
+      <div
+        className="relative rounded-2xl p-4 transition-all duration-300 flex flex-col w-full"
+        style={{
+          background: isActive
+            ? `linear-gradient(145deg,${item.color}22 0%,${item.color}06 100%)`
+            : "rgba(255,255,255,0.038)",
+          border: `1px solid ${isActive ? item.color + "50" : "rgba(255,255,255,0.07)"}`,
+          boxShadow: isActive ? `0 6px 28px -6px ${item.color}45, 0 0 0 1px ${item.color}18` : "none",
+          transform: isActive ? "translateY(-4px)" : "translateY(0px)",
+        }}
+      >
+        {/* top shimmer */}
+        {isActive && (
+          <div className="absolute top-0 left-5 right-5 h-px"
+            style={{ background: `linear-gradient(90deg,transparent,${item.color}cc,transparent)` }} />
+        )}
+
+        {/* check badge */}
+        {isActive && (
+          <div className="absolute top-3 right-3 w-5 h-5 rounded-full flex items-center justify-center"
+            style={{ background: `${item.color}22`, border: `1px solid ${item.color}48` }}>
+            <Icon icon="solar:check-circle-bold" className="text-xs" style={{ color: item.color }} />
+          </div>
+        )}
+
+        {/* icon */}
+        <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-3 transition-all duration-300 shrink-0"
+          style={{
+            background: `${item.color}18`,
+            border: `1px solid ${item.color}28`,
+            boxShadow: isActive ? `0 0 18px ${item.color}30` : "none",
+          }}>
+          <Icon icon={item.icon} className="text-[22px] transition-all duration-300"
+            style={{ color: item.color, filter: isActive ? `drop-shadow(0 0 6px ${item.color}aa)` : "none" }} />
+        </div>
+
+        <div className="text-[13px] font-bold leading-tight mb-1 transition-colors duration-300"
+          style={{ color: isActive ? item.color : "rgba(255,255,255,0.78)" }}>
+          {item.label}
+        </div>
+        <div className="text-[10px] text-white/28 leading-snug">{item.desc}</div>
+
+        <div className="flex-1" />
+
+        {/* stats dengan count-up — hanya kartu aktif */}
+        {isActive && tabCounts && (
+          <div className="mt-3 flex flex-col gap-1.5">
+            <div className="h-px w-full"
+              style={{ background: `linear-gradient(90deg,transparent,${item.color}30,transparent)` }} />
+            <div className="flex flex-col gap-1 pt-1">
+              <StatRow label="Dijual" count={tabCounts.jual}   color="#60a5fa" />
+              <StatRow label="Lelang" count={tabCounts.lelang} color="#fbbf24" />
+              <StatRow label="Disewa" count={tabCounts.sewa}   color="#34d399" />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── DARK SEARCH BAR ─────────────────────────────────────────────────────────
+const ALL_PROPERTY_TYPES = sortAlpha([
+  ...new Set([...PROPERTY_TYPES.beli, ...PROPERTY_TYPES.sewa, ...PROPERTY_TYPES.lelang]),
+]);
+
+function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: string }) {
+  const router = useRouter();
+  const wrapperRef   = useRef<HTMLDivElement>(null);
+  const refLokasi    = useRef<HTMLDivElement>(null);
+  const refTipe      = useRef<HTMLDivElement>(null);
+  const refHarga     = useRef<HTMLDivElement>(null);
+  const refDimensi   = useRef<HTMLDivElement>(null);
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+
+  const [viewLevel, setViewLevel]   = useState<Region["level"]>("provinsi");
+  const [currentList, setCurrentList] = useState<Region[]>([]);
+  const [parentRegion, setParentRegion] = useState<Region | null>(null);
+  const [loadingWilayah, setLoadingWilayah] = useState(false);
+
+  const [formData, setFormData] = useState<SearchState>({
+    locations: [], type: "",
+    minPrice: "", maxPrice: "",
+    minLt: "", maxLt: "",
+    minLb: "", maxLb: "",
+  });
+
+  // Sync tipe aset ke kategori halaman yang aktif
+  useEffect(() => {
+    const cat = KATEGORI_LIST.find(k => k.slug === slug);
+    setFormData(prev => ({ ...prev, type: cat && cat.key !== "SEMUA" ? cat.label : "" }));
+  }, [slug]);
+
+  const mapData = (data: ApiRegion[], level: Region["level"]): Region[] =>
+    data.map(item => ({ id: item.id, name: item.nama, level }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+  const getRegionIcon = (level: Region["level"]) => ({
+    provinsi:   "solar:globus-bold-duotone",
+    kota:       "solar:buildings-2-bold-duotone",
+    kecamatan:  "solar:buildings-bold-duotone",
+    kelurahan:  "solar:map-point-wave-bold-duotone",
+  }[level] ?? "solar:map-point-bold-duotone");
+
+  const fetchRegions = async (level: Region["level"], parentId?: string) => {
+    setLoadingWilayah(true);
+    try {
+      const urlMap: Record<string, string> = {
+        provinsi:  `${BASE_API}/propinsi.json`,
+        kota:      parentId ? `${BASE_API}/kabupaten/${parentId}.json` : "",
+        kecamatan: parentId ? `${BASE_API}/kecamatan/${parentId}.json` : "",
+        kelurahan: parentId ? `${BASE_API}/kelurahan/${parentId}.json` : "",
+      };
+      const url = urlMap[level];
+      if (url) {
+        const res = await fetch(url);
+        const data = await res.json();
+        setCurrentList(mapData(data, level));
+      }
+    } catch { toast.error("Gagal memuat data wilayah"); }
+    finally { setLoadingWilayah(false); }
+  };
+
+  useEffect(() => {
+    if (openDropdown === "location" && viewLevel === "provinsi") fetchRegions("provinsi");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openDropdown]);
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      const target = e.target as Element;
+      if (wrapperRef.current?.contains(target)) return;
+      if (target.closest?.("[data-search-portal]")) return;
+      setOpenDropdown(null);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  const toggleLocation = (item: Region) => {
+    const exists = formData.locations.some(l => l.id === item.id);
+    if (!exists) toast.success(`${item.name} ditambahkan!`, {
+      icon: "📍",
+      style: { borderRadius: "10px", background: "#1a1f2e", color: "#fff", fontSize: "12px" },
+    });
+    setFormData(prev => {
+      const locs = prev.locations.filter(l => !item.id.startsWith(l.id) && !l.id.startsWith(item.id));
+      return { ...prev, locations: exists ? prev.locations.filter(l => l.id !== item.id) : [...locs, item] };
+    });
+  };
+
+  const handleRowClick = (item: Region) => {
+    if (item.level === "kelurahan") { toggleLocation(item); return; }
+    const nextLevel = ({ provinsi: "kota", kota: "kecamatan", kecamatan: "kelurahan" } as const)[item.level] ?? "kota";
+    setParentRegion(item);
+    setViewLevel(nextLevel);
+    fetchRegions(nextLevel, item.id);
+  };
+
+  const handleBack = () => { setViewLevel("provinsi"); setParentRegion(null); fetchRegions("provinsi"); };
+
+  const handleFormattedInput = (e: React.ChangeEvent<HTMLInputElement>, field: keyof SearchState) => {
+    const raw = e.target.value.replace(/\D/g, "");
+    setFormData(prev => ({ ...prev, [field]: raw ? new Intl.NumberFormat("id-ID").format(Number(raw)) : "" }));
+  };
+
+  const getLabel = (min: string, max: string, def: string, prefix = "") => {
+    if (min && max) return `${prefix}${min} – ${prefix}${max}`;
+    if (min) return `Mulai ${prefix}${min}`;
+    if (max) return `Hingga ${prefix}${max}`;
+    return def;
+  };
+
+  const handleSearch = () => {
+    const targetSlug = formData.type
+      ? KATEGORI_LIST.find(k => k.label === formData.type)?.slug ?? slug
+      : slug;
+    const params = new URLSearchParams();
+    if (formData.locations.length) params.set("lokasi", formData.locations.map(l => l.name).join(","));
+    if (formData.minPrice) params.set("minHarga", formData.minPrice.replace(/\./g, ""));
+    if (formData.maxPrice) params.set("maxHarga", formData.maxPrice.replace(/\./g, ""));
+    if (formData.minLt)    params.set("minLt", formData.minLt.replace(/\./g, ""));
+    if (formData.maxLt)    params.set("maxLt", formData.maxLt.replace(/\./g, ""));
+    router.push(`/kategori/${targetSlug}?${params.toString()}`, { scroll: false });
+    setOpenDropdown(null);
+  };
+
+  // shared dark input style
+  const inputCls = "w-full rounded-xl px-3 py-2.5 text-sm outline-none font-medium placeholder:text-white/20 text-white/80 transition-colors";
+  const inputStyle = { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" };
+  const inputFocusStyle = { border: `1px solid ${activeColor}60` };
+
+  // dropdown panel base style
+  const panelStyle: React.CSSProperties = {
+    background: "rgba(10,13,20,0.98)",
+    border: "1px solid rgba(255,255,255,0.1)",
+    boxShadow: "0 24px 64px rgba(0,0,0,0.85)",
+    backdropFilter: "blur(20px)",
+  };
+
+  return (
+    <div ref={wrapperRef} className="w-full relative z-[100]">
+
+      {/* SEARCH BAR */}
+      <div
+        className="rounded-[1.75rem] p-2"
+        style={{
+          background: "rgba(255,255,255,0.04)",
+          border: "1px solid rgba(255,255,255,0.09)",
+          boxShadow: "0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)",
+        }}
+      >
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center divide-y lg:divide-y-0 lg:divide-x divide-white/[0.07]">
+
+          {/* A. LOKASI */}
+          <div ref={refLokasi} className="w-full lg:w-[28%] px-4 py-3 relative group min-w-0">
+            <div className="cursor-pointer" onClick={() => setOpenDropdown(openDropdown === "location" ? null : "location")}>
+              <label className="text-[10px] font-extrabold tracking-wider text-white/30 uppercase mb-1 block group-hover:text-white/60 transition-colors">
+                Lokasi
+              </label>
+              <div className="flex items-center gap-2 w-full">
+                <Icon icon="solar:map-point-bold-duotone" className="text-2xl text-white/30 group-hover:text-white/60 transition-colors shrink-0" />
+                <div className="w-full overflow-x-auto no-scrollbar flex items-center gap-1.5 h-7">
+                  {formData.locations.length === 0 ? (
+                    <div className="w-full">
+                      <p className="font-bold text-white/85 text-sm truncate">Semua Lokasi</p>
+                      <p className="text-xs text-white/30 truncate">Pilih Provinsi, Kota...</p>
+                    </div>
+                  ) : (
+                    formData.locations.map(loc => (
+                      <span key={loc.id}
+                        onClick={e => { e.stopPropagation(); toggleLocation(loc); }}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap cursor-pointer transition-colors"
+                        style={{ background: `${activeColor}20`, border: `1px solid ${activeColor}40`, color: activeColor }}
+                      >
+                        {loc.name}
+                        <Icon icon="solar:close-circle-bold" className="text-xs" />
+                      </span>
+                    ))
+                  )}
+                </div>
+                <motion.div animate={{ rotate: openDropdown === "location" ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                  <Icon icon="solar:alt-arrow-down-linear" className="text-white/25 shrink-0" />
+                </motion.div>
+              </div>
+            </div>
+
+            <PortalDropdown triggerRef={refLokasi} open={openDropdown === "location"}>
+              <AnimatePresence>
+              {openDropdown === "location" && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={{ duration: 0.18, ease: [0.16,1,0.3,1] }}
+                  className="w-[400px] rounded-2xl overflow-hidden flex flex-col max-h-[400px]"
+                  style={panelStyle}
+                >
+                  <div className="p-4 border-b border-white/[0.08] flex items-center justify-between sticky top-0 z-10"
+                    style={{ background: "rgba(255,255,255,0.03)" }}>
+                    <div className="flex items-center gap-2">
+                      {viewLevel !== "provinsi" && (
+                        <button onClick={handleBack} className="p-1.5 hover:bg-white/10 rounded-full transition-colors">
+                          <Icon icon="solar:arrow-left-linear" className="text-lg text-white/60" />
+                        </button>
+                      )}
+                      <h4 className="font-bold text-white/80 text-sm flex items-center gap-2">
+                        <Icon icon={getRegionIcon(viewLevel)} className="text-lg" style={{ color: activeColor }} />
+                        {viewLevel === "provinsi" ? "Pilih Wilayah" : <span style={{ color: activeColor }}>{parentRegion?.name}</span>}
+                      </h4>
+                    </div>
+                    {loadingWilayah && <Icon icon="line-md:loading-loop" className="text-lg" style={{ color: activeColor }} />}
+                  </div>
+
+                  <div className="overflow-y-auto flex-1" style={{ scrollbarWidth: "none" }}>
+                    {viewLevel !== "provinsi" && parentRegion && (
+                      <button onClick={() => toggleLocation(parentRegion)}
+                        className="w-full text-left px-4 py-3 border-b border-white/[0.06] flex items-center gap-3 transition-colors hover:bg-white/5"
+                        style={{ background: `${activeColor}08` }}>
+                        <div className="w-5 h-5 rounded border flex items-center justify-center transition-colors"
+                          style={{
+                            background: formData.locations.some(l => l.id === parentRegion.id) ? activeColor : "transparent",
+                            borderColor: formData.locations.some(l => l.id === parentRegion.id) ? activeColor : "rgba(255,255,255,0.2)",
+                          }}>
+                          {formData.locations.some(l => l.id === parentRegion.id) && <Icon icon="solar:check-read-linear" className="text-[#0a0d14] text-sm" />}
+                        </div>
+                        <span className="text-sm font-bold text-white/80">Pilih Semua di {parentRegion.name}</span>
+                      </button>
+                    )}
+
+                    {currentList.map(item => {
+                      const isSelected = formData.locations.some(l => l.id === item.id);
+                      const hasChild   = item.level !== "kelurahan";
+                      return (
+                        <div key={item.id} className="flex items-center justify-between border-b border-white/[0.04] last:border-0 hover:bg-white/[0.03] transition-colors">
+                          <button onClick={() => handleRowClick(item)} className="flex-1 flex items-center gap-3 px-4 py-3 text-left">
+                            <Icon icon={getRegionIcon(item.level)} className="text-lg shrink-0"
+                              style={{ color: isSelected ? activeColor : "rgba(255,255,255,0.2)" }} />
+                            <div className="flex-1 overflow-hidden">
+                              <span className="text-sm block truncate"
+                                style={{ color: isSelected ? activeColor : "rgba(255,255,255,0.7)", fontWeight: isSelected ? 700 : 500 }}>
+                                {item.name}
+                              </span>
+                              {hasChild && (
+                                <span className="text-[10px] text-white/25">
+                                  Lihat {item.level === "provinsi" ? "Kota" : item.level === "kota" ? "Kecamatan" : "Kelurahan"}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                          <button onClick={e => { e.stopPropagation(); toggleLocation(item); }}
+                            className="p-3 hover:bg-white/5 rounded-lg transition-colors">
+                            <div className="w-5 h-5 rounded border flex items-center justify-center transition-colors"
+                              style={{
+                                background: isSelected ? activeColor : "transparent",
+                                borderColor: isSelected ? activeColor : "rgba(255,255,255,0.2)",
+                              }}>
+                              {isSelected && <Icon icon="solar:check-read-linear" className="text-[#0a0d14] text-sm" />}
+                            </div>
+                          </button>
+                          {hasChild && (
+                            <button onClick={() => handleRowClick(item)} className="p-2 text-white/20 hover:text-white/60 transition-colors">
+                              <Icon icon="solar:alt-arrow-right-linear" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+              </AnimatePresence>
+            </PortalDropdown>
+          </div>
+
+          {/* B. TIPE ASET */}
+          <div ref={refTipe} className="w-full lg:w-[18%] px-4 py-3 relative group min-w-0">
+            <div className="cursor-pointer" onClick={() => setOpenDropdown(openDropdown === "type" ? null : "type")}>
+              <label className="text-[10px] font-extrabold tracking-wider text-white/30 uppercase mb-1 block group-hover:text-white/60 transition-colors">
+                Tipe Aset
+              </label>
+              <div className="flex items-center gap-2">
+                <Icon icon="solar:buildings-bold-duotone" className="text-2xl text-white/30 group-hover:text-white/60 transition-colors shrink-0" />
+                <p className="font-bold text-white/85 text-sm truncate flex-1">{formData.type || "Semua Tipe"}</p>
+                <motion.div animate={{ rotate: openDropdown === "type" ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                  <Icon icon="solar:alt-arrow-down-linear" className="text-white/25 shrink-0" />
+                </motion.div>
+              </div>
+            </div>
+
+            <PortalDropdown triggerRef={refTipe} open={openDropdown === "type"}>
+              <AnimatePresence>
+              {openDropdown === "type" && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={{ duration: 0.18, ease: [0.16,1,0.3,1] }}
+                  className="w-[260px] rounded-2xl p-2 max-h-[300px] overflow-y-auto"
+                  style={{ ...panelStyle, scrollbarWidth: "none" }}
+                >
+                  <button
+                    onClick={() => { setFormData(p => ({ ...p, type: "" })); setOpenDropdown(null); }}
+                    className="w-full text-left px-4 py-3 rounded-xl text-sm font-medium flex items-center gap-3 transition-colors"
+                    style={{
+                      background: formData.type === "" ? `${activeColor}18` : "transparent",
+                      color: formData.type === "" ? activeColor : "rgba(255,255,255,0.55)",
+                    }}
+                    onMouseEnter={e => { if (formData.type !== "") (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)"; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = formData.type === "" ? `${activeColor}18` : "transparent"; }}
+                  >
+                    <Icon icon="solar:apps-bold-duotone" className="text-lg opacity-70" />
+                    Semua Tipe
+                  </button>
+                  {ALL_PROPERTY_TYPES.map(item => (
+                    <button key={item}
+                      onClick={() => { setFormData(p => ({ ...p, type: item })); setOpenDropdown(null); }}
+                      className="w-full text-left px-4 py-3 rounded-xl text-sm font-medium flex items-center gap-3 transition-colors"
+                      style={{
+                        background: formData.type === item ? `${activeColor}18` : "transparent",
+                        color: formData.type === item ? activeColor : "rgba(255,255,255,0.55)",
+                      }}
+                      onMouseEnter={e => { if (formData.type !== item) (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)"; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = formData.type === item ? `${activeColor}18` : "transparent"; }}
+                    >
+                      <Icon icon={PROPERTY_ICONS[item] || "solar:home-bold-duotone"} className="text-lg opacity-70" />
+                      {item}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+              </AnimatePresence>
+            </PortalDropdown>
+          </div>
+
+          {/* C. HARGA */}
+          <div ref={refHarga} className="w-full lg:w-[22%] px-4 py-3 relative group min-w-0">
+            <div className="cursor-pointer" onClick={() => setOpenDropdown(openDropdown === "price" ? null : "price")}>
+              <label className="text-[10px] font-extrabold tracking-wider text-white/30 uppercase mb-1 block group-hover:text-white/60 transition-colors">
+                Harga
+              </label>
+              <div className="flex items-center gap-2">
+                <Icon icon="solar:wallet-money-bold-duotone" className="text-2xl text-white/30 group-hover:text-white/60 transition-colors shrink-0" />
+                <p className="font-bold text-white/85 text-sm truncate flex-1">
+                  {getLabel(formData.minPrice, formData.maxPrice, "Range Harga")}
+                </p>
+                <motion.div animate={{ rotate: openDropdown === "price" ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                  <Icon icon="solar:alt-arrow-down-linear" className="text-white/25 shrink-0" />
+                </motion.div>
+              </div>
+            </div>
+
+            <PortalDropdown triggerRef={refHarga} open={openDropdown === "price"}>
+              <AnimatePresence>
+              {openDropdown === "price" && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={{ duration: 0.18, ease: [0.16,1,0.3,1] }}
+                  className="w-[320px] rounded-2xl p-5"
+                  style={panelStyle}
+                >
+                  <h4 className="font-bold text-white/70 mb-3 text-sm">Range Budget (Rp)</h4>
+                  <div className="flex items-center gap-2">
+                    <input type="text" placeholder="Min" value={formData.minPrice}
+                      onChange={e => handleFormattedInput(e, "minPrice")}
+                      className={inputCls} style={inputStyle}
+                      onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
+                      onBlur={e => Object.assign(e.target.style, inputStyle)}
+                    />
+                    <span className="text-white/30 font-medium shrink-0">s/d</span>
+                    <input type="text" placeholder="Max" value={formData.maxPrice}
+                      onChange={e => handleFormattedInput(e, "maxPrice")}
+                      className={inputCls} style={inputStyle}
+                      onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
+                      onBlur={e => Object.assign(e.target.style, inputStyle)}
+                    />
+                  </div>
+                </motion.div>
+              )}
+              </AnimatePresence>
+            </PortalDropdown>
+          </div>
+
+          {/* D. DIMENSI */}
+          <div ref={refDimensi} className="w-full lg:w-[22%] px-4 py-3 relative group min-w-0">
+            <div className="cursor-pointer" onClick={() => setOpenDropdown(openDropdown === "dimensions" ? null : "dimensions")}>
+              <label className="text-[10px] font-extrabold tracking-wider text-white/30 uppercase mb-1 block group-hover:text-white/60 transition-colors">
+                Dimensi
+              </label>
+              <div className="flex items-center gap-2">
+                <Icon icon="solar:ruler-angular-bold-duotone" className="text-2xl text-white/30 group-hover:text-white/60 transition-colors shrink-0" />
+                <p className="font-bold text-white/85 text-sm truncate flex-1">
+                  {formData.minLt || formData.maxLt
+                    ? getLabel(formData.minLt, formData.maxLt, "", "LT: ") + " m²"
+                    : "Luas Tanah/Bangunan"}
+                </p>
+                <motion.div animate={{ rotate: openDropdown === "dimensions" ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                  <Icon icon="solar:alt-arrow-down-linear" className="text-white/25 shrink-0" />
+                </motion.div>
+              </div>
+            </div>
+
+            <PortalDropdown triggerRef={refDimensi} open={openDropdown === "dimensions"}>
+              <AnimatePresence>
+              {openDropdown === "dimensions" && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={{ duration: 0.18, ease: [0.16,1,0.3,1] }}
+                  className="w-[320px] rounded-2xl p-5"
+                  style={panelStyle}
+                >
+                  <div className="mb-4">
+                    <h4 className="font-bold text-white/70 mb-2 text-sm flex items-center gap-2">
+                      <Icon icon="solar:map-bold" className="text-white/30" /> Luas Tanah (m²)
+                    </h4>
+                    <div className="flex items-center gap-2">
+                      <input type="text" placeholder="Min" value={formData.minLt}
+                        onChange={e => handleFormattedInput(e, "minLt")}
+                        className={inputCls} style={inputStyle}
+                        onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
+                        onBlur={e => Object.assign(e.target.style, inputStyle)}
+                      />
+                      <span className="text-white/30 shrink-0">–</span>
+                      <input type="text" placeholder="Max" value={formData.maxLt}
+                        onChange={e => handleFormattedInput(e, "maxLt")}
+                        className={inputCls} style={inputStyle}
+                        onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
+                        onBlur={e => Object.assign(e.target.style, inputStyle)}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white/70 mb-2 text-sm flex items-center gap-2">
+                      <Icon icon="solar:home-bold" className="text-white/30" /> Luas Bangunan (m²)
+                    </h4>
+                    <div className="flex items-center gap-2">
+                      <input type="text" placeholder="Min" value={formData.minLb}
+                        onChange={e => handleFormattedInput(e, "minLb")}
+                        className={inputCls} style={inputStyle}
+                        onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
+                        onBlur={e => Object.assign(e.target.style, inputStyle)}
+                      />
+                      <span className="text-white/30 shrink-0">–</span>
+                      <input type="text" placeholder="Max" value={formData.maxLb}
+                        onChange={e => handleFormattedInput(e, "maxLb")}
+                        className={inputCls} style={inputStyle}
+                        onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
+                        onBlur={e => Object.assign(e.target.style, inputStyle)}
+                      />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+              </AnimatePresence>
+            </PortalDropdown>
+          </div>
+
+          {/* E. TOMBOL CARI */}
+          <div className="w-full lg:w-[10%] p-2 shrink-0 flex items-center justify-center">
+            <button
+              onClick={handleSearch}
+              className="w-full lg:w-14 h-14 rounded-2xl lg:rounded-full font-bold text-lg flex items-center justify-center transition-all active:scale-95"
+              style={{
+                background: activeColor,
+                color: "#0a0d14",
+                boxShadow: `0 8px 24px -6px ${activeColor}70`,
+                transition: "background 0.4s ease, box-shadow 0.4s ease",
+              }}
+            >
+              <Icon icon="solar:magnifer-linear" className="text-2xl" />
+              <span className="lg:hidden ml-2 text-base">Cari Sekarang</span>
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── PROPS ────────────────────────────────────────────────────────────────────
+interface KategoriHeroProps {
+  slug: string;
+  label: string;
+  tabCounts: TabCounts;
+}
+
+// ─── MAIN ─────────────────────────────────────────────────────────────────────
+export default function KategoriHero({ slug, label, tabCounts }: KategoriHeroProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const dragging       = useRef(false);
+  const dragStartX     = useRef(0);
+  const dragScrollLeft = useRef(0);
+  const [mouse, setMouse] = useState({ x: 0, y: 0 });
+
+  const categoryKey = slug.toUpperCase().replace(/-/g, "_");
+  const current     = KATEGORI_LIST.find((k) => k.key === categoryKey);
+  const activeColor = current?.color ?? "#34d399";
+  const activeIdx   = KATEGORI_LIST.findIndex((k) => k.key === categoryKey);
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => setMouse({
+      x: (e.clientX / window.innerWidth  - 0.5) * 18,
+      y: (e.clientY / window.innerHeight - 0.5) * 18,
+    });
+    window.addEventListener("mousemove", h);
+    return () => window.removeEventListener("mousemove", h);
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (el.scrollLeft < ONE_SET * 0.5)      el.scrollLeft += ONE_SET;
+    else if (el.scrollLeft > ONE_SET * 1.5) el.scrollLeft -= ONE_SET;
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const cardOffset = activeIdx >= 0 ? activeIdx * STRIDE : 0;
+    let scrollTarget = ONE_SET + cardOffset - el.offsetWidth / 2 + CARD_W / 2;
+    // Normalise ke range valid [ONE_SET*0.5, ONE_SET*1.5] tanpa mengubah posisi visual
+    while (scrollTarget > ONE_SET * 1.5) scrollTarget -= ONE_SET;
+    while (scrollTarget < ONE_SET * 0.5) scrollTarget += ONE_SET;
+    el.scrollLeft = scrollTarget;
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    return () => el.removeEventListener("scroll", handleScroll);
+  }, [activeIdx, handleScroll]);
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    dragging.current       = true;
+    dragStartX.current     = e.pageX;
+    dragScrollLeft.current = scrollRef.current?.scrollLeft ?? 0;
+    if (scrollRef.current) scrollRef.current.style.cursor = "grabbing";
+  };
+  const onMouseMove = (e: React.MouseEvent) => {
+    if (!dragging.current || !scrollRef.current) return;
+    e.preventDefault();
+    scrollRef.current.scrollLeft = dragScrollLeft.current - (e.pageX - dragStartX.current);
+  };
+  const stopDrag = () => {
+    dragging.current = false;
+    if (scrollRef.current) scrollRef.current.style.cursor = "grab";
+  };
+
+  return (
+    <div
+      className="relative border-b border-white/[0.06]"
+      style={{ background: "linear-gradient(160deg,#07080f 0%,#080c12 55%,#060810 100%)" }}
+    >
+      {/* BACKGROUND */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute -top-40 -left-28 w-[520px] h-96 rounded-full blur-[130px] opacity-20"
+          style={{
+            background: `radial-gradient(circle,${activeColor}cc,transparent 65%)`,
+            transform: `translate(${mouse.x * 1.6}px,${mouse.y * 1.6}px)`,
+            transition: "transform 0.22s ease-out, background 0.6s ease",
+          }} />
+        <div className="absolute bottom-0 right-1/4 w-80 h-56 rounded-full blur-[90px] opacity-10"
+          style={{
+            background: "radial-gradient(circle,rgba(96,165,250,0.6),transparent 65%)",
+            transform: `translate(${-mouse.x * 0.8}px,${mouse.y * 0.8}px)`,
+            transition: "transform 0.22s ease-out",
+          }} />
+        <div className="absolute inset-0 opacity-[0.032]"
+          style={{
+            backgroundImage:
+              `linear-gradient(${activeColor}88 1px,transparent 1px),` +
+              `linear-gradient(90deg,${activeColor}88 1px,transparent 1px)`,
+            backgroundSize: "52px 52px",
+            transform: `translate(${mouse.x * 0.28}px,${mouse.y * 0.28}px)`,
+            transition: "transform 0.15s ease-out",
+          }} />
+        {PARTICLES.map((p, i) => (
+          <motion.div key={i} className="absolute rounded-full"
+            style={{ left: `${p.x}%`, top: `${p.y}%`, width: p.s, height: p.s, background: activeColor, opacity: 0.28 }}
+            animate={{ y: [-4, 4, -4], opacity: [0.12, 0.42, 0.12] }}
+            transition={{ duration: p.d, repeat: Infinity, ease: "easeInOut", delay: p.delay }} />
+        ))}
+        <motion.div className="absolute left-0 right-0 h-px pointer-events-none"
+          style={{ background: `linear-gradient(90deg,transparent,${activeColor}55,transparent)` }}
+          animate={{ top: ["0%", "100%"] }}
+          transition={{ duration: 5.5, repeat: Infinity, ease: "linear", repeatDelay: 9 }} />
+      </div>
+
+      {/* CONTENT */}
+      <div className="relative z-10 container mx-auto max-w-screen-xl px-4 pt-[72px] pb-8 md:pt-20 md:pb-10">
+
+        {/* TOP ROW */}
+        <div className="flex flex-col lg:flex-row lg:items-stretch gap-6 lg:gap-10 xl:gap-14">
+
+          {/* LEFT */}
+          <div className="flex-1 min-w-0">
+            <motion.div initial={{ opacity: 0, x: -14 }} animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.08, duration: 0.5 }} className="inline-flex items-center gap-2 mb-4">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[11px] font-bold tracking-wide"
+                style={{ background: `${activeColor}15`, border: `1px solid ${activeColor}38`, color: activeColor }}>
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-70" style={{ background: activeColor }} />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5" style={{ background: activeColor }} />
+                </span>
+                Layanan Properti Terbaik
+              </div>
+            </motion.div>
+
+            <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.16, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+              className="font-black text-white leading-[0.9] tracking-tight text-[28px] sm:text-4xl md:text-5xl lg:text-[54px]">
+              Temukan Properti
+              <br />
+              <span className="text-transparent bg-clip-text"
+                style={{
+                  backgroundImage: `linear-gradient(120deg,${activeColor} 0%,#fff 42%,${activeColor} 85%)`,
+                  WebkitBackgroundClip: "text",
+                  transition: "background-image 0.55s ease",
+                }}>
+                {label}
+              </span>
+              <br />
+              <span className="text-white/48 text-[22px] sm:text-3xl md:text-[36px] lg:text-[40px] font-semibold">
+                Terbaik Anda
+              </span>
+            </motion.h1>
+
+            <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.26, duration: 0.5 }}
+              className="text-white/32 text-[13px] mt-3.5 max-w-[340px] leading-relaxed">
+              Properti dijual, disewa & dilelang di seluruh Indonesia. Satu platform, semua pilihan.
+            </motion.p>
+          </div>
+
+          {/* RIGHT — carousel */}
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.2, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+            className="w-full lg:w-auto lg:max-w-[400px] xl:max-w-[440px] shrink-0 lg:flex lg:flex-col">
+
+            <div className="flex items-center mb-3 px-1 lg:shrink-0">
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/20">Semua Kategori</span>
+            </div>
+
+            <div className="relative lg:flex-1 lg:min-h-0 lg:flex lg:flex-col">
+              <div className="absolute left-0 inset-y-0 w-10 z-10 pointer-events-none"
+                style={{ background: "linear-gradient(90deg,rgba(7,8,15,0.9),transparent)" }} />
+              <div className="absolute right-0 inset-y-0 w-10 z-10 pointer-events-none"
+                style={{ background: "linear-gradient(270deg,rgba(7,8,15,0.9),transparent)" }} />
+
+              <div ref={scrollRef}
+                onMouseDown={onMouseDown} onMouseMove={onMouseMove}
+                onMouseUp={stopDrag} onMouseLeave={stopDrag}
+                className="flex overflow-x-scroll lg:flex-1"
+                style={{
+                  gap: CARD_GAP, paddingTop: 8, paddingBottom: 10,
+                  scrollbarWidth: "none", msOverflowStyle: "none",
+                  cursor: "grab", WebkitOverflowScrolling: "touch",
+                  alignItems: "stretch",
+                }}>
+                {LOOPED_LIST.map(item => (
+                  <KategoriCard key={item.uid} item={item}
+                    isActive={item.key === categoryKey}
+                    tabCounts={item.key === categoryKey ? tabCounts : undefined}
+                    scrollRef={scrollRef} />
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        </div>
+
+        {/* SEARCH BAR */}
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.42, duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+          className="mt-7 md:mt-8">
+          <DarkSearchBar slug={slug} activeColor={activeColor} />
+        </motion.div>
+      </div>
+
+      {/* bottom fade */}
+      <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[#0F0F0F] to-transparent pointer-events-none" />
+    </div>
+  );
+}

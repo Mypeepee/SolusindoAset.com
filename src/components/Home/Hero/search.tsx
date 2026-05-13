@@ -16,14 +16,13 @@ const PROPERTY_ICONS: Record<string, string> = {
   "Pabrik": "solar:garage-bold-duotone",
   "Ruko": "solar:shop-2-bold-duotone",
   "Toko": "solar:shop-bold-duotone",
-  "Hotel": "solar:bed-bold-duotone",
-  "Villa": "solar:star-fall-bold-duotone",
+  "Hotel & Villa": "solar:bed-bold-duotone",
 };
 
 const PROPERTY_TYPES = {
-  beli: sortAlpha(["Rumah", "Tanah", "Gudang", "Apartemen", "Pabrik", "Ruko", "Toko", "Hotel", "Villa"]),
+  beli: sortAlpha(["Rumah", "Tanah", "Gudang", "Apartemen", "Pabrik", "Ruko", "Toko", "Hotel & Villa"]),
   sewa: sortAlpha(["Rumah", "Tanah", "Gudang", "Apartemen", "Pabrik", "Ruko", "Toko"]),
-  lelang: sortAlpha(["Rumah", "Tanah", "Gudang", "Apartemen", "Pabrik", "Ruko", "Toko", "Hotel", "Villa"]),
+  lelang: sortAlpha(["Rumah", "Tanah", "Gudang", "Apartemen", "Pabrik", "Ruko", "Toko", "Hotel & Villa"]),
 };
 
 type TabType = "beli" | "sewa" | "lelang";
