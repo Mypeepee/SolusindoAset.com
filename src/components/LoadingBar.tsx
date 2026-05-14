@@ -14,14 +14,13 @@ export default function LoadingBar() {
     if (timerRef.current) clearTimeout(timerRef.current);
   }, [pathname]);
 
-  // Hanya nyalakan loading saat user klik link navigasi, bukan setiap klik
+  // Nyalakan dari klik <a href> biasa
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       const anchor = (e.target as HTMLElement).closest("a[href]") as HTMLAnchorElement | null;
       if (!anchor) return;
 
       const href = anchor.getAttribute("href") ?? "";
-      // Abaikan: hash link, external URL, javascript:, atau path yang sama
       if (
         !href ||
         href.startsWith("#") ||
@@ -32,13 +31,24 @@ export default function LoadingBar() {
       ) return;
 
       setLoading(true);
-      // Fallback: matikan setelah 4 detik jika navigasi tidak terjadi
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => setLoading(false), 4000);
     }
 
     window.addEventListener("click", handleClick);
     return () => window.removeEventListener("click", handleClick);
+  }, []);
+
+  // Nyalakan dari programmatic navigation (router.push via custom event)
+  useEffect(() => {
+    function handleNavigate() {
+      setLoading(true);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setLoading(false), 4000);
+    }
+
+    window.addEventListener("navigate-start", handleNavigate);
+    return () => window.removeEventListener("navigate-start", handleNavigate);
   }, []);
 
   return (

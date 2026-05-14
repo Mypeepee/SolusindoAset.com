@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@iconify/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DateRange } from "./types";
@@ -166,10 +167,24 @@ const DatePickerModal = ({
 
 // --- HERO FILTER MAIN COMPONENT ---
 const HeroFilter = () => {
-  const [duration, setDuration] = useState("Bulanan");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const [duration, setDuration] = useState(() => {
+    const d = searchParams.get("durasi");
+    return d && ["Harian", "Bulanan", "Tahunan"].includes(d) ? d : "Bulanan";
+  });
+  const [lokasi, setLokasi] = useState(() => searchParams.get("lokasi") ?? "");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedRangeString, setSelectedRangeString] = useState("Pilih Tanggal");
   const [nights, setNights] = useState(0);
+
+  const handleSearch = () => {
+    const params = new URLSearchParams();
+    if (lokasi.trim()) params.set("lokasi", lokasi.trim());
+    params.set("durasi", duration);
+    router.push(`/Sewa?${params.toString()}`);
+  };
 
   const handleDateApplied = (start: Date, end: Date, n: number) => {
      const startStr = `${start.getDate()} ${monthNames[start.getMonth()].substring(0,3)}`;
@@ -214,7 +229,14 @@ const HeroFilter = () => {
                 </div>
                 <div className="flex-1 border-r border-white/10 pr-4">
                    <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mb-1">LOKASI / AREA</p>
-                   <input type="text" placeholder="Ketik nama apartemen..." className="bg-transparent w-full text-sm font-bold text-white placeholder:text-gray-600 focus:outline-none"/>
+                   <input
+                     type="text"
+                     placeholder="Ketik nama apartemen..."
+                     value={lokasi}
+                     onChange={(e) => setLokasi(e.target.value)}
+                     onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                     className="bg-transparent w-full text-sm font-bold text-white placeholder:text-gray-600 focus:outline-none"
+                   />
                 </div>
              </div>
 
@@ -256,7 +278,10 @@ const HeroFilter = () => {
              </div>
 
              <div className="lg:col-span-2">
-                <button className="w-full h-full bg-primary hover:bg-green-500 text-darkmode font-extrabold text-base rounded-2xl shadow-[0_0_30px_rgba(34,197,94,0.2)] hover:shadow-[0_0_40px_rgba(34,197,94,0.4)] flex items-center justify-center gap-2 transition-all transform hover:scale-[1.02] active:scale-95">
+                <button
+                  onClick={handleSearch}
+                  className="w-full h-full bg-primary hover:bg-green-500 text-darkmode font-extrabold text-base rounded-2xl shadow-[0_0_30px_rgba(34,197,94,0.2)] hover:shadow-[0_0_40px_rgba(34,197,94,0.4)] flex items-center justify-center gap-2 transition-all transform hover:scale-[1.02] active:scale-95"
+                >
                    <Icon icon="solar:magnifer-bold-duotone" className="text-xl"/> Cari
                 </button>
              </div>

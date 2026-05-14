@@ -147,8 +147,61 @@ export default async function SearchPage({ searchParams }: Props) {
       ? searchParams.sort
       : "desc";
 
+  // Filter harga & luas dari SearchHero
+  const minHarga =
+    typeof searchParams.minHarga === "string"
+      ? Number(searchParams.minHarga)
+      : undefined;
+  const maxHarga =
+    typeof searchParams.maxHarga === "string"
+      ? Number(searchParams.maxHarga)
+      : undefined;
+  const minLT =
+    typeof searchParams.minLT === "string"
+      ? Number(searchParams.minLT)
+      : undefined;
+  const maxLT =
+    typeof searchParams.maxLT === "string"
+      ? Number(searchParams.maxLT)
+      : undefined;
+  const minLB =
+    typeof searchParams.minLB === "string"
+      ? Number(searchParams.minLB)
+      : undefined;
+  const maxLB =
+    typeof searchParams.maxLB === "string"
+      ? Number(searchParams.maxLB)
+      : undefined;
+
   const limit = 15;
   const skip = (page - 1) * limit;
+
+  // Filter harga efektif: pakai harga_promo jika valid (> 0), else pakai harga
+  const buildPriceFilter = (): Prisma.ListingWhereInput | undefined => {
+    if (minHarga === undefined && maxHarga === undefined) return undefined;
+    return {
+      OR: [
+        // Punya harga promo yang valid → filter berdasar harga_promo
+        {
+          AND: [
+            { harga_promo: { gt: 0 } },
+            ...(minHarga !== undefined ? [{ harga_promo: { gte: minHarga } }] : []),
+            ...(maxHarga !== undefined ? [{ harga_promo: { lte: maxHarga } }] : []),
+          ],
+        },
+        // Tidak ada harga promo → filter berdasar harga biasa
+        {
+          AND: [
+            { OR: [{ harga_promo: null }, { harga_promo: { lte: 0 } }] },
+            ...(minHarga !== undefined ? [{ harga: { gte: minHarga } }] : []),
+            ...(maxHarga !== undefined ? [{ harga: { lte: maxHarga } }] : []),
+          ],
+        },
+      ],
+    };
+  };
+
+  const priceFilter = buildPriceFilter();
 
   // B. BUILD FILTER QUERY (WHERE)
   const whereClause: Prisma.ListingWhereInput = {
@@ -163,6 +216,8 @@ export default async function SearchPage({ searchParams }: Props) {
       allowedKategori.includes(tipe.toUpperCase() as any) && {
         kategori: tipe.toUpperCase() as any,
       }),
+
+    ...(priceFilter && priceFilter),
 
     ...(minKT !== undefined && {
       kamar_tidur: { gte: minKT },
@@ -267,7 +322,19 @@ export default async function SearchPage({ searchParams }: Props) {
 
   return (
     <main className="bg-[#0F0F0F] min-h-screen pb-20">
-      <SearchHero />
+      <SearchHero
+        key={`${kota ?? ""}_${tipe ?? ""}_${minHarga ?? ""}_${maxHarga ?? ""}_${minLT ?? ""}_${maxLT ?? ""}_${minLB ?? ""}_${maxLB ?? ""}`}
+        initial={{
+          kota: kota,
+          tipe: tipe,
+          minHarga: minHarga,
+          maxHarga: maxHarga,
+          minLT: minLT,
+          maxLT: maxLT,
+          minLB: minLB,
+          maxLB: maxLB,
+        }}
+      />
 
       <ProductList
         initialData={formattedData}

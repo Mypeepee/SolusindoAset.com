@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { Icon } from "@iconify/react";
 import toast from "react-hot-toast";
 
@@ -48,25 +49,64 @@ interface SearchState {
 
 // --- 2. COMPONENT ---
 
-const SearchHero = () => {
+const parseRawNumber = (val: string) =>
+  val.replace(/\./g, "").replace(/[^0-9]/g, "");
+
+const formatIdNumber = (raw: string) =>
+  raw ? new Intl.NumberFormat("id-ID").format(Number(raw)) : "";
+
+const DB_TYPE_TO_DISPLAY: Record<string, string> = {
+  RUMAH: "Rumah",
+  TANAH: "Tanah",
+  GUDANG: "Gudang",
+  APARTEMEN: "Apartemen",
+  PABRIK: "Pabrik",
+  RUKO: "Ruko",
+  TOKO: "Toko",
+  HOTEL_DAN_VILLA: "Hotel & Villa",
+};
+
+export interface SearchHeroInitial {
+  kota?: string;
+  tipe?: string;
+  minHarga?: number;
+  maxHarga?: number;
+  minLT?: number;
+  maxLT?: number;
+  minLB?: number;
+  maxLB?: number;
+}
+
+const buildFormData = (init: SearchHeroInitial): SearchState => ({
+  locations: init.kota
+    ? [{ id: init.kota, name: init.kota, level: "kota" as const }]
+    : [],
+  type: init.tipe ? (DB_TYPE_TO_DISPLAY[init.tipe] ?? "") : "",
+  minPrice: init.minHarga ? formatIdNumber(String(init.minHarga)) : "",
+  maxPrice: init.maxHarga ? formatIdNumber(String(init.maxHarga)) : "",
+  minLt: init.minLT ? formatIdNumber(String(init.minLT)) : "",
+  maxLt: init.maxLT ? formatIdNumber(String(init.maxLT)) : "",
+  minLb: init.minLB ? formatIdNumber(String(init.minLB)) : "",
+  maxLb: init.maxLB ? formatIdNumber(String(init.maxLB)) : "",
+});
+
+const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
+  const router = useRouter();
+
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  
+
   // State Wilayah
   const [viewLevel, setViewLevel] = useState<'provinsi' | 'kota' | 'kecamatan' | 'kelurahan'>('provinsi');
   const [currentList, setCurrentList] = useState<Region[]>([]);
   const [parentRegion, setParentRegion] = useState<Region | null>(null);
   const [loadingWilayah, setLoadingWilayah] = useState(false);
 
-  const [formData, setFormData] = useState<SearchState>({
-    locations: [],
-    type: "",
-    minPrice: "",
-    maxPrice: "",
-    minLt: "",
-    maxLt: "",
-    minLb: "",
-    maxLb: "",
-  });
+  const [formData, setFormData] = useState<SearchState>(() => buildFormData(initial));
+
+  useEffect(() => {
+    setFormData(buildFormData(initial));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initial.kota, initial.tipe, initial.minHarga, initial.maxHarga, initial.minLT, initial.maxLT, initial.minLB, initial.maxLB]);
 
   const wrapperRef = useRef<HTMLDivElement>(null);
   const BASE_API = "https://ibnux.github.io/data-indonesia";
@@ -190,6 +230,38 @@ const SearchHero = () => {
     if (min) return `Mulai ${prefix}${min}`;
     if (max) return `Hingga ${prefix}${max}`;
     return defaultText;
+  };
+
+  const handleSearch = () => {
+    const params = new URLSearchParams();
+
+    if (formData.locations.length > 0) {
+      params.set("kota", formData.locations[0].name);
+    }
+
+    if (formData.type) {
+      let dbType = formData.type.toUpperCase().replace(/\s+/g, "_");
+      if (formData.type === "Hotel & Villa") dbType = "HOTEL_DAN_VILLA";
+      params.set("tipe", dbType);
+    }
+
+    const minPrice = parseRawNumber(formData.minPrice);
+    const maxPrice = parseRawNumber(formData.maxPrice);
+    if (minPrice) params.set("minHarga", minPrice);
+    if (maxPrice) params.set("maxHarga", maxPrice);
+
+    const minLt = parseRawNumber(formData.minLt);
+    const maxLt = parseRawNumber(formData.maxLt);
+    if (minLt) params.set("minLT", minLt);
+    if (maxLt) params.set("maxLT", maxLt);
+
+    const minLb = parseRawNumber(formData.minLb);
+    const maxLb = parseRawNumber(formData.maxLb);
+    if (minLb) params.set("minLB", minLb);
+    if (maxLb) params.set("maxLB", maxLb);
+
+    params.set("page", "1");
+    router.push(`/Jual?${params.toString()}`);
   };
 
   return (
@@ -450,8 +522,8 @@ const SearchHero = () => {
 
             {/* === E. TOMBOL CARI === */}
             <div className="w-full lg:w-[10%] p-4 lg:p-2 shrink-0 flex items-center justify-center">
-                <button 
-                  onClick={() => console.log('Searching...', formData)} 
+                <button
+                  onClick={handleSearch}
                   className="w-full lg:w-14 h-14 bg-primary hover:bg-[#6ee7b7] text-darkmode rounded-2xl lg:rounded-full font-bold text-lg flex items-center justify-center shadow-lg shadow-primary/30 transition-all transform active:scale-95"
                 >
                 <Icon icon="solar:magnifer-linear" className="text-2xl stroke-2" />

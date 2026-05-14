@@ -1,11 +1,11 @@
 "use client";
 
-import React from "react";
+import React, { Suspense } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 
 // Pastikan nama file sudah di-rename jadi huruf besar depannya
-import HeroFilter from "./SearchHero"; 
+import HeroFilter from "./SearchHero";
 import Sidebar from "./Sidebar";
 import ProductList from "./ProductList"; // Import harus sama dengan nama file
 
@@ -28,15 +28,18 @@ export default function CariApartemenPage() {
       </div>
 
       {/* 2. HERO FILTER */}
-      <HeroFilter />
+      <Suspense fallback={null}>
+        <HeroFilter />
+      </Suspense>
 
       {/* 3. CONTENT AREA */}
       <div className="container mx-auto px-4 mt-12">
          <div className="flex flex-col lg:flex-row gap-8 items-start">
             
             {/* KIRI: PRODUCT LIST */}
-            {/* Perbaikan: Panggil component sesuai nama importnya */}
-            <ProductList /> 
+            <Suspense fallback={<div className="w-full lg:w-3/4 animate-pulse h-64 bg-white/5 rounded-2xl" />}>
+              <ProductList />
+            </Suspense>
 
             {/* KANAN: SIDEBAR FILTER */}
             <div className="hidden lg:block w-1/4 min-w-[280px]">

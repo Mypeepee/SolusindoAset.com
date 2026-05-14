@@ -10,10 +10,12 @@ export const KATEGORI_ICONS: Record<string, string> = {
 };
 
 export const SORT_OPTIONS = [
-  { value: "terbaru",    label: "Terbaru"    },
-  { value: "termurah",   label: "Termurah"   },
-  { value: "termahal",   label: "Termahal"   },
-  { value: "terpopuler", label: "Terpopuler" },
+  { value: "terbaru",    label: "Terbaru",         icon: "solar:sort-by-time-bold-duotone"              },
+  { value: "terpopuler", label: "Terpopuler",       icon: "solar:fire-bold-duotone"                      },
+  { value: "termurah",   label: "Termurah",         icon: "solar:tag-price-bold-duotone"                 },
+  { value: "termahal",   label: "Termahal",         icon: "solar:crown-bold-duotone"                     },
+  { value: "luas-asc",   label: "Luasan Terkecil",  icon: "solar:minimize-square-3-bold-duotone"         },
+  { value: "luas-desc",  label: "Luasan Terbesar",  icon: "solar:maximize-square-3-bold-duotone"         },
 ] as const;
 
 export const TAB_KEYS = ["semua", "jual", "lelang", "sewa"] as const;

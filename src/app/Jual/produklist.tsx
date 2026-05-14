@@ -6,6 +6,7 @@ import { Icon } from "@iconify/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import Sidebar from "./sidebar";
+import { useSwipe } from "@/hooks/useSwipe";
 
 // --- TIPE DATA ---
 interface PropertyDB {
@@ -95,19 +96,19 @@ const PropertyCard = ({ item }: { item: PropertyDB }) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const currentImage = images[currentImageIndex];
 
-  const nextImage = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
+  const nextImage = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    e?.preventDefault();
     setCurrentImageIndex((prev) => (prev + 1) % images.length);
   };
 
-  const prevImage = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    setCurrentImageIndex(
-      (prev) => (prev - 1 + images.length) % images.length
-    );
+  const prevImage = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    e?.preventDefault();
+    setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
   };
+
+  const swipe = useSwipe(nextImage, prevImage);
 
   const hasDiscount =
     item.harga_promo != null &&
@@ -123,7 +124,10 @@ const PropertyCard = ({ item }: { item: PropertyDB }) => {
   return (
     <div className="bg-[#111111] border border-white/5 rounded-3xl overflow-hidden group transition-all duration-300 flex flex-col h-full hover:border-emerald-400/70 hover:shadow-[0_24px_70px_-30px_rgba(16,185,129,0.7)]">
       {/* IMAGE */}
-      <div className="relative w-full h-72 md:h-80 overflow-hidden">
+      <div
+        className="relative w-full h-72 md:h-80 overflow-hidden"
+        {...(images.length > 1 ? swipe : {})}
+      >
         <Image
           key={currentImage}
           src={currentImage}
@@ -139,13 +143,13 @@ const PropertyCard = ({ item }: { item: PropertyDB }) => {
           <>
             <button
               onClick={prevImage}
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-black/60 hover:bg-black/90 text-white rounded-full flex items-center justify-center z-20 transition-all opacity-0 group-hover:opacity-100"
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-black/60 hover:bg-black/90 text-white rounded-full flex items-center justify-center z-20 transition-all lg:opacity-0 lg:group-hover:opacity-100"
             >
               <Icon icon="solar:alt-arrow-left-linear" className="text-lg" />
             </button>
             <button
               onClick={nextImage}
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-black/60 hover:bg-black/90 text-white rounded-full flex items-center justify-center z-20 transition-all opacity-0 group-hover:opacity-100"
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-black/60 hover:bg-black/90 text-white rounded-full flex items-center justify-center z-20 transition-all lg:opacity-0 lg:group-hover:opacity-100"
             >
               <Icon icon="solar:alt-arrow-right-linear" className="text-lg" />
             </button>

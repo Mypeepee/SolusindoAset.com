@@ -7,6 +7,7 @@ import { Icon } from "@iconify/react";
 import { KATEGORI_ICONS } from "../constants";
 import { formatCurrency, formatDateShort, daysUntil, getPropertyUrl } from "../utils";
 import type { PropertyItem } from "../types";
+import { useSwipe } from "@/hooks/useSwipe";
 
 // ─── BADGES ──────────────────────────────────────────────────────────────────
 
@@ -102,16 +103,18 @@ export default function PropertyCard({ item }: PropertyCardProps) {
       ? item.foto_list
       : [item.gambar || "/images/hero/banner.jpg"];
 
-  const nextImage = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const nextImage = (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
     setImgIdx((p) => (p + 1) % images.length);
   };
-  const prevImage = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const prevImage = (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
     setImgIdx((p) => (p - 1 + images.length) % images.length);
   };
+
+  const swipe = useSwipe(nextImage, prevImage);
 
   const isLelang    = item.jenis_transaksi?.toUpperCase() === "LELANG";
   const hasDiscount =
@@ -141,7 +144,10 @@ export default function PropertyCard({ item }: PropertyCardProps) {
         "
       >
         {/* ── IMAGE ── */}
-        <div className="relative h-64 w-full overflow-hidden">
+        <div
+          className="relative h-64 w-full overflow-hidden"
+          {...(images.length > 1 ? swipe : {})}
+        >
           <Image
             key={images[imgIdx]}
             src={images[imgIdx]}
@@ -165,13 +171,13 @@ export default function PropertyCard({ item }: PropertyCardProps) {
             <>
               <button
                 onClick={prevImage}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/70 hover:bg-primary hover:text-black text-white flex items-center justify-center z-20 transition-all opacity-0 group-hover:opacity-100"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/70 hover:bg-primary hover:text-black text-white flex items-center justify-center z-20 transition-all lg:opacity-0 lg:group-hover:opacity-100"
               >
                 <Icon icon="solar:alt-arrow-left-linear" />
               </button>
               <button
                 onClick={nextImage}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/70 hover:bg-primary hover:text-black text-white flex items-center justify-center z-20 transition-all opacity-0 group-hover:opacity-100"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/70 hover:bg-primary hover:text-black text-white flex items-center justify-center z-20 transition-all lg:opacity-0 lg:group-hover:opacity-100"
               >
                 <Icon icon="solar:alt-arrow-right-linear" />
               </button>
@@ -246,11 +252,6 @@ export default function PropertyCard({ item }: PropertyCardProps) {
             )}
             {item.jenis_transaksi?.toUpperCase() === "SEWA" && (
               <span className="text-gray-500 text-[11px]"> / bulan</span>
-            )}
-            {isLelang && (
-              <span className="ml-1 text-amber-400/60 text-[11px]">
-                nilai limit
-              </span>
             )}
           </div>
 

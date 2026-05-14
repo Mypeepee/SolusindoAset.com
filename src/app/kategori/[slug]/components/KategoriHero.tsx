@@ -163,10 +163,15 @@ function KategoriCard({ item, isActive, tabCounts, scrollRef }: {
   tabCounts?: TabCounts;
   scrollRef: React.RefObject<HTMLDivElement>;
 }) {
-  const router  = useRouter();
-  const cardRef = useRef<HTMLDivElement>(null);
+  const router      = useRouter();
+  const cardRef     = useRef<HTMLDivElement>(null);
+  const [pending, setPending] = useState(false);
 
   const handleClick = () => {
+    if (pending) return;
+    setPending(true);
+    window.dispatchEvent(new CustomEvent("navigate-start"));
+
     if (cardRef.current && scrollRef.current) {
       const container = scrollRef.current;
       const cardRect  = cardRef.current.getBoundingClientRect();
@@ -198,8 +203,17 @@ function KategoriCard({ item, isActive, tabCounts, scrollRef }: {
             style={{ background: `linear-gradient(90deg,transparent,${item.color}cc,transparent)` }} />
         )}
 
+        {/* loading overlay */}
+        {pending && (
+          <div className="absolute inset-0 rounded-2xl flex items-center justify-center z-10"
+            style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(2px)" }}>
+            <div className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin"
+              style={{ borderColor: `${item.color} transparent transparent transparent` }} />
+          </div>
+        )}
+
         {/* check badge */}
-        {isActive && (
+        {isActive && !pending && (
           <div className="absolute top-3 right-3 w-5 h-5 rounded-full flex items-center justify-center"
             style={{ background: `${item.color}22`, border: `1px solid ${item.color}48` }}>
             <Icon icon="solar:check-circle-bold" className="text-xs" style={{ color: item.color }} />
@@ -354,7 +368,13 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
     return def;
   };
 
+  const [searching, setSearching] = useState(false);
+
   const handleSearch = () => {
+    if (searching) return;
+    setSearching(true);
+    window.dispatchEvent(new CustomEvent("navigate-start"));
+
     const targetSlug = formData.type
       ? KATEGORI_LIST.find(k => k.label === formData.type)?.slug ?? slug
       : slug;
@@ -698,7 +718,8 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
           <div className="w-full lg:w-[10%] p-2 shrink-0 flex items-center justify-center">
             <button
               onClick={handleSearch}
-              className="w-full lg:w-14 h-14 rounded-2xl lg:rounded-full font-bold text-lg flex items-center justify-center transition-all active:scale-95"
+              disabled={searching}
+              className="w-full lg:w-14 h-14 rounded-2xl lg:rounded-full font-bold text-lg flex items-center justify-center transition-all active:scale-95 disabled:opacity-80 disabled:cursor-not-allowed"
               style={{
                 background: activeColor,
                 color: "#0a0d14",
@@ -706,8 +727,15 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
                 transition: "background 0.4s ease, box-shadow 0.4s ease",
               }}
             >
-              <Icon icon="solar:magnifer-linear" className="text-2xl" />
-              <span className="lg:hidden ml-2 text-base">Cari Sekarang</span>
+              {searching ? (
+                <div className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin"
+                  style={{ borderColor: "#0a0d14 transparent transparent transparent" }} />
+              ) : (
+                <Icon icon="solar:magnifer-linear" className="text-2xl" />
+              )}
+              <span className="lg:hidden ml-2 text-base">
+                {searching ? "Mencari..." : "Cari Sekarang"}
+              </span>
             </button>
           </div>
 
@@ -823,7 +851,7 @@ export default function KategoriHero({ slug, label, tabCounts }: KategoriHeroPro
       </div>
 
       {/* CONTENT */}
-      <div className="relative z-10 container mx-auto max-w-screen-xl px-4 pt-[72px] pb-8 md:pt-20 md:pb-10">
+      <div className="relative z-10 container mx-auto max-w-screen-xl px-5 sm:px-8 md:px-10 pt-[72px] pb-8 md:pt-20 md:pb-10">
 
         {/* TOP ROW */}
         <div className="flex flex-col lg:flex-row lg:items-stretch gap-6 lg:gap-10 xl:gap-14">

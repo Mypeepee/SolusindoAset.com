@@ -111,12 +111,15 @@ export default async function KategoriPage({ params, searchParams }: Props) {
   const label = isSemua ? "Semua Kategori" : KATEGORI_LABEL[slug];
 
   // Parse searchParams
-  const page   = typeof searchParams.page === "string"  ? Number(searchParams.page)  : 1;
-  const tipe   = typeof searchParams.tipe === "string"  ? searchParams.tipe          : "semua";
-  const kota   = typeof searchParams.kota === "string"  ? searchParams.kota          : undefined;
-  const sort   = typeof searchParams.sort === "string"  ? searchParams.sort          : "terbaru";
-  const limit  = 15;
-  const skip   = (page - 1) * limit;
+  const page = typeof searchParams.page === "string" ? Number(searchParams.page) : 1;
+  const tipe = typeof searchParams.tipe === "string" ? searchParams.tipe         : "semua";
+  const kota = typeof searchParams.kota === "string" ? searchParams.kota         : undefined;
+  // rawSort: hanya ada nilai jika user memang memilih sort (untuk highlight pill)
+  // sort: selalu punya nilai fallback untuk query DB
+  const rawSort = typeof searchParams.sort === "string" ? searchParams.sort : "";
+  const sort     = rawSort || "terbaru";
+  const limit = 15;
+  const skip  = (page - 1) * limit;
 
   // jenis_transaksi filter berdasarkan tab
   const transaksiFilter = (): Prisma.ListingWhereInput["jenis_transaksi"] => {
@@ -133,11 +136,17 @@ export default async function KategoriPage({ params, searchParams }: Props) {
     ...(kota && { kota: { contains: kota, mode: "insensitive" } }),
   };
 
-  // Sorting
-  let orderBy: Prisma.ListingOrderByWithRelationInput[] = [{ tanggal_dibuat: "desc" }];
-  if (sort === "termurah") orderBy = [{ harga: "asc" }];
-  if (sort === "termahal") orderBy = [{ harga: "desc" }];
-  if (sort === "terpopuler") orderBy = [{ dilihat: "desc" }];
+  // Sorting — is_hot_deal always floats to top, then secondary sort
+  let secondaryOrder: Prisma.ListingOrderByWithRelationInput = { tanggal_dibuat: "desc" };
+  if (sort === "termurah")   secondaryOrder = { harga: "asc" };
+  if (sort === "termahal")   secondaryOrder = { harga: "desc" };
+  if (sort === "terpopuler") secondaryOrder = { dilihat: "desc" };
+  if (sort === "luas-asc")   secondaryOrder = { luas_tanah: "asc" };
+  if (sort === "luas-desc")  secondaryOrder = { luas_tanah: "desc" };
+  const orderBy: Prisma.ListingOrderByWithRelationInput[] = [
+    { is_hot_deal: "desc" },
+    secondaryOrder,
+  ];
 
   const [totalItems, propertiesRaw] = await prisma.$transaction([
     prisma.listing.count({ where: whereClause }),
@@ -209,7 +218,7 @@ export default async function KategoriPage({ params, searchParams }: Props) {
       initialData={properties}
       pagination={{ currentPage: page, totalPages, totalItems }}
       activeTipe={tipe}
-      activeSort={sort}
+      activeSort={rawSort}
       tabCounts={{
         semua:  totalCount,
         jual:   jualCount,

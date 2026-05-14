@@ -13,6 +13,12 @@ import Signin from "@/components/Auth/SignIn";
 import SignUp from "@/components/Auth/SignUp";
 import { headerData } from "./Navigation/menuData";
 
+const matchesPath = (subHref: string, currentPath: string) => {
+  if (subHref === currentPath) return true;
+  const base = "/" + subHref.split("/")[1];
+  return currentPath === base || currentPath.startsWith(base + "/");
+};
+
 // ============================================================================
 // MOBILE NAV
 // ============================================================================
@@ -300,8 +306,9 @@ const MobileNav: React.FC<MobileNavProps> = ({
                           <button
                             onClick={() => toggleSubmenu(idx)}
                             className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl transition-all font-medium ${
-                              openSubmenu === idx
-                                ? "bg-white/5 text-[#86efac]"
+                              openSubmenu === idx ||
+                              menuItem.submenu?.some((s: any) => matchesPath(s.href, pathname))
+                                ? "bg-[#86efac]/10 text-[#86efac]"
                                 : "text-gray-300 hover:text-white hover:bg-white/5"
                             }`}
                           >
@@ -336,7 +343,11 @@ const MobileNav: React.FC<MobileNavProps> = ({
                                       key={subIdx}
                                       href={sub.href || "#"}
                                       onClick={() => setIsOpen(false)}
-                                      className="flex items-center gap-3 px-6 py-3 text-sm text-gray-400 hover:text-white hover:bg-white/5 transition-all"
+                                      className={`flex items-center gap-3 px-6 py-3 text-sm transition-all ${
+                                        matchesPath(sub.href, pathname)
+                                          ? "text-[#86efac] bg-[#86efac]/5 font-medium"
+                                          : "text-gray-400 hover:text-white hover:bg-white/5"
+                                      }`}
                                     >
                                       {sub.icon && (
                                         <Icon
@@ -345,6 +356,9 @@ const MobileNav: React.FC<MobileNavProps> = ({
                                         />
                                       )}
                                       {sub.label}
+                                      {matchesPath(sub.href, pathname) && (
+                                        <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#86efac]" />
+                                      )}
                                     </Link>
                                   )
                                 )}
@@ -356,7 +370,11 @@ const MobileNav: React.FC<MobileNavProps> = ({
                         <Link
                           href={menuItem.href || "/"}
                           onClick={() => setIsOpen(false)}
-                          className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-gray-300 hover:text-white hover:bg-white/5 transition-all font-medium"
+                          className={`flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all font-medium ${
+                            matchesPath(menuItem.href, pathname)
+                              ? "bg-[#86efac]/10 text-[#86efac]"
+                              : "text-gray-300 hover:text-white hover:bg-white/5"
+                          }`}
                         >
                           {menuItem.icon && (
                             <Icon
@@ -365,6 +383,9 @@ const MobileNav: React.FC<MobileNavProps> = ({
                             />
                           )}
                           {menuItem.label}
+                          {matchesPath(menuItem.href, pathname) && (
+                            <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#86efac]" />
+                          )}
                         </Link>
                       )}
                     </div>
@@ -424,8 +445,8 @@ const DesktopMenuItem = ({ item }: { item: any }) => {
   const pathUrl = usePathname();
 
   const isActive =
-    item.href === pathUrl ||
-    item.submenu?.some((sub: any) => sub.href === pathUrl);
+    matchesPath(item.href, pathUrl) ||
+    item.submenu?.some((sub: any) => matchesPath(sub.href, pathUrl));
 
   return (
     <div
@@ -435,7 +456,7 @@ const DesktopMenuItem = ({ item }: { item: any }) => {
     >
       <Link
         href={item.submenu ? "#" : item.href}
-        className={`flex items-center gap-1 text-sm font-bold transition-colors py-2 ${
+        className={`relative flex items-center gap-1 text-sm font-bold transition-colors py-2 ${
           isActive || isHovered
             ? "text-[#86efac]"
             : "text-white/80 hover:text-white"
@@ -450,6 +471,9 @@ const DesktopMenuItem = ({ item }: { item: any }) => {
             }`}
           />
         )}
+        {isActive && (
+          <span className="absolute -bottom-1 left-0 right-0 h-0.5 rounded-full bg-[#86efac]" />
+        )}
       </Link>
 
       <AnimatePresence>
@@ -462,20 +486,32 @@ const DesktopMenuItem = ({ item }: { item: any }) => {
             className="absolute top-full left-0 pt-4 w-64 z-50"
           >
             <div className="bg-[#1A1A1A] border border-white/10 rounded-xl shadow-2xl overflow-hidden p-2">
-              {item.submenu.map((subItem: any, index: number) => (
+              {item.submenu.map((subItem: any, index: number) => {
+                const isSubActive = matchesPath(subItem.href, pathUrl);
+                return (
                 <Link
                   key={index}
                   href={subItem.href}
-                  className="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-white/5 transition-all group"
+                  className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-all group ${
+                    isSubActive
+                      ? "bg-[#86efac]/10"
+                      : "hover:bg-white/5"
+                  }`}
                 >
-                  <div className="shrink-0 w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-gray-400 group-hover:text-[#86efac] group-hover:bg-[#86efac]/10 transition-colors">
+                  <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                    isSubActive
+                      ? "bg-[#86efac]/20 text-[#86efac]"
+                      : "bg-white/5 text-gray-400 group-hover:text-[#86efac] group-hover:bg-[#86efac]/10"
+                  }`}>
                     <Icon
                       icon={subItem.icon || "solar:link-circle-linear"}
                       className="text-lg"
                     />
                   </div>
-                  <div>
-                    <span className="block text-sm font-medium text-gray-300 group-hover:text-white">
+                  <div className="flex-1">
+                    <span className={`block text-sm font-medium transition-colors ${
+                      isSubActive ? "text-[#86efac]" : "text-gray-300 group-hover:text-white"
+                    }`}>
                       {subItem.label}
                     </span>
                     {subItem.description && (
@@ -484,8 +520,12 @@ const DesktopMenuItem = ({ item }: { item: any }) => {
                       </span>
                     )}
                   </div>
+                  {isSubActive && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#86efac] shrink-0" />
+                  )}
                 </Link>
-              ))}
+                );
+              })}
             </div>
           </motion.div>
         )}
@@ -591,9 +631,9 @@ const Header: React.FC = () => {
 
       {/* DESKTOP HEADER */}
       <header
-        className={`hidden lg:block fixed top-0 left-0 w-full z-40 transition-all duration-300 ${
+        className={`hidden lg:block fixed top-0 left-0 w-full z-50 transition-all duration-300 ${
           sticky
-            ? "bg-[#0F0F0F]/80 backdrop-blur-md border-b border-white/5 py-4"
+            ? "bg-[#0F0F0F]/80 backdrop-blur-md border-b border-white/5 h-[72px]"
             : "bg-transparent py-6"
         }`}
       >

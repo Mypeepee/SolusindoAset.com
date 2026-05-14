@@ -3,6 +3,7 @@
 import React, { useRef } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import KategoriHero from "./components/KategoriHero";
+import KategoriFilterBar from "./components/KategoriFilterBar";
 import KategoriGrid from "./components/KategoriGrid";
 import type { KategoriPageProps } from "./types";
 
@@ -34,8 +35,16 @@ export default function KategoriPageClient({
     <main className="bg-[#0F0F0F] min-h-screen pb-24">
       <KategoriHero slug={slug} label={label} tabCounts={tabCounts} />
 
+      <KategoriFilterBar
+        activeTipe={activeTipe}
+        activeSort={activeSort}
+        tabCounts={tabCounts}
+        onTipeChange={(t) => navigate({ tipe: t, page: undefined })}
+        onSortChange={(s) => navigate({ sort: s, page: undefined })}
+      />
+
       <div
-        className="container mx-auto max-w-screen-xl px-4 mt-10"
+        className="container mx-auto max-w-screen-xl px-5 sm:px-8 md:px-10 mt-5"
         ref={gridRef}
       >
         <KategoriGrid

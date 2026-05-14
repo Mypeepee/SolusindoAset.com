@@ -1,8 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { Icon } from "@iconify/react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { SORT_OPTIONS } from "../constants";
 import type { TabCounts } from "../types";
 
@@ -21,90 +21,276 @@ const TABS = [
   { key: "sewa",   label: "Sewa"   },
 ] as const;
 
-export default function KategoriFilterBar({
-  activeTipe,
-  activeSort,
-  tabCounts,
-  onTipeChange,
-  onSortChange,
-}: KategoriFilterBarProps) {
+const BAR_STYLE: React.CSSProperties = {
+  background: "rgba(15,15,15,0.92)",
+  backdropFilter: "blur(20px)",
+  WebkitBackdropFilter: "blur(20px)",
+  borderBottom: "1px solid rgba(255,255,255,0.06)",
+  boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
+};
+
+const PANEL_STYLE: React.CSSProperties = {
+  background: "rgba(12,12,18,0.98)",
+  backdropFilter: "blur(24px)",
+  WebkitBackdropFilter: "blur(24px)",
+  borderBottom: "1px solid rgba(255,255,255,0.08)",
+  boxShadow: "0 16px 48px rgba(0,0,0,0.7)",
+};
+
+function formatCount(n: number) {
+  if (n >= 1000) return `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}rb`;
+  return n.toLocaleString("id-ID");
+}
+
+// ─── DESKTOP BAR ─────────────────────────────────────────────────────────────
+function DesktopBar({ activeTipe, activeSort, tabCounts, onTipeChange, onSortChange }: KategoriFilterBarProps) {
   return (
-    <div className="sticky top-0 z-40 bg-[#0F0F0F]/95 backdrop-blur-xl border-b border-white/[0.06] shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
-      <div className="container mx-auto max-w-screen-xl px-4">
-        <div className="flex items-center gap-4 py-3 overflow-x-auto scrollbar-none">
+    <div className="container mx-auto max-w-screen-xl flex items-center gap-1 px-5 sm:px-8 md:px-10" style={{ height: 52 }}>
 
-          {/* Tabs dengan animated sliding background */}
-          <div className="flex gap-1 shrink-0">
-            {TABS.map((tab) => {
-              const isActive =
-                activeTipe === tab.key ||
-                (tab.key === "semua" && activeTipe === "semua");
-              const count = tabCounts[tab.key];
-
-              return (
-                <button
-                  key={tab.key}
-                  onClick={() =>
-                    onTipeChange(tab.key === "semua" ? undefined : tab.key)
-                  }
-                  className={`relative px-4 py-2 rounded-xl text-sm font-semibold transition-colors duration-200 flex items-center gap-2 whitespace-nowrap ${
-                    isActive
-                      ? "text-white"
-                      : "text-white/40 hover:text-white/70"
-                  }`}
-                >
-                  {isActive && (
-                    <motion.div
-                      layoutId="tab-bg"
-                      className="absolute inset-0 bg-white/10 rounded-xl border border-white/15"
-                      transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                    />
-                  )}
-                  <span className="relative z-10">{tab.label}</span>
-                  <span
-                    className={`relative z-10 text-[10px] px-1.5 py-0.5 rounded-full tabular-nums font-bold ${
-                      isActive
-                        ? "bg-emerald-500/20 text-emerald-400"
-                        : "bg-white/5 text-white/25"
-                    }`}
-                  >
-                    {count.toLocaleString("id-ID")}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Divider */}
-          <div className="w-px h-5 bg-white/10 shrink-0" />
-
-          {/* Sort */}
-          <div className="flex items-center gap-2 shrink-0 ml-auto">
-            <Icon
-              icon="solar:sort-by-time-bold-duotone"
-              className="text-white/25 text-sm"
-            />
-            <select
-              value={activeSort}
-              onChange={(e) => onSortChange(e.target.value)}
-              className="bg-transparent border-none text-white/60 text-sm outline-none cursor-pointer hover:text-white transition-colors appearance-none pr-4"
+      {/* TIPE TABS */}
+      {TABS.map((tab) => {
+        const isActive = activeTipe === tab.key || (tab.key === "semua" && (activeTipe === "semua" || !activeTipe));
+        return (
+          <button
+            key={tab.key}
+            onClick={() => onTipeChange(tab.key === "semua" ? undefined : tab.key)}
+            className="relative flex items-center gap-1.5 shrink-0 px-3.5 h-8 rounded-xl text-xs font-bold transition-colors duration-150 select-none"
+            style={{ color: isActive ? "#fff" : "rgba(255,255,255,0.38)" }}
+          >
+            {isActive && (
+              <motion.span
+                layoutId="tipe-pill-desktop"
+                className="absolute inset-0 rounded-xl"
+                style={{ background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.14)" }}
+                transition={{ type: "spring", stiffness: 500, damping: 35 }}
+              />
+            )}
+            <span className="relative z-10 whitespace-nowrap">{tab.label}</span>
+            <span
+              className="relative z-10 tabular-nums text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+              style={isActive
+                ? { background: "rgba(52,211,153,0.2)", color: "#34d399" }
+                : { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.22)" }}
             >
-              {SORT_OPTIONS.map((o) => (
-                <option
-                  key={o.value}
-                  value={o.value}
-                  className="bg-[#1a1a1a] text-white"
-                >
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            <Icon
-              icon="solar:alt-arrow-down-linear"
-              className="text-white/25 text-xs -ml-3 pointer-events-none"
-            />
+              {formatCount(tabCounts[tab.key])}
+            </span>
+          </button>
+        );
+      })}
+
+      {/* DIVIDER */}
+      <div className="w-px h-5 shrink-0 mx-2" style={{ background: "rgba(255,255,255,0.1)" }} />
+
+      {/* SORT PILLS */}
+      {SORT_OPTIONS.map((opt) => {
+        const isActive = activeSort === opt.value;
+        return (
+          <button
+            key={opt.value}
+            onClick={() => onSortChange(opt.value)}
+            className="relative flex items-center gap-1.5 shrink-0 px-3 h-8 rounded-full text-xs font-semibold transition-all duration-150 select-none"
+            style={isActive ? {
+              background: "rgba(99,102,241,0.18)",
+              border: "1px solid rgba(99,102,241,0.4)",
+              color: "#a5b4fc",
+            } : {
+              background: "transparent",
+              border: "1px solid rgba(255,255,255,0.08)",
+              color: "rgba(255,255,255,0.35)",
+            }}
+          >
+            <Icon icon={opt.icon} className="text-sm shrink-0" />
+            <span className="whitespace-nowrap">{opt.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── MOBILE BAR ──────────────────────────────────────────────────────────────
+function MobileBar({ activeTipe, activeSort, tabCounts, onTipeChange, onSortChange }: KategoriFilterBarProps) {
+  const [openPanel, setOpenPanel] = useState<"tipe" | "sort" | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const currentSort = SORT_OPTIONS.find(o => o.value === activeSort) ?? null;
+  const currentTipe = TABS.find(t => t.key === (activeTipe || "semua")) ?? TABS[0];
+
+  const toggle = (panel: "tipe" | "sort") =>
+    setOpenPanel(prev => prev === panel ? null : panel);
+
+  // Tutup jika klik di luar
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpenPanel(null);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+
+      {/* ── TRIGGER ROW ── */}
+      <div className="container mx-auto max-w-screen-xl px-5 sm:px-8 md:px-10 flex" style={{ height: 52 }}>
+
+        {/* TIPE trigger */}
+        <button
+          onClick={() => toggle("tipe")}
+          className="flex-1 flex items-center gap-2.5 transition-colors duration-150 select-none min-w-0"
+          style={{ color: openPanel === "tipe" ? "#fff" : "rgba(255,255,255,0.6)" }}
+        >
+          <Icon
+            icon="solar:filter-bold-duotone"
+            className="text-base shrink-0"
+            style={{ color: openPanel === "tipe" ? "#a5b4fc" : "rgba(255,255,255,0.28)" }}
+          />
+          <div className="min-w-0 text-left flex-1">
+            <p className="text-[9px] font-extrabold uppercase tracking-widest leading-none mb-0.5"
+              style={{ color: "rgba(255,255,255,0.28)" }}>Kategori</p>
+            <p className="text-sm font-bold truncate leading-tight">{currentTipe.label}</p>
           </div>
-        </div>
+          <motion.div animate={{ rotate: openPanel === "tipe" ? 180 : 0 }} transition={{ duration: 0.18 }}>
+            <Icon icon="solar:alt-arrow-down-bold" className="text-xs shrink-0"
+              style={{ color: "rgba(255,255,255,0.25)" }} />
+          </motion.div>
+        </button>
+
+        {/* Divider */}
+        <div className="shrink-0 mx-2 my-3" style={{ width: 1, background: "rgba(255,255,255,0.08)" }} />
+
+        {/* SORT trigger */}
+        <button
+          onClick={() => toggle("sort")}
+          className="flex-1 flex items-center gap-2.5 transition-colors duration-150 select-none min-w-0"
+          style={{ color: openPanel === "sort" ? "#fff" : "rgba(255,255,255,0.6)" }}
+        >
+          <Icon
+            icon={currentSort?.icon ?? "solar:sort-by-time-bold-duotone"}
+            className="text-base shrink-0"
+            style={{ color: openPanel === "sort" ? "#a5b4fc" : "rgba(255,255,255,0.28)" }}
+          />
+          <div className="min-w-0 text-left flex-1">
+            <p className="text-[9px] font-extrabold uppercase tracking-widest leading-none mb-0.5"
+              style={{ color: "rgba(255,255,255,0.28)" }}>Urutkan</p>
+            <p className="text-sm font-bold truncate leading-tight"
+              style={{ color: currentSort ? "#fff" : "rgba(255,255,255,0.4)" }}>
+              {currentSort?.label ?? "Pilih urutan"}
+            </p>
+          </div>
+          <motion.div animate={{ rotate: openPanel === "sort" ? 180 : 0 }} transition={{ duration: 0.18 }}>
+            <Icon icon="solar:alt-arrow-down-bold" className="text-xs shrink-0"
+              style={{ color: "rgba(255,255,255,0.25)" }} />
+          </motion.div>
+        </button>
+      </div>
+
+      {/* ── FLOATING DROPDOWN PANELS ── */}
+      <AnimatePresence>
+        {openPanel && (
+          <motion.div
+            key={openPanel}
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            className="absolute left-0 right-0 z-50"
+            style={{
+              top: "100%",
+              background: "rgba(10,11,18,0.98)",
+              backdropFilter: "blur(24px)",
+              WebkitBackdropFilter: "blur(24px)",
+              borderBottom: "1px solid rgba(255,255,255,0.08)",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
+            }}
+          >
+            {/* TIPE PANEL */}
+            {openPanel === "tipe" && (
+              <div className="container mx-auto max-w-screen-xl px-5 sm:px-8 md:px-10 py-4 grid grid-cols-2 gap-2">
+                {TABS.map((tab) => {
+                  const isActive = activeTipe === tab.key
+                    || (tab.key === "semua" && (activeTipe === "semua" || !activeTipe));
+                  return (
+                    <button
+                      key={tab.key}
+                      onClick={() => { onTipeChange(tab.key === "semua" ? undefined : tab.key); setOpenPanel(null); }}
+                      className="flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all active:scale-[0.97]"
+                      style={isActive ? {
+                        background: "rgba(255,255,255,0.09)",
+                        border: "1px solid rgba(255,255,255,0.16)",
+                      } : {
+                        background: "rgba(255,255,255,0.03)",
+                        border: "1px solid rgba(255,255,255,0.06)",
+                      }}
+                    >
+                      <span className="text-sm font-bold"
+                        style={{ color: isActive ? "#fff" : "rgba(255,255,255,0.45)" }}>
+                        {tab.label}
+                      </span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full tabular-nums"
+                        style={isActive
+                          ? { background: "rgba(52,211,153,0.2)", color: "#34d399" }
+                          : { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.22)" }}>
+                        {formatCount(tabCounts[tab.key])}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* SORT PANEL */}
+            {openPanel === "sort" && (
+              <div className="container mx-auto max-w-screen-xl px-5 sm:px-8 md:px-10 py-4 grid grid-cols-2 gap-2">
+                {SORT_OPTIONS.map((opt) => {
+                  const isActive = activeSort === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      onClick={() => { onSortChange(opt.value); setOpenPanel(null); }}
+                      className="flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all active:scale-[0.97]"
+                      style={isActive ? {
+                        background: "rgba(99,102,241,0.14)",
+                        border: "1px solid rgba(99,102,241,0.3)",
+                      } : {
+                        background: "rgba(255,255,255,0.03)",
+                        border: "1px solid rgba(255,255,255,0.06)",
+                      }}
+                    >
+                      <Icon icon={opt.icon} className="text-base shrink-0"
+                        style={{ color: isActive ? "#a5b4fc" : "rgba(255,255,255,0.28)" }} />
+                      <span className="text-sm font-semibold text-left flex-1"
+                        style={{ color: isActive ? "#a5b4fc" : "rgba(255,255,255,0.5)" }}>
+                        {opt.label}
+                      </span>
+                      {isActive && (
+                        <Icon icon="solar:check-circle-bold" className="text-sm shrink-0"
+                          style={{ color: "#a5b4fc" }} />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── MAIN EXPORT ─────────────────────────────────────────────────────────────
+export default function KategoriFilterBar(props: KategoriFilterBarProps) {
+  return (
+    <div className="sticky top-0 lg:top-[72px] z-40" style={BAR_STYLE}>
+      {/* Desktop: horizontal pill bar */}
+      <div className="hidden lg:block">
+        <DesktopBar {...props} />
+      </div>
+
+      {/* Mobile/tablet: dropdown */}
+      <div className="lg:hidden">
+        <MobileBar {...props} />
       </div>
     </div>
   );

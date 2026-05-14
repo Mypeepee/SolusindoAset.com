@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Icon } from "@iconify/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useSwipe } from "@/hooks/useSwipe";
 
 interface PropertyDB {
   id_property: number | string;
@@ -85,17 +86,19 @@ const PropertyCard = ({ item }: { item: PropertyDB }) => {
       ? item.foto_list
       : [item.gambar || "/images/hero/banner.jpg"];
 
-  const nextImage = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
+  const nextImage = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    e?.preventDefault();
     setCurrentImageIndex((prev) => (prev + 1) % images.length);
   };
 
-  const prevImage = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
+  const prevImage = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    e?.preventDefault();
     setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
   };
+
+  const swipe = useSwipe(nextImage, prevImage);
 
   const days = daysUntil(item.tanggal_lelang);
 
@@ -194,6 +197,7 @@ const PropertyCard = ({ item }: { item: PropertyDB }) => {
                    after:content-[''] after:absolute after:inset-x-6 after:bottom-0
                    after:h-px after:bg-gradient-to-r from-transparent via-emerald-400/40 to-transparent
                    after:opacity-70"
+        {...(images.length > 1 ? swipe : {})}
       >
         <div className="relative w-full h-full">
           <Image

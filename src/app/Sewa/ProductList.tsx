@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Icon } from "@iconify/react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
+import { useSearchParams } from "next/navigation";
 import { Apartment } from "./types";
 import { apartmentsData } from "./data";
 import { formatRupiah, getFacilityIcon, getTypeColor } from "./utils";
@@ -88,17 +89,44 @@ const ApartmentCard = ({ item }: { item: Apartment }) => {
 };
 
 export default function ProductList() {
+  const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     setTimeout(() => setIsLoading(false), 1000);
   }, []);
 
+  const lokasiQuery = searchParams.get("lokasi") || "";
+
+  const filteredData = lokasiQuery
+    ? apartmentsData.filter(
+        (item) =>
+          item.name.toLowerCase().includes(lokasiQuery.toLowerCase()) ||
+          item.location.toLowerCase().includes(lokasiQuery.toLowerCase())
+      )
+    : apartmentsData;
+
   return (
     <div className="w-full lg:w-3/4">
        <div className="flex justify-between items-center mb-6">
           <h2 className="text-white font-bold text-lg flex items-center gap-2">
-            Menampilkan <span className="bg-primary/10 text-primary px-2 py-0.5 rounded border border-primary/20">{apartmentsData.length}</span> Unit
+            {lokasiQuery ? (
+              <>
+                Hasil untuk{" "}
+                <span className="bg-primary/10 text-primary px-2 py-0.5 rounded border border-primary/20">
+                  &quot;{lokasiQuery}&quot;
+                </span>
+                — {filteredData.length} Unit
+              </>
+            ) : (
+              <>
+                Menampilkan{" "}
+                <span className="bg-primary/10 text-primary px-2 py-0.5 rounded border border-primary/20">
+                  {filteredData.length}
+                </span>{" "}
+                Unit
+              </>
+            )}
           </h2>
        </div>
 
@@ -115,10 +143,16 @@ export default function ProductList() {
                 </div>
              ))}
           </div>
+       ) : filteredData.length === 0 ? (
+          <div className="text-center py-20">
+             <Icon icon="solar:magnifer-bold-duotone" className="text-5xl text-gray-600 mx-auto mb-4" />
+             <p className="text-white font-bold text-lg">Tidak ditemukan unit untuk &quot;{lokasiQuery}&quot;</p>
+             <p className="text-gray-500 text-sm mt-2">Coba kata kunci lain atau hapus filter lokasi</p>
+          </div>
        ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
              <AnimatePresence>
-                {apartmentsData.map((item) => (
+                {filteredData.map((item) => (
                    <ApartmentCard key={item.id} item={item} />
                 ))}
              </AnimatePresence>

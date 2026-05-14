@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Icon } from "@iconify/react";
 import toast from "react-hot-toast";
@@ -49,7 +50,11 @@ interface SearchState {
   maxLb: string;
 }
 
+const parseRawNumber = (val: string) =>
+  val.replace(/\./g, "").replace(/[^0-9]/g, "");
+
 const CardSlider = () => {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>("beli");
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   
@@ -192,6 +197,42 @@ const CardSlider = () => {
     if (min) return `Mulai ${prefix}${min}`;
     if (max) return `Hingga ${prefix}${max}`;
     return defaultText;
+  };
+
+  const handleSearch = () => {
+    const params = new URLSearchParams();
+
+    if (formData.locations.length > 0) {
+      params.set("kota", formData.locations[0].name);
+    }
+
+    if (formData.type) {
+      let dbType = formData.type.toUpperCase().replace(/\s+/g, "_");
+      if (formData.type === "Hotel & Villa") dbType = "HOTEL_DAN_VILLA";
+      params.set("tipe", dbType);
+    }
+
+    const minPrice = parseRawNumber(formData.minPrice);
+    const maxPrice = parseRawNumber(formData.maxPrice);
+    if (minPrice) params.set("minHarga", minPrice);
+    if (maxPrice) params.set("maxHarga", maxPrice);
+
+    const minLt = parseRawNumber(formData.minLt);
+    const maxLt = parseRawNumber(formData.maxLt);
+    if (minLt) params.set("minLT", minLt);
+    if (maxLt) params.set("maxLT", maxLt);
+
+    const minLb = parseRawNumber(formData.minLb);
+    const maxLb = parseRawNumber(formData.maxLb);
+    if (minLb) params.set("minLB", minLb);
+    if (maxLb) params.set("maxLB", maxLb);
+
+    params.set("page", "1");
+
+    const destination =
+      activeTab === "beli" ? "/Jual" : activeTab === "sewa" ? "/Sewa" : "/Lelang";
+
+    router.push(`${destination}?${params.toString()}`);
   };
 
   return (
@@ -465,7 +506,10 @@ const CardSlider = () => {
 
           {/* === E. TOMBOL CARI (10%) === */}
           <div className="w-full lg:w-[10%] p-4 lg:p-2 shrink-0 flex items-center justify-center">
-            <button className="w-full lg:w-14 h-14 bg-primary hover:bg-[#6ee7b7] text-darkmode rounded-2xl lg:rounded-full font-bold text-lg flex items-center justify-center shadow-lg shadow-primary/30 transition-all transform active:scale-95">
+            <button
+              onClick={handleSearch}
+              className="w-full lg:w-14 h-14 bg-primary hover:bg-[#6ee7b7] text-darkmode rounded-2xl lg:rounded-full font-bold text-lg flex items-center justify-center shadow-lg shadow-primary/30 transition-all transform active:scale-95"
+            >
               <Icon icon="solar:magnifer-linear" className="text-2xl stroke-2" />
               <span className="lg:hidden ml-2">Cari Sekarang</span>
             </button>

@@ -324,7 +324,17 @@ export default async function SearchPage({ searchParams }: Props) {
 
   return (
     <main className="bg-[#0F0F0F] min-h-screen pb-20">
-      <SearchHero />
+      <SearchHero
+        key={`${kota ?? ""}_${tipe ?? ""}_${minHarga ?? ""}_${maxHarga ?? ""}_${minLT ?? ""}_${maxLT ?? ""}`}
+        initial={{
+          kota: kota,
+          tipe: tipe,
+          minHarga: minHarga,
+          maxHarga: maxHarga,
+          minLT: minLT,
+          maxLT: maxLT,
+        }}
+      />
 
       <section className="container mx-auto px-4 mt-6">
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-4">
