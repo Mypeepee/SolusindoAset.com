@@ -29,18 +29,55 @@ export default function DashboardTopbar({
         px-4 sm:px-5 py-4 sm:py-6
       "
     >
-      {/* LEFT: burger (mobile) + search */}
-      <div className="flex flex-1 items-center gap-3">
+      {/* LEFT: burger (mobile) + home (mobile) + search */}
+      <div className="flex flex-1 items-center gap-2">
         {/* Burger hanya tampil di < md */}
         <button
           type="button"
           onClick={onOpenMobileSidebar}
-          className="flex md:hidden h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-[#050608] text-slate-200 hover:bg-white/5"
+          className="flex md:hidden h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-[#050608] text-slate-200 hover:bg-white/5 shrink-0"
         >
           <Icon icon="solar:hamburger-menu-linear" className="h-4 w-4" />
         </button>
 
+        {/* Home button — mobile only */}
+        <Link
+          href="/"
+          className="
+            group flex md:hidden items-center gap-1.5
+            px-2.5 py-1.5 rounded-full
+            border border-emerald-500/25
+            bg-emerald-500/8
+            hover:bg-emerald-500/18 hover:border-emerald-400/50
+            active:scale-95
+            transition-all duration-200
+            shrink-0
+          "
+        >
+          <Icon icon="solar:home-smile-angle-bold-duotone" className="text-emerald-400 text-base" />
+          <span className="text-[11px] font-semibold text-emerald-300 leading-none">Beranda</span>
+        </Link>
+
         <GlobalSearch />
+
+        {/* Home button — desktop only */}
+        <Link
+          href="/"
+          className="
+            group hidden md:flex items-center gap-2
+            px-3.5 py-2 rounded-full
+            border border-emerald-500/20
+            bg-emerald-500/5
+            hover:bg-emerald-500/12 hover:border-emerald-400/40
+            transition-all duration-200
+            shrink-0
+            overflow-hidden relative
+          "
+        >
+          <span className="pointer-events-none absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-600 bg-gradient-to-r from-transparent via-emerald-400/10 to-transparent" />
+          <Icon icon="solar:home-smile-angle-bold-duotone" className="text-emerald-400 text-base shrink-0" />
+          <span className="text-[12px] font-semibold text-emerald-300 leading-none whitespace-nowrap">Beranda</span>
+        </Link>
       </div>
 
       {/* RIGHT: notif + profile */}

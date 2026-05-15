@@ -20,13 +20,14 @@ const PROPERTY_ICONS: Record<string, string> = {
   "Hotel & Villa": "solar:bed-bold-duotone",
 };
 
-const PROPERTY_TYPES = {
-  beli: sortAlpha(["Rumah", "Tanah", "Gudang", "Apartemen", "Pabrik", "Ruko", "Toko", "Hotel & Villa"]),
-  sewa: sortAlpha(["Rumah", "Tanah", "Gudang", "Apartemen", "Pabrik", "Ruko", "Toko"]),
+const PROPERTY_TYPES: Record<TabType, string[]> = {
+  semua:  sortAlpha(["Rumah", "Tanah", "Gudang", "Apartemen", "Pabrik", "Ruko", "Toko", "Hotel & Villa"]),
+  beli:   sortAlpha(["Rumah", "Tanah", "Gudang", "Apartemen", "Pabrik", "Ruko", "Toko", "Hotel & Villa"]),
+  sewa:   sortAlpha(["Rumah", "Tanah", "Gudang", "Apartemen", "Pabrik", "Ruko", "Toko"]),
   lelang: sortAlpha(["Rumah", "Tanah", "Gudang", "Apartemen", "Pabrik", "Ruko", "Toko", "Hotel & Villa"]),
 };
 
-type TabType = "beli" | "sewa" | "lelang";
+type TabType = "semua" | "beli" | "sewa" | "lelang";
 
 interface Region {
   id: string;
@@ -55,7 +56,7 @@ const parseRawNumber = (val: string) =>
 
 const CardSlider = () => {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TabType>("beli");
+  const [activeTab, setActiveTab] = useState<TabType>("semua");
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   
   // --- STATE WILAYAH ---
@@ -63,6 +64,9 @@ const CardSlider = () => {
   const [currentList, setCurrentList] = useState<Region[]>([]);
   const [parentRegion, setParentRegion] = useState<Region | null>(null);
   const [loadingWilayah, setLoadingWilayah] = useState(false);
+
+  const [rangeErrors, setRangeErrors] = useState<{ price?: string; lt?: string; lb?: string }>({});
+  const [shaking, setShaking] = useState(false);
 
   const [formData, setFormData] = useState<SearchState>({
     locations: [],
@@ -186,11 +190,36 @@ const CardSlider = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [wrapperRef]);
 
+  const n = (val: string) => Number(parseRawNumber(val)) || 0;
+
   const handleFormattedInput = (e: React.ChangeEvent<HTMLInputElement>, field: keyof SearchState) => {
     const rawValue = e.target.value.replace(/\D/g, "");
-    const formattedValue = rawValue ? new Intl.NumberFormat("id-ID").format(Number(rawValue)) : "";
-    setFormData(prev => ({ ...prev, [field]: formattedValue }));
+    const formatted = rawValue ? new Intl.NumberFormat("id-ID").format(Number(rawValue)) : "";
+    const num = Number(rawValue) || 0;
+    setFormData(prev => {
+      const next = { ...prev, [field]: formatted };
+      const err = "Nilai harus lebih besar dari minimum";
+      if (field === 'minPrice') setRangeErrors(p => ({ ...p, price: formatted && prev.maxPrice && num > n(prev.maxPrice) ? "Min melebihi Max" : undefined }));
+      if (field === 'maxPrice') setRangeErrors(p => ({ ...p, price: formatted && prev.minPrice && num < n(prev.minPrice) ? `Harus ≥ ${prev.minPrice}` : undefined }));
+      if (field === 'minLt')    setRangeErrors(p => ({ ...p, lt:    formatted && prev.maxLt    && num > n(prev.maxLt)    ? "Min melebihi Max" : undefined }));
+      if (field === 'maxLt')    setRangeErrors(p => ({ ...p, lt:    formatted && prev.minLt    && num < n(prev.minLt)    ? `Harus ≥ ${prev.minLt} m²` : undefined }));
+      if (field === 'minLb')    setRangeErrors(p => ({ ...p, lb:    formatted && prev.maxLb    && num > n(prev.maxLb)    ? "Min melebihi Max" : undefined }));
+      if (field === 'maxLb')    setRangeErrors(p => ({ ...p, lb:    formatted && prev.minLb    && num < n(prev.minLb)    ? `Harus ≥ ${prev.minLb} m²` : undefined }));
+      void err;
+      return next;
+    });
   };
+
+  const handleRangeBlur = (field: 'minPrice' | 'maxPrice' | 'minLt' | 'maxLt' | 'minLb' | 'maxLb') => {
+    if ((field === 'minPrice' || field === 'maxPrice') && formData.minPrice && formData.maxPrice && n(formData.minPrice) > n(formData.maxPrice))
+      setRangeErrors(p => ({ ...p, price: `Max harus ≥ ${formData.minPrice}` }));
+    if ((field === 'minLt' || field === 'maxLt') && formData.minLt && formData.maxLt && n(formData.minLt) > n(formData.maxLt))
+      setRangeErrors(p => ({ ...p, lt: `Max harus ≥ ${formData.minLt} m²` }));
+    if ((field === 'minLb' || field === 'maxLb') && formData.minLb && formData.maxLb && n(formData.minLb) > n(formData.maxLb))
+      setRangeErrors(p => ({ ...p, lb: `Max harus ≥ ${formData.minLb} m²` }));
+  };
+
+  const hasRangeError = () => !!(rangeErrors.price || rangeErrors.lt || rangeErrors.lb);
 
   const getLabel = (min: string, max: string, defaultText: string, prefix = "") => {
     if (min && max) return `${prefix}${min} - ${prefix}${max}`;
@@ -200,6 +229,13 @@ const CardSlider = () => {
   };
 
   const handleSearch = () => {
+    if (hasRangeError()) {
+      toast.error("Perbaiki range nilai sebelum mencari", { icon: "⚠️" });
+      setShaking(true);
+      setTimeout(() => setShaking(false), 500);
+      return;
+    }
+
     const params = new URLSearchParams();
 
     if (formData.locations.length > 0) {
@@ -230,7 +266,9 @@ const CardSlider = () => {
     params.set("page", "1");
 
     const destination =
-      activeTab === "beli" ? "/Jual" : activeTab === "sewa" ? "/Sewa" : "/Lelang";
+      activeTab === "semua"  ? "/properti/semua" :
+      activeTab === "beli"   ? "/Jual" :
+      activeTab === "sewa"   ? "/Sewa" : "/Lelang";
 
     router.push(`${destination}?${params.toString()}`);
   };
@@ -242,16 +280,21 @@ const CardSlider = () => {
       <div className="flex justify-center mb-6">
         <div className="bg-[#1A1A1A]/90 backdrop-blur-md border border-white/20 p-1.5 rounded-full inline-flex shadow-xl overflow-x-auto max-w-full no-scrollbar">
           {[
-            { id: "beli", label: "Beli", icon: "solar:home-2-bold" },
-            { id: "sewa", label: "Sewa", icon: "solar:key-minimalistic-square-bold" },
+            { id: "semua",  label: "Semua",  icon: "solar:map-point-rotate-bold" },
+            { id: "beli",   label: "Beli",   icon: "solar:home-2-bold" },
+            { id: "sewa",   label: "Sewa",   icon: "solar:key-minimalistic-square-bold" },
             { id: "lelang", label: "Lelang", icon: "solar:tag-price-bold" },
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => {
-                setActiveTab(tab.id as TabType);
+                const newTab = tab.id as TabType;
+                setActiveTab(newTab);
                 setOpenDropdown(null);
-                setFormData(prev => ({ ...prev, type: "" }));
+                setFormData(prev => ({
+                  ...prev,
+                  type: PROPERTY_TYPES[newTab].includes(prev.type) ? prev.type : "",
+                }));
               }}
               className={`
                 relative flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors duration-200
@@ -446,15 +489,16 @@ const CardSlider = () => {
             {openDropdown === "price" && (
               <div className="absolute top-full left-0 w-full lg:w-[320px] bg-white rounded-2xl shadow-2xl border border-gray-100 mt-4 p-5 z-50 animate-fade-in-up">
                  <h4 className="font-bold text-gray-800 mb-3 text-sm">Range Budget (Rp)</h4>
-                 <div className="flex items-center gap-2 mb-1">
+                 <div className="flex items-center gap-2">
                     <div className="relative w-1/2">
-                       <input type="text" placeholder="Min" value={formData.minPrice} onChange={(e) => handleFormattedInput(e, 'minPrice')} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none text-gray-700 font-medium placeholder:text-gray-400" />
+                       <input type="text" placeholder="Min" value={formData.minPrice} onChange={(e) => handleFormattedInput(e, 'minPrice')} onBlur={() => handleRangeBlur('minPrice')}className={`w-full bg-gray-50 border rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none text-gray-700 font-medium placeholder:text-gray-400 ${rangeErrors.price ? "border-red-400" : "border-gray-200"}`} />
                     </div>
                     <span className="text-gray-400 font-medium">s/d</span>
                     <div className="relative w-1/2">
-                       <input type="text" placeholder="Max" value={formData.maxPrice} onChange={(e) => handleFormattedInput(e, 'maxPrice')} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none text-gray-700 font-medium placeholder:text-gray-400" />
+                       <input type="text" placeholder="Max" value={formData.maxPrice} onChange={(e) => handleFormattedInput(e, 'maxPrice')} onBlur={() => handleRangeBlur('maxPrice')} className={`w-full bg-gray-50 border rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none text-gray-700 font-medium placeholder:text-gray-400 ${rangeErrors.price ? "border-red-400" : "border-gray-200"}`} />
                     </div>
                  </div>
+                 {rangeErrors.price && <p className="text-red-500 text-[11px] mt-1.5 flex items-center gap-1"><Icon icon="solar:danger-triangle-bold-duotone" className="shrink-0 text-sm"/>{rangeErrors.price}</p>}
               </div>
             )}
           </div>
@@ -484,19 +528,21 @@ const CardSlider = () => {
                  <div className="mb-4">
                     <h4 className="font-bold text-gray-800 mb-2 text-sm flex items-center gap-2"><Icon icon="solar:map-bold" className="text-gray-400"/> Luas Tanah (m²)</h4>
                     <div className="flex items-center gap-2">
-                       <input type="text" placeholder="Min" value={formData.minLt} onChange={(e) => handleFormattedInput(e, 'minLt')} className="w-1/2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none font-medium placeholder:text-gray-400 text-gray-700" />
+                       <input type="text" placeholder="Min" value={formData.minLt} onChange={(e) => handleFormattedInput(e, 'minLt')} onBlur={() => handleRangeBlur('minLt')} className={`w-1/2 bg-gray-50 border rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none font-medium placeholder:text-gray-400 text-gray-700 ${rangeErrors.lt ? "border-red-400" : "border-gray-200"}`} />
                        <span className="text-gray-400">-</span>
-                       <input type="text" placeholder="Max" value={formData.maxLt} onChange={(e) => handleFormattedInput(e, 'maxLt')} className="w-1/2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none font-medium placeholder:text-gray-400 text-gray-700" />
+                       <input type="text" placeholder="Max" value={formData.maxLt} onChange={(e) => handleFormattedInput(e, 'maxLt')} onBlur={() => handleRangeBlur('maxLt')} className={`w-1/2 bg-gray-50 border rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none font-medium placeholder:text-gray-400 text-gray-700 ${rangeErrors.lt ? "border-red-400" : "border-gray-200"}`} />
                     </div>
+                    {rangeErrors.lt && <p className="text-red-500 text-[11px] mt-1.5 flex items-center gap-1"><Icon icon="solar:danger-triangle-bold-duotone" className="shrink-0 text-sm"/>{rangeErrors.lt}</p>}
                  </div>
                  {activeTab !== "lelang" && (
                     <div>
                        <h4 className="font-bold text-gray-800 mb-2 text-sm flex items-center gap-2"><Icon icon="solar:home-bold" className="text-gray-400"/> Luas Bangunan (m²)</h4>
                        <div className="flex items-center gap-2">
-                          <input type="text" placeholder="Min" value={formData.minLb} onChange={(e) => handleFormattedInput(e, 'minLb')} className="w-1/2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none font-medium placeholder:text-gray-400 text-gray-700" />
+                          <input type="text" placeholder="Min" value={formData.minLb} onChange={(e) => handleFormattedInput(e, 'minLb')} onBlur={() => handleRangeBlur('minLb')} className={`w-1/2 bg-gray-50 border rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none font-medium placeholder:text-gray-400 text-gray-700 ${rangeErrors.lb ? "border-red-400" : "border-gray-200"}`} />
                           <span className="text-gray-400">-</span>
-                          <input type="text" placeholder="Max" value={formData.maxLb} onChange={(e) => handleFormattedInput(e, 'maxLb')} className="w-1/2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none font-medium placeholder:text-gray-400 text-gray-700" />
+                          <input type="text" placeholder="Max" value={formData.maxLb} onChange={(e) => handleFormattedInput(e, 'maxLb')} onBlur={() => handleRangeBlur('maxLb')} className={`w-1/2 bg-gray-50 border rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none font-medium placeholder:text-gray-400 text-gray-700 ${rangeErrors.lb ? "border-red-400" : "border-gray-200"}`} />
                        </div>
+                       {rangeErrors.lb && <p className="text-red-500 text-[11px] mt-1.5 flex items-center gap-1"><Icon icon="solar:danger-triangle-bold-duotone" className="shrink-0 text-sm"/>{rangeErrors.lb}</p>}
                     </div>
                  )}
                  {activeTab === "lelang" && <p className="text-[10px] text-orange-600 bg-orange-50 p-2 rounded-lg mt-2 font-medium border border-orange-100"><Icon icon="solar:info-circle-bold" className="inline mr-1 text-sm"/>Aset lelang fokus pada nilai tanah (Land Value).</p>}
@@ -506,13 +552,15 @@ const CardSlider = () => {
 
           {/* === E. TOMBOL CARI (10%) === */}
           <div className="w-full lg:w-[10%] p-4 lg:p-2 shrink-0 flex items-center justify-center">
-            <button
+            <motion.button
               onClick={handleSearch}
+              animate={shaking ? { x: [0, -16, 16, -16, 16, -16, 16, -12, 12, -8, 8, 0], rotate: [0, -3, 3, -3, 3, -3, 3, -2, 2, -1, 1, 0] } : {}}
+              transition={{ duration: 0.7, ease: "easeInOut" }}
               className="w-full lg:w-14 h-14 bg-primary hover:bg-[#6ee7b7] text-darkmode rounded-2xl lg:rounded-full font-bold text-lg flex items-center justify-center shadow-lg shadow-primary/30 transition-all transform active:scale-95"
             >
               <Icon icon="solar:magnifer-linear" className="text-2xl stroke-2" />
               <span className="lg:hidden ml-2">Cari Sekarang</span>
-            </button>
+            </motion.button>
           </div>
 
         </div>

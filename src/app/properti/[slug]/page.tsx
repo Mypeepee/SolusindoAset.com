@@ -68,7 +68,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     title,
     description,
     alternates: {
-      canonical: `/kategori/${slug}${tipe ? `?tipe=${tipe}` : ""}`,
+      canonical: `/properti/${slug}${tipe ? `?tipe=${tipe}` : ""}`,
     },
     openGraph: {
       title,
@@ -114,6 +114,12 @@ export default async function KategoriPage({ params, searchParams }: Props) {
   const page = typeof searchParams.page === "string" ? Number(searchParams.page) : 1;
   const tipe = typeof searchParams.tipe === "string" ? searchParams.tipe         : "semua";
   const kota = typeof searchParams.kota === "string" ? searchParams.kota         : undefined;
+  const minHarga = typeof searchParams.minHarga === "string" ? Number(searchParams.minHarga) : undefined;
+  const maxHarga = typeof searchParams.maxHarga === "string" ? Number(searchParams.maxHarga) : undefined;
+  const minLT    = typeof searchParams.minLT    === "string" ? Number(searchParams.minLT)    : undefined;
+  const maxLT    = typeof searchParams.maxLT    === "string" ? Number(searchParams.maxLT)    : undefined;
+  const minLB    = typeof searchParams.minLB    === "string" ? Number(searchParams.minLB)    : undefined;
+  const maxLB    = typeof searchParams.maxLB    === "string" ? Number(searchParams.maxLB)    : undefined;
   // rawSort: hanya ada nilai jika user memang memilih sort (untuk highlight pill)
   // sort: selalu punya nilai fallback untuk query DB
   const rawSort = typeof searchParams.sort === "string" ? searchParams.sort : "";
@@ -134,6 +140,24 @@ export default async function KategoriPage({ params, searchParams }: Props) {
     status_tayang: "TERSEDIA",
     jenis_transaksi: transaksiFilter(),
     ...(kota && { kota: { contains: kota, mode: "insensitive" } }),
+    ...((minHarga !== undefined || maxHarga !== undefined) && {
+      harga: {
+        ...(minHarga !== undefined && { gte: minHarga }),
+        ...(maxHarga !== undefined && { lte: maxHarga }),
+      },
+    }),
+    ...((minLT !== undefined || maxLT !== undefined) && {
+      luas_tanah: {
+        ...(minLT !== undefined && { gte: minLT }),
+        ...(maxLT !== undefined && { lte: maxLT }),
+      },
+    }),
+    ...((minLB !== undefined || maxLB !== undefined) && {
+      luas_bangunan: {
+        ...(minLB !== undefined && { gte: minLB }),
+        ...(maxLB !== undefined && { lte: maxLB }),
+      },
+    }),
   };
 
   // Sorting — is_hot_deal always floats to top, then secondary sort

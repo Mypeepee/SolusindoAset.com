@@ -41,7 +41,7 @@ const Hero = () => {
     <div className="relative w-full bg-darkmode">
       
       {/* --- BAGIAN 1: BANNER UTAMA (CENTERED) --- */}
-      <section className="relative w-full h-[75vh] min-h-[560px] flex items-center justify-center overflow-hidden" id="main-banner">
+      <section className="relative w-full h-[75vh] min-h-[560px] flex items-start pt-[72px] lg:items-center lg:pt-0 justify-center overflow-hidden" id="main-banner">
         
         {/* Background Image */}
         <div className="absolute inset-0 z-0">

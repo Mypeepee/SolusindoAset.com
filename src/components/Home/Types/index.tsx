@@ -74,7 +74,7 @@ function CategoryCard({ cat, count, isLoading }: { cat: CategoryItem; count: num
 
   return (
     <div ref={cardRef}>
-      <Link href={`/kategori/${cat.id.toLowerCase().replace(/_/g, "-")}`} className="block h-full">
+      <Link href={`/properti/${cat.id.toLowerCase().replace(/_/g, "-")}`} className="block h-full">
         <div
           className="
             group relative h-full p-6 rounded-2xl

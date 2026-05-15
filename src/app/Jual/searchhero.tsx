@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
 import { Icon } from "@iconify/react";
 import toast from "react-hot-toast";
 
@@ -100,6 +101,9 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
   const [currentList, setCurrentList] = useState<Region[]>([]);
   const [parentRegion, setParentRegion] = useState<Region | null>(null);
   const [loadingWilayah, setLoadingWilayah] = useState(false);
+
+  const [rangeErrors, setRangeErrors] = useState<{ price?: string; lt?: string; lb?: string }>({});
+  const [shaking, setShaking] = useState(false);
 
   const [formData, setFormData] = useState<SearchState>(() => buildFormData(initial));
 
@@ -219,11 +223,33 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [wrapperRef]);
 
+  const n = (val: string) => Number(parseRawNumber(val)) || 0;
+
   const handleFormattedInput = (e: React.ChangeEvent<HTMLInputElement>, field: keyof SearchState) => {
     const rawValue = e.target.value.replace(/\D/g, "");
-    const formattedValue = rawValue ? new Intl.NumberFormat("id-ID").format(Number(rawValue)) : "";
-    setFormData(prev => ({ ...prev, [field]: formattedValue }));
+    const formatted = rawValue ? new Intl.NumberFormat("id-ID").format(Number(rawValue)) : "";
+    const num = Number(rawValue) || 0;
+    setFormData(prev => {
+      if (field === 'minPrice') setRangeErrors(p => ({ ...p, price: formatted && prev.maxPrice && num > n(prev.maxPrice) ? "Min melebihi Max" : undefined }));
+      if (field === 'maxPrice') setRangeErrors(p => ({ ...p, price: formatted && prev.minPrice && num < n(prev.minPrice) ? `Harus ≥ ${prev.minPrice}` : undefined }));
+      if (field === 'minLt')    setRangeErrors(p => ({ ...p, lt:    formatted && prev.maxLt    && num > n(prev.maxLt)    ? "Min melebihi Max" : undefined }));
+      if (field === 'maxLt')    setRangeErrors(p => ({ ...p, lt:    formatted && prev.minLt    && num < n(prev.minLt)    ? `Harus ≥ ${prev.minLt} m²` : undefined }));
+      if (field === 'minLb')    setRangeErrors(p => ({ ...p, lb:    formatted && prev.maxLb    && num > n(prev.maxLb)    ? "Min melebihi Max" : undefined }));
+      if (field === 'maxLb')    setRangeErrors(p => ({ ...p, lb:    formatted && prev.minLb    && num < n(prev.minLb)    ? `Harus ≥ ${prev.minLb} m²` : undefined }));
+      return { ...prev, [field]: formatted };
+    });
   };
+
+  const handleRangeBlur = (field: 'minPrice' | 'maxPrice' | 'minLt' | 'maxLt' | 'minLb' | 'maxLb') => {
+    if ((field === 'minPrice' || field === 'maxPrice') && formData.minPrice && formData.maxPrice && n(formData.minPrice) > n(formData.maxPrice))
+      setRangeErrors(p => ({ ...p, price: `Max harus ≥ ${formData.minPrice}` }));
+    if ((field === 'minLt' || field === 'maxLt') && formData.minLt && formData.maxLt && n(formData.minLt) > n(formData.maxLt))
+      setRangeErrors(p => ({ ...p, lt: `Max harus ≥ ${formData.minLt} m²` }));
+    if ((field === 'minLb' || field === 'maxLb') && formData.minLb && formData.maxLb && n(formData.minLb) > n(formData.maxLb))
+      setRangeErrors(p => ({ ...p, lb: `Max harus ≥ ${formData.minLb} m²` }));
+  };
+
+  const hasRangeError = () => !!(rangeErrors.price || rangeErrors.lt || rangeErrors.lb);
 
   const getLabel = (min: string, max: string, defaultText: string, prefix = "") => {
     if (min && max) return `${prefix}${min} - ${prefix}${max}`;
@@ -233,6 +259,13 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
   };
 
   const handleSearch = () => {
+    if (hasRangeError()) {
+      toast.error("Perbaiki range nilai sebelum mencari", { icon: "⚠️" });
+      setShaking(true);
+      setTimeout(() => setShaking(false), 500);
+      return;
+    }
+
     const params = new URLSearchParams();
 
     if (formData.locations.length > 0) {
@@ -465,15 +498,16 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
                 {openDropdown === "price" && (
                 <div className="absolute top-full left-0 w-full lg:w-[320px] bg-[#222] rounded-2xl shadow-2xl border border-white/10 mt-4 p-5 z-50 animate-fade-in-up">
                     <h4 className="font-bold text-white mb-3 text-sm">Range Budget (Rp)</h4>
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2">
                         <div className="relative w-1/2">
-                        <input type="text" placeholder="Min" value={formData.minPrice} onChange={(e) => handleFormattedInput(e, 'minPrice')} className="w-full bg-[#1A1A1A] border border-white/10 rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none text-white font-medium placeholder:text-gray-600" />
+                        <input type="text" placeholder="Min" value={formData.minPrice} onChange={(e) => handleFormattedInput(e, 'minPrice')} onBlur={() => handleRangeBlur('minPrice')} className={`w-full bg-[#1A1A1A] border rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none text-white font-medium placeholder:text-gray-600 ${rangeErrors.price ? "border-red-500/70" : "border-white/10"}`} />
                         </div>
                         <span className="text-gray-500 font-medium">s/d</span>
                         <div className="relative w-1/2">
-                        <input type="text" placeholder="Max" value={formData.maxPrice} onChange={(e) => handleFormattedInput(e, 'maxPrice')} className="w-full bg-[#1A1A1A] border border-white/10 rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none text-white font-medium placeholder:text-gray-600" />
+                        <input type="text" placeholder="Max" value={formData.maxPrice} onChange={(e) => handleFormattedInput(e, 'maxPrice')} onBlur={() => handleRangeBlur('maxPrice')} className={`w-full bg-[#1A1A1A] border rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none text-white font-medium placeholder:text-gray-600 ${rangeErrors.price ? "border-red-500/70" : "border-white/10"}`} />
                         </div>
                     </div>
+                    {rangeErrors.price && <p className="text-red-400 text-[11px] mt-1.5 flex items-center gap-1"><Icon icon="solar:danger-triangle-bold-duotone" className="shrink-0 text-sm"/>{rangeErrors.price}</p>}
                 </div>
                 )}
             </div>
@@ -503,18 +537,20 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
                     <div className="mb-4">
                         <h4 className="font-bold text-white mb-2 text-sm flex items-center gap-2"><Icon icon="solar:map-bold" className="text-gray-400"/> Luas Tanah (m²)</h4>
                         <div className="flex items-center gap-2">
-                        <input type="text" placeholder="Min" value={formData.minLt} onChange={(e) => handleFormattedInput(e, 'minLt')} className="w-1/2 bg-[#1A1A1A] border border-white/10 rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none font-medium placeholder:text-gray-600 text-white" />
+                        <input type="text" placeholder="Min" value={formData.minLt} onChange={(e) => handleFormattedInput(e, 'minLt')} onBlur={() => handleRangeBlur('minLt')} className={`w-1/2 bg-[#1A1A1A] border rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none font-medium placeholder:text-gray-600 text-white ${rangeErrors.lt ? "border-red-500/70" : "border-white/10"}`} />
                         <span className="text-gray-500">-</span>
-                        <input type="text" placeholder="Max" value={formData.maxLt} onChange={(e) => handleFormattedInput(e, 'maxLt')} className="w-1/2 bg-[#1A1A1A] border border-white/10 rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none font-medium placeholder:text-gray-600 text-white" />
+                        <input type="text" placeholder="Max" value={formData.maxLt} onChange={(e) => handleFormattedInput(e, 'maxLt')} onBlur={() => handleRangeBlur('maxLt')} className={`w-1/2 bg-[#1A1A1A] border rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none font-medium placeholder:text-gray-600 text-white ${rangeErrors.lt ? "border-red-500/70" : "border-white/10"}`} />
                         </div>
+                        {rangeErrors.lt && <p className="text-red-400 text-[11px] mt-1.5 flex items-center gap-1"><Icon icon="solar:danger-triangle-bold-duotone" className="shrink-0 text-sm"/>{rangeErrors.lt}</p>}
                     </div>
                     <div>
                         <h4 className="font-bold text-white mb-2 text-sm flex items-center gap-2"><Icon icon="solar:home-bold" className="text-gray-400"/> Luas Bangunan (m²)</h4>
                         <div className="flex items-center gap-2">
-                            <input type="text" placeholder="Min" value={formData.minLb} onChange={(e) => handleFormattedInput(e, 'minLb')} className="w-1/2 bg-[#1A1A1A] border border-white/10 rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none font-medium placeholder:text-gray-600 text-white" />
+                            <input type="text" placeholder="Min" value={formData.minLb} onChange={(e) => handleFormattedInput(e, 'minLb')} onBlur={() => handleRangeBlur('minLb')} className={`w-1/2 bg-[#1A1A1A] border rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none font-medium placeholder:text-gray-600 text-white ${rangeErrors.lb ? "border-red-500/70" : "border-white/10"}`} />
                             <span className="text-gray-500">-</span>
-                            <input type="text" placeholder="Max" value={formData.maxLb} onChange={(e) => handleFormattedInput(e, 'maxLb')} className="w-1/2 bg-[#1A1A1A] border border-white/10 rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none font-medium placeholder:text-gray-600 text-white" />
+                            <input type="text" placeholder="Max" value={formData.maxLb} onChange={(e) => handleFormattedInput(e, 'maxLb')} onBlur={() => handleRangeBlur('maxLb')} className={`w-1/2 bg-[#1A1A1A] border rounded-xl px-3 py-2.5 text-sm focus:border-primary outline-none font-medium placeholder:text-gray-600 text-white ${rangeErrors.lb ? "border-red-500/70" : "border-white/10"}`} />
                         </div>
+                        {rangeErrors.lb && <p className="text-red-400 text-[11px] mt-1.5 flex items-center gap-1"><Icon icon="solar:danger-triangle-bold-duotone" className="shrink-0 text-sm"/>{rangeErrors.lb}</p>}
                     </div>
                 </div>
                 )}
@@ -522,13 +558,15 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
 
             {/* === E. TOMBOL CARI === */}
             <div className="w-full lg:w-[10%] p-4 lg:p-2 shrink-0 flex items-center justify-center">
-                <button
+                <motion.button
                   onClick={handleSearch}
+                  animate={shaking ? { x: [0, -16, 16, -16, 16, -16, 16, -12, 12, -8, 8, 0], rotate: [0, -3, 3, -3, 3, -3, 3, -2, 2, -1, 1, 0] } : {}}
+                  transition={{ duration: 0.7, ease: "easeInOut" }}
                   className="w-full lg:w-14 h-14 bg-primary hover:bg-[#6ee7b7] text-darkmode rounded-2xl lg:rounded-full font-bold text-lg flex items-center justify-center shadow-lg shadow-primary/30 transition-all transform active:scale-95"
                 >
                 <Icon icon="solar:magnifer-linear" className="text-2xl stroke-2" />
                 <span className="lg:hidden ml-2">Cari</span>
-                </button>
+                </motion.button>
             </div>
 
             </div>

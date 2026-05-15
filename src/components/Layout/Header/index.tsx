@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Icon } from "@iconify/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSession, signOut } from "next-auth/react";
@@ -54,6 +54,7 @@ const MobileNav: React.FC<MobileNavProps> = ({
   const [isScrolled, setIsScrolled] = useState(false);
   const [openSubmenu, setOpenSubmenu] = useState<number | null>(null);
   const pathname = usePathname();
+  const router = useRouter();
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 50);
@@ -71,7 +72,14 @@ const MobileNav: React.FC<MobileNavProps> = ({
 
   const noBackPaths = ["/"];
   const showBackButton = !noBackPaths.includes(pathname || "/");
-  const backHref = "/Jual";
+
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/");
+    }
+  };
 
   // ✅ filter base menu: hide "Gabung Jadi Agent" jika tidak eligible
   const filteredBaseMenu = React.useMemo(() => {
@@ -139,8 +147,8 @@ const MobileNav: React.FC<MobileNavProps> = ({
       >
         {/* BACK BUTTON */}
         {showBackButton ? (
-          <Link
-            href={backHref}
+          <button
+            onClick={handleBack}
             className={`p-2.5 rounded-full backdrop-blur-md active:scale-95 transition-all shadow-sm ${
               isScrolled
                 ? "bg-white/10 text-white"
@@ -148,7 +156,7 @@ const MobileNav: React.FC<MobileNavProps> = ({
             }`}
           >
             <Icon icon="solar:arrow-left-linear" className="text-xl" />
-          </Link>
+          </button>
         ) : (
           <div className="w-10 h-10" />
         )}

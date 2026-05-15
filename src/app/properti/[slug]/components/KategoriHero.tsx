@@ -2,7 +2,7 @@
 
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@iconify/react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
@@ -178,9 +178,9 @@ function KategoriCard({ item, isActive, tabCounts, scrollRef }: {
       const contRect  = container.getBoundingClientRect();
       const delta     = (cardRect.left - contRect.left) - (container.offsetWidth / 2 - CARD_W / 2);
       container.scrollTo({ left: container.scrollLeft + delta, behavior: "smooth" });
-      setTimeout(() => router.push(`/kategori/${item.slug}`), 260);
+      setTimeout(() => router.push(`/properti/${item.slug}`), 260);
     } else {
-      router.push(`/kategori/${item.slug}`);
+      router.push(`/properti/${item.slug}`);
     }
   };
 
@@ -263,6 +263,7 @@ const ALL_PROPERTY_TYPES = sortAlpha([
 
 function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: string }) {
   const router = useRouter();
+  const sp     = useSearchParams();
   const wrapperRef   = useRef<HTMLDivElement>(null);
   const refLokasi    = useRef<HTMLDivElement>(null);
   const refTipe      = useRef<HTMLDivElement>(null);
@@ -275,11 +276,21 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
   const [parentRegion, setParentRegion] = useState<Region | null>(null);
   const [loadingWilayah, setLoadingWilayah] = useState(false);
 
-  const [formData, setFormData] = useState<SearchState>({
-    locations: [], type: "",
-    minPrice: "", maxPrice: "",
-    minLt: "", maxLt: "",
-    minLb: "", maxLb: "",
+  const fmt = (val: string | null) =>
+    val ? new Intl.NumberFormat("id-ID").format(Number(val)) : "";
+
+  const [formData, setFormData] = useState<SearchState>(() => {
+    const rawKota = sp.get("kota") ?? sp.get("lokasi") ?? "";
+    return {
+      locations: rawKota ? [{ id: rawKota, name: rawKota, level: "kota" as const }] : [],
+      type: "",
+      minPrice: fmt(sp.get("minHarga")),
+      maxPrice: fmt(sp.get("maxHarga")),
+      minLt:    fmt(sp.get("minLT") ?? sp.get("minLt")),
+      maxLt:    fmt(sp.get("maxLT") ?? sp.get("maxLt")),
+      minLb:    fmt(sp.get("minLB") ?? sp.get("minLb")),
+      maxLb:    fmt(sp.get("maxLB") ?? sp.get("maxLb")),
+    };
   });
 
   // Sync tipe aset ke kategori halaman yang aktif
@@ -378,13 +389,16 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
     const targetSlug = formData.type
       ? KATEGORI_LIST.find(k => k.label === formData.type)?.slug ?? slug
       : slug;
+    const raw = (v: string) => v.replace(/\./g, "");
     const params = new URLSearchParams();
-    if (formData.locations.length) params.set("lokasi", formData.locations.map(l => l.name).join(","));
-    if (formData.minPrice) params.set("minHarga", formData.minPrice.replace(/\./g, ""));
-    if (formData.maxPrice) params.set("maxHarga", formData.maxPrice.replace(/\./g, ""));
-    if (formData.minLt)    params.set("minLt", formData.minLt.replace(/\./g, ""));
-    if (formData.maxLt)    params.set("maxLt", formData.maxLt.replace(/\./g, ""));
-    router.push(`/kategori/${targetSlug}?${params.toString()}`, { scroll: false });
+    if (formData.locations.length) params.set("kota", formData.locations.map(l => l.name).join(","));
+    if (formData.minPrice) params.set("minHarga", raw(formData.minPrice));
+    if (formData.maxPrice) params.set("maxHarga", raw(formData.maxPrice));
+    if (formData.minLt)    params.set("minLT",    raw(formData.minLt));
+    if (formData.maxLt)    params.set("maxLT",    raw(formData.maxLt));
+    if (formData.minLb)    params.set("minLB",    raw(formData.minLb));
+    if (formData.maxLb)    params.set("maxLB",    raw(formData.maxLb));
+    router.push(`/properti/${targetSlug}?${params.toString()}`, { scroll: false });
     setOpenDropdown(null);
   };
 

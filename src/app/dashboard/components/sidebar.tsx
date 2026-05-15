@@ -108,6 +108,42 @@ export function OwnerSidebar() {
           />
         ))}
       </nav>
+
+      {/* SPACER */}
+      <div className="flex-1" />
+
+      {/* EXIT TO HOME */}
+      <div className="pt-4 mt-4 border-t border-white/5">
+        <Link
+          href="/"
+          className="
+            group relative flex items-center gap-3
+            px-3.5 py-3 rounded-2xl
+            border border-emerald-500/20
+            bg-emerald-500/5
+            hover:bg-emerald-500/12 hover:border-emerald-400/40
+            transition-all duration-300
+            overflow-hidden
+          "
+        >
+          {/* scanning light sweep */}
+          <span className="pointer-events-none absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-emerald-400/10 to-transparent" />
+
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-400/30 group-hover:bg-emerald-500/20 transition-colors shrink-0">
+            <Icon icon="solar:home-smile-angle-bold-duotone" className="text-emerald-400 text-[20px]" />
+          </div>
+
+          <div className="flex flex-col min-w-0">
+            <span className="text-[0.85rem] font-semibold text-emerald-300 leading-tight">Kembali ke Beranda</span>
+            <span className="text-[10px] text-slate-500 leading-tight">Keluar dari dashboard</span>
+          </div>
+
+          <Icon
+            icon="solar:arrow-right-up-linear"
+            className="ml-auto text-[15px] text-emerald-500/40 group-hover:text-emerald-400 transition-colors shrink-0"
+          />
+        </Link>
+      </div>
     </aside>
   );
 }

@@ -8,7 +8,7 @@ export const headerData: HeaderItem[] = [
     submenu: [
       {
         label: "Semua Kategori",
-        href: "/kategori/semua",
+        href: "/properti/semua",
         description: "Jelajahi semua jenis properti sekaligus",
         icon: "solar:map-point-rotate-bold-duotone",
       },

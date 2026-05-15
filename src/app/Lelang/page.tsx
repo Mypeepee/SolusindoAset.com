@@ -111,7 +111,7 @@ export default async function SearchPage({ searchParams }: Props) {
       ? searchParams.legalitas
       : undefined;
 
-  // ✅ Filter harga dan luas tanah dari SearchHero
+  // ✅ Filter harga, luas tanah, dan luas bangunan dari SearchHero
   const minHarga =
     typeof searchParams.minHarga === "string"
       ? Number(searchParams.minHarga)
@@ -127,6 +127,14 @@ export default async function SearchPage({ searchParams }: Props) {
   const maxLT =
     typeof searchParams.maxLT === "string"
       ? Number(searchParams.maxLT)
+      : undefined;
+  const minLB =
+    typeof searchParams.minLB === "string"
+      ? Number(searchParams.minLB)
+      : undefined;
+  const maxLB =
+    typeof searchParams.maxLB === "string"
+      ? Number(searchParams.maxLB)
       : undefined;
 
   // ✅ Sort parameter (default: lelang-terdekat)
@@ -194,6 +202,14 @@ export default async function SearchPage({ searchParams }: Props) {
       luas_tanah: {
         ...(minLT !== undefined && { gte: minLT }),
         ...(maxLT !== undefined && { lte: maxLT }),
+      },
+    }),
+
+    // ✅ Filter LUAS BANGUNAN
+    ...((minLB !== undefined || maxLB !== undefined) && {
+      luas_bangunan: {
+        ...(minLB !== undefined && { gte: minLB }),
+        ...(maxLB !== undefined && { lte: maxLB }),
       },
     }),
 
@@ -325,7 +341,7 @@ export default async function SearchPage({ searchParams }: Props) {
   return (
     <main className="bg-[#0F0F0F] min-h-screen pb-20">
       <SearchHero
-        key={`${kota ?? ""}_${tipe ?? ""}_${minHarga ?? ""}_${maxHarga ?? ""}_${minLT ?? ""}_${maxLT ?? ""}`}
+        key={`${kota ?? ""}_${tipe ?? ""}_${minHarga ?? ""}_${maxHarga ?? ""}_${minLT ?? ""}_${maxLT ?? ""}_${minLB ?? ""}_${maxLB ?? ""}`}
         initial={{
           kota: kota,
           tipe: tipe,
@@ -333,6 +349,8 @@ export default async function SearchPage({ searchParams }: Props) {
           maxHarga: maxHarga,
           minLT: minLT,
           maxLT: maxLT,
+          minLB: minLB,
+          maxLB: maxLB,
         }}
       />
 
