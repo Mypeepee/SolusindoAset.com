@@ -72,6 +72,7 @@ async function migrateAgents() {
     console.log('Total agent_tampungan ditemukan:', rows.length);
 
     let success = 0;
+    let alreadyExist = 0;
     let skippedNoUser = 0;
     let fail = 0;
 
@@ -124,10 +125,12 @@ async function migrateAgents() {
         let kantorFinal;
         if (upline_id === 'AG023' || id_agent === 'AG023') {
           kantorFinal = 'Ray White Diponegoro';
+        } else if (id_agent === 'AG014') {
+          kantorFinal = 'Ray White Diponegoro';
         } else if (upline_id === 'AG022' || id_agent === 'AG022') {
           kantorFinal = 'Era Ventura';
         } else {
-          kantorFinal = 'Kantor Tidak Diketahui';
+          kantorFinal = 'Solusindo Premier Pusat';
         }
 
         const kotaAreaFinal = lokasi_kerja || kota || 'KOTA TIDAK DIKETAHUI';
@@ -178,6 +181,7 @@ async function migrateAgents() {
             $13, NULL, $14,
             $15, $16
           )
+          ON CONFLICT (id_pengguna) DO NOTHING
           RETURNING id_agent
         `,
           [
@@ -200,7 +204,21 @@ async function migrateAgents() {
           ],
         );
 
-        const idAgentBaru = insertRes.rows[0].id_agent;
+        let idAgentBaru;
+        if (insertRes.rowCount > 0) {
+          idAgentBaru = insertRes.rows[0].id_agent;
+          success++;
+          console.log(`OK agent: ${id_account} (${email}) => ${idAgentBaru}`);
+        } else {
+          // Agent sudah ada dari run sebelumnya, ambil id_agent yang sudah ada
+          const existingRes = await client.query(
+            `SELECT id_agent FROM public.agent WHERE id_pengguna = $1`,
+            [idPenggunaBaru],
+          );
+          idAgentBaru = existingRes.rows[0].id_agent;
+          alreadyExist++;
+          console.log(`EXIST agent: ${id_account} (${email}) => ${idAgentBaru}`);
+        }
 
         // 5) Simpan mapping agent lama -> baru
         if (idAgentLama) {
@@ -213,22 +231,86 @@ async function migrateAgents() {
             [idAgentLama, idAgentBaru],
           );
         }
-
-        success++;
-        console.log(`OK agent: ${id_account} (${email}) => ${idAgentBaru}`);
       } catch (err) {
         fail++;
         console.error(`FAIL agent: ${id_account} (${email}):`, err.message);
       }
     }
 
-    console.log('Migrasi agent selesai');
+    console.log('\n--- Fase 2: Update id_upline menggunakan mapping ---');
+
+    // Ambil semua agent_tampungan yang punya upline_id
+    const { rows: uplineRows } = await client.query(`
+      SELECT id_agent, upline_id
+      FROM public.agent_tampungan
+      WHERE upline_id IS NOT NULL AND upline_id != '' AND email IS NOT NULL
+    `);
+
+    let uplineSuccess = 0;
+    let uplineSkipped = 0;
+    let uplineFail = 0;
+
+    for (const { id_agent: idAgentLama, upline_id: uplineIdLama } of uplineRows) {
+      try {
+        // Cari id_agent_baru dari mapping
+        const agentMapRes = await client.query(
+          `SELECT id_agent_baru FROM public.mapping_agent WHERE id_agent_lama = $1`,
+          [idAgentLama],
+        );
+        if (agentMapRes.rowCount === 0) {
+          uplineSkipped++;
+          continue;
+        }
+        const idAgentBaru = agentMapRes.rows[0].id_agent_baru;
+
+        // Cari id_upline_baru dari mapping
+        const uplineMapRes = await client.query(
+          `SELECT id_agent_baru FROM public.mapping_agent WHERE id_agent_lama = $1`,
+          [uplineIdLama],
+        );
+        if (uplineMapRes.rowCount === 0) {
+          uplineSkipped++;
+          console.warn(
+            `SKIP upline: ${idAgentLama} -> upline lama ${uplineIdLama} tidak ditemukan di mapping`,
+          );
+          continue;
+        }
+        const idUplineBaru = uplineMapRes.rows[0].id_agent_baru;
+
+        await client.query(
+          `UPDATE public.agent SET id_upline = $1 WHERE id_agent = $2`,
+          [idUplineBaru, idAgentBaru],
+        );
+
+        uplineSuccess++;
+        console.log(
+          `OK upline: ${idAgentLama} (${idAgentBaru}) -> upline ${uplineIdLama} (${idUplineBaru})`,
+        );
+      } catch (err) {
+        uplineFail++;
+        console.error(`FAIL upline: ${idAgentLama}:`, err.message);
+      }
+    }
+
+    console.log('Update upline selesai');
     console.log(
-      'Sukses:',
-      success,
-      'Skip tanpa pengguna:',
-      skippedNoUser,
+      'Upline sukses:',
+      uplineSuccess,
+      'Skip:',
+      uplineSkipped,
       'Gagal:',
+      uplineFail,
+    );
+
+    console.log('\n--- Ringkasan Migrasi Agent ---');
+    console.log(
+      'Insert baru:',
+      success,
+      '| Sudah ada:',
+      alreadyExist,
+      '| Skip tanpa pengguna:',
+      skippedNoUser,
+      '| Gagal:',
       fail,
     );
   } finally {

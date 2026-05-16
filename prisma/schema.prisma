@@ -93,6 +93,7 @@ model Listing {
   vendor             String?                @db.VarChar(200)
   status_tayang      status_properti_enum   @default(TERSEDIA)
   harga              Decimal                @db.Decimal(20, 2)
+  harga_per_meter    Decimal?               @db.Decimal(20, 2)
   harga_promo        Decimal?               @db.Decimal(20, 2)
   tanggal_lelang     DateTime?              @db.Timestamptz(6)
   uang_jaminan       Decimal?               @db.Decimal(20, 2)

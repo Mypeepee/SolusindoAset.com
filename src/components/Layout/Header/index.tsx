@@ -639,7 +639,7 @@ const Header: React.FC = () => {
 
       {/* DESKTOP HEADER */}
       <header
-        className={`hidden lg:block fixed top-0 left-0 w-full z-50 transition-all duration-300 ${
+        className={`hidden lg:flex lg:items-center fixed top-0 left-0 w-full z-50 transition-all duration-300 ${
           sticky
             ? "bg-[#0F0F0F]/80 backdrop-blur-md border-b border-white/5 h-[72px]"
             : "bg-transparent py-6"
