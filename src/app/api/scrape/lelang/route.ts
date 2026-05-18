@@ -249,11 +249,27 @@ export async function POST(req: NextRequest) {
               { timeout: 25000 }
             ).catch(() => {});
 
-            // Tunggu section "Bukti Kepemilikan" — lebih spesifik dari sebelumnya
+            // Tunggu section "Bukti Kepemilikan" — STRICT: label + sibling non-empty
+            // (Tidak boleh exit cuma karena teks "SHM" muncul di breadcrumb/dropdown.)
             await detailTab.waitForFunction(
-              `Array.from(document.querySelectorAll("div")).some(el =>
-                el.children.length === 0 && /Bukti\\s*Kepemilikan/i.test(el.textContent || "")
-              ) || document.body.textContent.match(/\\bSHM\\b|\\bHGB\\b|\\bSHGB\\b/) !== null`,
+              `(() => {
+                const labels = Array.from(document.querySelectorAll('div')).filter(el =>
+                  el.children.length === 0 &&
+                  /^Bukti\\s*Kepemilikan$/i.test((el.textContent || '').trim())
+                );
+                if (labels.length === 0) return false;
+                return labels.some(lbl => {
+                  const parent = lbl.parentElement;
+                  if (!parent) return false;
+                  const kids = Array.from(parent.children);
+                  const idx = kids.indexOf(lbl);
+                  for (let i = idx + 1; i < kids.length; i++) {
+                    const t = (kids[i].textContent || '').trim();
+                    if (t.length > 2) return true;
+                  }
+                  return false;
+                });
+              })()`,
               { timeout: 30000 }
             ).catch(() => {});
 
@@ -358,34 +374,144 @@ export async function POST(req: NextRequest) {
                 const allNumbers: string[] = [];
                 const seenNums = new Set<string>();
                 const addNum = (n: string) => {
-                  const c = n.trim().replace(/[.,;:]+$/, "");
+                  let c = n.trim().replace(/[.,;:]+$/, "");
+                  // Strip suffix kode kelurahan/desa setelah "/" — user hanya minta nomor.
+                  // Contoh: "09/WGb" → "09", "590/W.Gb" → "590", "00254/Belimbing" → "00254"
+                  const slashIdx = c.indexOf("/");
+                  if (slashIdx >= 0) c = c.substring(0, slashIdx).trim();
                   if (c && !seenNums.has(c)) { allNumbers.push(c); seenNums.add(c); }
                 };
 
                 // Parse satu blok teks → ekstrak tipe sertifikat & nomornya.
-                // Pola valid: "SHM No: 09/WGb", "HGB No.: 1234", "SHGB No 05", atau "SHM 09/WGb"
+                // Pola valid: "SHM No: 09/WGb", "HGB No.: 1234", "SHGB No 05", "SHM 09/WGb",
+                //   plus variasi: "Sertifikat Hak Milik", "Sertipikat" (ejaan lama),
+                //   "S.H.M" (dotted), "Hak Milik Atas Satuan Rumah Susun" (strata).
                 const parseCertText = (raw: string): boolean => {
                   if (!raw) return false;
-                  const m1 = raw.match(
-                    /\b(SHM|SHGB|HGB|HPL|HP|HAK\s*PAKAI|HAK\s*MILIK)\b\s*(?:No\.?|Nomor)\s*[:.]?\s*([0-9]+(?:\/[A-Za-z0-9.\-]+)?)/i
+
+                  // Normalisasi: collapse semua variasi penulisan tipe ke token kanonik
+                  // sebelum di-regex. Urutan penting: yang lebih panjang dulu.
+                  const text = raw
+                    .replace(/\bHak\s+Milik\s+Atas\s+Satuan\s+Rumah\s+Susun\b/gi, "STRATA")
+                    .replace(/\bSerti[fp]ikat\s+Hak\s+Milik\b/gi, "SHM")
+                    .replace(/\bSerti[fp]ikat\s+Hak\s+Guna\s+Bangunan\b/gi, "SHGB")
+                    .replace(/\bSerti[fp]ikat\s+Hak\s+Pakai\b/gi, "HP")
+                    .replace(/\bS\.?\s*H\.?\s*G\.?\s*B\.?\b/gi, "SHGB")
+                    .replace(/\bS\.?\s*H\.?\s*M\.?\b/gi, "SHM");
+
+                  // Pattern A: <TYPE> [No/Nomor][./:]? <NUMBER>
+                  const m1 = text.match(
+                    /\b(SHM|SHGB|HGB|HPL|HP|STRATA|HAK\s*PAKAI|HAK\s*MILIK)\b\s*(?:No\.?|Nomor)\s*[:.]?\s*([0-9]+(?:\/[A-Za-z0-9.\-]+)?)/i
                   );
                   if (m1) {
                     if (!primaryType) primaryType = m1[1].replace(/\s+/g, "").toUpperCase();
                     addNum(m1[2]);
                     return true;
                   }
-                  const m2 = raw.match(
-                    /\b(SHM|SHGB|HGB|HPL|HP)\b\s+([0-9]+(?:\/[A-Za-z0-9.\-]+)?)\b/i
+                  // Pattern B: <TYPE> <NUMBER> (space, tanpa No/Nomor)
+                  const m2 = text.match(
+                    /\b(SHM|SHGB|HGB|HPL|HP|STRATA)\b\s+([0-9]+(?:\/[A-Za-z0-9.\-]+)?)\b/i
                   );
                   if (m2) {
                     if (!primaryType) primaryType = m2[1].replace(/\s+/g, "").toUpperCase();
                     addNum(m2[2]);
                     return true;
                   }
+                  // Pattern C: type-only (kalau tipe muncul tanpa nomor di string ini)
+                  if (!primaryType) {
+                    const tm = text.match(
+                      /\b(SHM|SHGB|HGB|HPL|HP|STRATA|HAK\s*PAKAI|HAK\s*MILIK)\b/i
+                    );
+                    if (tm) {
+                      primaryType = tm[1].replace(/\s+/g, "").toUpperCase();
+                      return true;
+                    }
+                  }
                   return false;
                 };
 
-                // ── Strategi 1 (PRIMARY): container "Bukti Kepemilikan" ──
+                // ── Strategi 0 (PRIMARY): Label "Bukti Kepemilikan" → siblings ──
+                // Struktur eksplisit yang dipakai lelang.go.id:
+                //   div.grid.grid-cols-1.gap-5.md:grid-cols-3.md:grid-cols-4
+                //     └ div.flex.w-full.flex-col           ← kolom Bukti Kepemilikan
+                //         ├ div.mb-3.text-sm.font-bold    "Bukti Kepemilikan"
+                //         ├ div.text-xs                   "SHM No. 02007 No:"  ← tipe + nomor
+                //         └ div.text-xs                   "26 Jan 1998"        ← tanggal
+                // Scope sempit (cuma siblings label) → aman parse lenient,
+                // dan iterasi semua text-xs (tanpa break) → support multi-bidang.
+                const buktiLabels = Array.from(
+                  document.querySelectorAll<HTMLElement>("div")
+                ).filter(
+                  (el) =>
+                    el.children.length === 0 &&
+                    /^Bukti\s*Kepemilikan$/i.test((el.textContent || "").trim())
+                );
+
+                for (const lbl of buktiLabels) {
+                  const parent = lbl.parentElement; // div.flex.w-full.flex-col
+                  if (!parent) continue;
+
+                  // (a) Query semua text-xs di kolom ini (handle nested bidang)
+                  const textXs = Array.from(
+                    parent.querySelectorAll<HTMLElement>("div.text-xs, div[class*='text-xs']")
+                  );
+                  const textXsRaws = textXs
+                    .map((el) => (el.textContent ?? "").replace(/\s+/g, " ").trim())
+                    .filter(Boolean);
+                  for (const raw of textXsRaws) parseCertText(raw);
+
+                  // (b) Combined parse — handle type & number split across siblings
+                  //     contoh: div 1 = "SHM", div 2 = "No. 02007"
+                  //     Trigger kapanpun salah satu masih kosong (bukan hanya kedua-duanya).
+                  if ((!primaryType || allNumbers.length === 0) && textXsRaws.length > 1) {
+                    parseCertText(textXsRaws.join(" "));
+                  }
+
+                  // (c) Direct children fallback (untuk struktur yang tidak pakai text-xs)
+                  if (!primaryType || allNumbers.length === 0) {
+                    const kids = Array.from(parent.children);
+                    const idx = kids.indexOf(lbl);
+                    const sibTexts: string[] = [];
+                    for (let i = idx + 1; i < kids.length; i++) {
+                      const t = (kids[i] as HTMLElement).textContent
+                        ?.replace(/\s+/g, " ")
+                        .trim() ?? "";
+                      if (t) sibTexts.push(t);
+                    }
+                    for (const t of sibTexts) parseCertText(t);
+                    if ((!primaryType || allNumbers.length === 0) && sibTexts.length > 0) {
+                      parseCertText(sibTexts.join(" "));
+                    }
+                  }
+
+                  // (d) Last resort: parent textContent (include label, full)
+                  if (!primaryType || allNumbers.length === 0) {
+                    const full = (parent.textContent ?? "").replace(/\s+/g, " ").trim();
+                    if (full) parseCertText(full);
+                  }
+
+                  // (e) Type ada tapi nomor null → scan standalone number,
+                  //     skip teks yang tampak tanggal (e.g., "26 Jan 1998")
+                  if (primaryType && allNumbers.length === 0) {
+                    const DATE_RE =
+                      /\b\d{1,2}\s+(jan|feb|mar|apr|mei|jun|jul|agu|sep|okt|nov|des)[a-z]*\.?\s*\d{0,4}\b/i;
+                    for (const t of textXsRaws) {
+                      if (DATE_RE.test(t)) continue;
+                      const cleaned = t.replace(DATE_RE, " ");
+                      const nm = cleaned.match(/\b(\d{2,7}(?:\/[A-Za-z0-9.\-]+)?)\b/);
+                      if (nm) { addNum(nm[1]); break; }
+                    }
+                  }
+                }
+
+                if (primaryType || allNumbers.length > 0) {
+                  return {
+                    sertifikat: primaryType,
+                    nomorLegalitas: allNumbers.length ? allNumbers.join(",") : null,
+                  };
+                }
+
+                // ── Strategi 1 (FALLBACK): container bg-primary-100/5 ──
                 // Target: div.h-auto.overflow-auto.rounded-lg.bg-primary-100/5
                 // Setiap bidang tanah punya div.text-xs sendiri berisi "SHM No: 09/WGb"
                 const containers = Array.from(
@@ -562,6 +688,29 @@ export async function POST(req: NextRequest) {
               // ── Lampiran (dikosongkan sementara) ──
               const lampiran: string | null = null;
 
+              // ── Debug: dump teks section Bukti Kepemilikan (untuk audit NULL cases) ──
+              const buktiDebug = (() => {
+                const labels = Array.from(
+                  document.querySelectorAll<HTMLElement>("div")
+                ).filter(
+                  (el) =>
+                    el.children.length === 0 &&
+                    /^Bukti\s*Kepemilikan$/i.test((el.textContent || "").trim())
+                );
+                if (labels.length === 0) return "[label 'Bukti Kepemilikan' tidak ditemukan di DOM]";
+                return labels
+                  .slice(0, 3)
+                  .map((lbl) => {
+                    const parent = lbl.parentElement;
+                    if (!parent) return "[no parent]";
+                    return (parent.textContent ?? "")
+                      .replace(/\s+/g, " ")
+                      .trim()
+                      .substring(0, 250);
+                  })
+                  .join(" || ");
+              })();
+
               return {
                 judul,
                 nilai_limit: nilaiLimit,
@@ -575,6 +724,7 @@ export async function POST(req: NextRequest) {
                 luas_text: luasText,
                 gambar: imgs,
                 lampiran,
+                bukti_debug: buktiDebug,
               };
             });
 
@@ -588,6 +738,14 @@ export async function POST(req: NextRequest) {
               .filter((f) => !data[f as keyof typeof data]);
             if (nullFields.length > 0)
               push({ type: "log", msg: `    ℹ️ Null: ${nullFields.join(", ")}` });
+
+            // Dump teks Bukti Kepemilikan kalau sertifikat/nomor null — audit 3 kasus NULL
+            if (!data.sertifikat || !data.nomor_legalitas) {
+              push({
+                type: "log",
+                msg: `    🔍 Bukti section: "${(data.bukti_debug ?? "?").substring(0, 200)}"`,
+              });
+            }
 
             // Parsing wilayah
             const alamat = data.alamat ?? "";
