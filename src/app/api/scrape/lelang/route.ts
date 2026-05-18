@@ -3,6 +3,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import prisma from "@/lib/prisma";
 import { GoogleDriveService } from "@/lib/services/google-drive.service";
+import { scrapeJobManager, type LogEvent } from "@/lib/scrape-job";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 // Folder Drive khusus lampiran PDF lelang
 const LAMPIRAN_FOLDER_ID = "1veX0M-SBLhDo-9pjBHcQbZm9wC03zkP-";
@@ -143,34 +147,24 @@ function sseMsg(data: object): Uint8Array {
 
 // ─── Main route ───────────────────────────────────────────────────────────────
 
-export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user)
-    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+// ─── Scrape worker ───────────────────────────────────────────────────────────
+// Dijalankan di background (tidak terikat ke koneksi HTTP). Cancel cuma lewat
+// scrapeJobManager.cancel() → diset oleh endpoint /stop. Disconnect client
+// (navigate away) TIDAK pernah mencancel — itulah inti perbaikan.
+async function runScrapeJob(
+  agentId: string,
+  kategori: string,
+  startPage: number,
+) {
+  const push = (data: LogEvent) => scrapeJobManager.push(data);
+  const isCancelled = () =>
+    scrapeJobManager.current?.cancelled === true;
 
-  const agentId = (session.user as any).agentId as string | null;
-  if (!agentId)
-    return new Response(JSON.stringify({ error: "Hanya agent yang bisa scrape" }), { status: 403 });
+  let browser: any = null;
 
-  const body = await req.json();
-  const kategori: string = body.kategori ?? "Rumah";
-  const startPage: number = body.startPage ?? 1;
-
-  let controllerRef: ReadableStreamDefaultController | null = null;
-  const stream = new ReadableStream({
-    start(c) { controllerRef = c; },
-    cancel() { controllerRef = null; },
-  });
-
-  (async () => {
-    const push = (data: object) => { try { controllerRef?.enqueue(sseMsg(data)); } catch {} };
-    const close = () => { try { controllerRef?.close(); } catch {} };
-
-    let browser: any = null;
-
-    try {
-      const puppeteer = await import("puppeteer");
-      push({ type: "log", msg: "Membuka browser..." });
+  try {
+    const puppeteer = await import("puppeteer");
+    push({ type: "log", msg: "Membuka browser..." });
 
       browser = await puppeteer.default.launch({
         headless: true,
@@ -190,6 +184,7 @@ export async function POST(req: NextRequest) {
       push({ type: "log", msg: `${existingSet.size} listing sudah ada di DB.` });
 
       while (true) {
+        if (isCancelled()) { console.log("[scrape] cancelled by user, stop page loop"); break; }
         const listUrl = `${baseUrl}/lot-lelang/katalog-lot-lelang?kategori=${encodeURIComponent(kategori)}&page=${page}`;
         push({ type: "log", msg: `Halaman ${page}: ${listUrl}` });
 
@@ -235,6 +230,7 @@ export async function POST(req: NextRequest) {
         }
 
         for (const detailUrl of newLinks) {
+          if (isCancelled()) { console.log("[scrape] cancelled by user, stop detail loop"); break; }
           push({ type: "log", msg: `  Scraping: ${detailUrl}` });
 
           const detailTab = await browser.newPage();
@@ -1187,6 +1183,13 @@ export async function POST(req: NextRequest) {
               });
             }
 
+            // Guard final: jangan tulis ke DB kalau user sudah cancel
+            // (puppeteer evaluate sudah berjalan, tapi data masih boleh di-discard)
+            if (isCancelled()) {
+              console.log("[scrape] cancelled — skip DB write untuk", detailUrl);
+              continue;
+            }
+
             await prisma.listing.create({
               data: {
                 id_agent: agentId,
@@ -1241,18 +1244,71 @@ export async function POST(req: NextRequest) {
           }
         }
 
+        if (isCancelled()) break;
         page++;
         push({ type: "progress", page, totalSaved, totalSkipped });
       }
 
-      push({ type: "done", totalSaved, totalSkipped, page: page - 1 });
+      push({
+        type: isCancelled() ? "cancelled" : "done",
+        totalSaved,
+        totalSkipped,
+        page: page - 1,
+      });
     } catch (err: any) {
       push({ type: "error", msg: err.message });
     } finally {
       if (browser) await browser.close().catch(() => {});
-      close();
     }
-  })();
+}
+
+// ─── SSE stream builder ──────────────────────────────────────────────────────
+// Setiap koneksi client dapat stream baru: replay log buffer + subscribe live.
+// stream.cancel() (client disconnect) HANYA unsubscribe — tidak cancel job.
+function buildSseStream(): Response {
+  let unsubscribe: (() => void) | null = null;
+
+  const stream = new ReadableStream({
+    start(c) {
+      const job = scrapeJobManager.current;
+
+      // Replay buffered logs (kalau ada job)
+      if (job) {
+        for (const ev of job.logs) {
+          try { c.enqueue(sseMsg(ev)); } catch {}
+        }
+        // Job sudah finished → langsung close
+        if (job.status !== "running") {
+          try { c.close(); } catch {}
+          return;
+        }
+      } else {
+        // Tidak ada job sama sekali → close immediately
+        try { c.close(); } catch {}
+        return;
+      }
+
+      // Subscribe untuk live updates
+      unsubscribe = scrapeJobManager.subscribe((event) => {
+        try { c.enqueue(sseMsg(event)); } catch {}
+        if (
+          event.type === "done" ||
+          event.type === "cancelled" ||
+          event.type === "error"
+        ) {
+          try { c.close(); } catch {}
+          unsubscribe?.();
+          unsubscribe = null;
+        }
+      });
+    },
+    cancel() {
+      // Client disconnect (navigate away, close tab) — JANGAN cancel job,
+      // hanya lepas subscription. Job tetap jalan di background.
+      unsubscribe?.();
+      unsubscribe = null;
+    },
+  });
 
   return new Response(stream, {
     headers: {
@@ -1261,4 +1317,59 @@ export async function POST(req: NextRequest) {
       Connection: "keep-alive",
     },
   });
+}
+
+// ─── POST handler ────────────────────────────────────────────────────────────
+// Body: { kategori, startPage }
+//   - Kalau belum ada job running → start baru, return SSE stream.
+//   - Kalau sudah ada job running → ABAIKAN body, return SSE replay+live job lama.
+// Disconnect tidak pernah mencancel — pakai POST /api/scrape/lelang/stop.
+export async function POST(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user)
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+    });
+
+  const agentId = (session.user as any).agentId as string | null;
+  if (!agentId)
+    return new Response(
+      JSON.stringify({ error: "Hanya agent yang bisa scrape" }),
+      { status: 403 },
+    );
+
+  const existing = scrapeJobManager.current;
+  const isReconnect = existing && existing.status === "running";
+  console.log(
+    `[scrape:POST] ${isReconnect ? "RECONNECT" : "START"} — existing job:`,
+    existing
+      ? { id: existing.id, status: existing.status, currentPage: existing.currentPage }
+      : null,
+  );
+
+  if (!isReconnect) {
+    // Start job baru
+    const body = await req.json().catch(() => ({}));
+    const kategori: string = body.kategori ?? "Rumah";
+    const startPage: number = body.startPage ?? 1;
+
+    const job = scrapeJobManager.start({ kategori, startPage, agentId });
+    if (!job) {
+      return new Response(
+        JSON.stringify({ error: "Job sudah berjalan" }),
+        { status: 409 },
+      );
+    }
+    console.log("[scrape:POST] started new job", job.id);
+    // Kick off background work — DO NOT await (must return stream first)
+    runScrapeJob(agentId, kategori, startPage).catch((e) => {
+      console.error("[scrape] worker error:", e);
+      scrapeJobManager.push({
+        type: "error",
+        msg: e?.message ?? "Worker crash",
+      });
+    });
+  }
+
+  return buildSseStream();
 }

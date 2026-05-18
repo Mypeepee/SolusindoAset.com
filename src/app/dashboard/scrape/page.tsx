@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Icon } from "@iconify/react";
 
 const KATEGORI = [
@@ -15,8 +15,8 @@ const KATEGORI = [
 ];
 
 interface LogLine {
-  type: "log" | "saved" | "error" | "progress" | "done";
-  msg: string;
+  type: "log" | "saved" | "error" | "progress" | "done" | "cancelled";
+  msg?: string;
   judul?: string;
   kota?: string;
   harga?: number;
@@ -55,7 +55,90 @@ export default function ScrapePage() {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
 
-  const handleStart = async () => {
+  // Stream consumer — shared antara handleStart (start baru) dan auto-reconnect.
+  // body: kategori + startPage. Server akan ABAIKAN body kalau job sudah jalan
+  // (just attach as subscriber), atau pakai body untuk start baru.
+  const consumeStream = useCallback(
+    async (signal: AbortSignal, body: { kategori: string; startPage: number }) => {
+      try {
+        const res = await fetch("/api/scrape/lelang", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal,
+        });
+
+        if (!res.ok || !res.body) {
+          setStatus("error");
+          setLogs((p) => [...p, { type: "error", msg: "Gagal terhubung ke server." }]);
+          return;
+        }
+
+        console.log("[scrape-client] consumeStream: fetch OK, starting read loop");
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let eventCount = 0;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            console.log("[scrape-client] stream done (read returned done). events:", eventCount);
+            break;
+          }
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n\n");
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            if (!line.startsWith("data:")) continue;
+            try {
+              const event: LogLine = JSON.parse(line.slice(5).trim());
+              eventCount++;
+              if (eventCount <= 5 || eventCount % 20 === 0) {
+                console.log(`[scrape-client] event #${eventCount}:`, event.type, (event.msg ?? "").substring(0, 80));
+              }
+              setLogs((p) => [...p, event]);
+
+              if (event.type === "saved" && event.judul) {
+                setSaved((p) =>
+                  [
+                    { judul: event.judul!, kota: event.kota!, harga: event.harga!, gambar: event.gambar ?? null },
+                    ...p,
+                  ].slice(0, 50),
+                );
+                setTotalSaved(event.totalSaved ?? 0);
+              }
+              if (event.type === "progress") {
+                setCurrentPage(event.page ?? 0);
+                setTotalSkipped(event.totalSkipped ?? 0);
+                setTotalSaved(event.totalSaved ?? 0);
+              }
+              if (event.type === "done" || event.type === "cancelled") {
+                setTotalSaved(event.totalSaved ?? 0);
+                setTotalSkipped(event.totalSkipped ?? 0);
+                setStatus("done");
+              }
+              if (event.type === "error") {
+                setStatus("error");
+              }
+            } catch {}
+          }
+        }
+
+        // Stream closed oleh server (setelah terminal event) — pastikan status final.
+        setStatus((cur) => (cur === "running" ? "done" : cur));
+      } catch (e: any) {
+        if (e.name !== "AbortError") {
+          setStatus("error");
+          setLogs((p) => [...p, { type: "error", msg: e.message }]);
+        }
+      }
+    },
+    [],
+  );
+
+  const handleStart = () => {
     if (status === "running") return;
 
     setStatus("running");
@@ -67,77 +150,87 @@ export default function ScrapePage() {
 
     const abort = new AbortController();
     abortRef.current = abort;
+    consumeStream(abort.signal, { kategori, startPage });
+  };
 
+  const handleStop = async () => {
+    // Eksplisit panggil endpoint /stop. Stream akan close otomatis lewat event
+    // "cancelled" dari server. Tidak abort lokal — itu cuma putus connection,
+    // sedangkan kita mau benar-benar hentikan worker di server.
     try {
-      const res = await fetch("/api/scrape/lelang", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kategori, startPage }),
-        signal: abort.signal,
-      });
+      await fetch("/api/scrape/lelang/stop", { method: "POST" });
+    } catch {}
+  };
 
-      if (!res.ok || !res.body) {
-        setStatus("error");
-        setLogs((p) => [...p, { type: "error", msg: "Gagal terhubung ke server." }]);
-        return;
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data:")) continue;
-          try {
-            const event: LogLine = JSON.parse(line.slice(5).trim());
-            setLogs((p) => [...p, event]);
-
-            if (event.type === "saved" && event.judul) {
-              setSaved((p) => [{ judul: event.judul!, kota: event.kota!, harga: event.harga!, gambar: event.gambar ?? null }, ...p].slice(0, 50));
-              setTotalSaved(event.totalSaved ?? 0);
-            }
-            if (event.type === "progress") {
-              setCurrentPage(event.page ?? currentPage);
-              setTotalSkipped(event.totalSkipped ?? 0);
-            }
-            if (event.type === "done") {
-              setTotalSaved(event.totalSaved ?? 0);
-              setTotalSkipped(event.totalSkipped ?? 0);
-              setStatus("done");
-            }
-            if (event.type === "error") {
-              setStatus("error");
-            }
-          } catch {}
+  // Auto-reconnect: kalau ada job aktif di server saat mount (user balik ke
+  // page setelah navigate away), langsung sambung ke stream-nya.
+  useEffect(() => {
+    let aborted = false;
+    (async () => {
+      try {
+        console.log("[scrape-client] mount: checking /status");
+        const r = await fetch("/api/scrape/lelang/status", {
+          cache: "no-store",
+        });
+        console.log("[scrape-client] /status response status:", r.status);
+        if (aborted) {
+          console.log("[scrape-client] aborted before processing response");
+          return;
         }
-      }
+        if (!r.ok) {
+          console.warn("[scrape-client] /status not ok:", r.status, await r.text().catch(() => ""));
+          return;
+        }
+        const data = await r.json();
+        console.log("[scrape-client] /status data:", data);
+        if (data.running && data.job) {
+          console.log("[scrape-client] reconnecting to job", data.job.id);
+          setKategori(data.job.kategori);
+          setStartPage(data.job.startPage);
+          setStatus("running");
+          setLogs([
+            { type: "log", msg: `🔄 Reconnect ke job aktif (kategori: ${data.job.kategori}, halaman: ${data.job.currentPage})` },
+          ]);
+          setSaved([]);
+          setTotalSaved(data.job.totalSaved ?? 0);
+          setTotalSkipped(data.job.totalSkipped ?? 0);
+          setCurrentPage(data.job.currentPage ?? 0);
 
-      if (status !== "done") setStatus("done");
-    } catch (e: any) {
-      if (e.name !== "AbortError") {
-        setStatus("error");
-        setLogs((p) => [...p, { type: "error", msg: e.message }]);
+          const abort = new AbortController();
+          abortRef.current = abort;
+          consumeStream(abort.signal, {
+            kategori: data.job.kategori,
+            startPage: data.job.startPage,
+          });
+        } else {
+          console.log("[scrape-client] no running job on server");
+        }
+      } catch (e) {
+        console.error("[scrape-client] mount error:", e);
       }
-    }
-  };
+    })();
 
-  const handleStop = () => {
-    abortRef.current?.abort();
-    setStatus("done");
-    setLogs((p) => [...p, { type: "log", msg: "⛔ Dihentikan oleh user." }]);
-  };
+    return () => {
+      aborted = true;
+      // Cleanup koneksi (release reader). Server-side TIDAK cancel job karena
+      // stream.cancel() di server cuma unsubscribe — job tetap jalan.
+      abortRef.current?.abort();
+    };
+  }, [consumeStream]);
 
   const isRunning = status === "running";
 
   return (
     <div className="min-h-screen bg-[#040608] p-4 md:p-6 space-y-5">
+
+      {/* ── DEBUG bar (hapus setelah issue selesai) ── */}
+      <div className="font-mono text-[10px] text-slate-500 border border-yellow-500/30 bg-yellow-500/5 rounded-lg px-3 py-1.5">
+        DEBUG → status: <span className="text-yellow-300">{status}</span> ·
+        logs: <span className="text-yellow-300">{logs.length}</span> ·
+        saved: <span className="text-yellow-300">{totalSaved}</span> ·
+        page: <span className="text-yellow-300">{currentPage}</span> ·
+        kategori: <span className="text-yellow-300">{kategori}</span>
+      </div>
 
       {/* ── Header ── */}
       <div className="flex items-center gap-3">
