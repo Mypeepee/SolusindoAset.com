@@ -2,9 +2,10 @@
 import React from "react";
 import { Icon } from "@iconify/react";
 import dynamic from "next/dynamic";
+import RiwayatLelang from "./RiwayatLelang";
 
 const Maps = dynamic(
-  () => import("../../../../../components/Maps/maps"),
+  () => import("../../../../../components/Maps/GoogleMapView"),
   {
     ssr: false,
     loading: () => (
@@ -598,7 +599,13 @@ export default function DetailInfo({
         )}
       </div>
 
-      {/* 7. EDUKASI LELANG */}
+      {/* 7. RIWAYAT LELANG */}
+      <RiwayatLelang
+        idProperty={data?.id_property}
+        currentIdProperty={data?.id_property}
+      />
+
+      {/* 8. EDUKASI LELANG */}
       <div className="bg-gradient-to-br from-slate-900 via-slate-800/90 to-slate-900 border border-emerald-500/20 rounded-2xl p-6 md:p-8 shadow-2xl">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 mb-4 shadow-lg shadow-emerald-500/30">

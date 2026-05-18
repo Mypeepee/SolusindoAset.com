@@ -4,7 +4,7 @@ import { Icon } from "@iconify/react";
 import dynamic from "next/dynamic";
 
 const Maps = dynamic(
-  () => import("../../../../../components/Maps/maps"),
+  () => import("../../../../../components/Maps/GoogleMapView"),
   {
     ssr: false,
     loading: () => (
@@ -595,8 +595,119 @@ export default function DetailInfo({ data }: DetailInfoProps) {
             </div>
           </div>
 
-          {/* (Bagian KPR tetap sama seperti sebelumnya) */}
-          {/* ... seluruh blok KPR code kamu di sini tanpa perubahan ... */}
+          <div className="space-y-5">
+            {/* Featured Result */}
+            <div className="bg-gradient-to-br from-emerald-500/5 to-transparent border border-emerald-500/20 rounded-xl p-4 text-center">
+              <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide mb-1">Cicilan Per Bulan</p>
+              <p className="text-3xl font-black text-white leading-tight break-words">
+                {formatRupiah(kprData.monthly)}
+              </p>
+            </div>
+
+            {/* Input Controls */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* DP Slider */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] text-gray-400 uppercase font-bold">Uang Muka</label>
+                  <span className="text-sm font-bold text-emerald-400">{dpPercentage}%</span>
+                </div>
+                <input
+                  type="range" min="10" max="50" step="5" value={dpPercentage}
+                  onChange={(e) => setDpPercentage(Number(e.target.value))}
+                  className="w-full h-2 bg-slate-700 rounded-full appearance-none cursor-pointer accent-emerald-500"
+                />
+                <p className="text-xs font-semibold text-white text-right">{formatRupiah(kprData.dp)}</p>
+              </div>
+
+              {/* Tenor Pills */}
+              <div className="space-y-2">
+                <label className="text-[10px] text-gray-400 uppercase font-bold block">Jangka Waktu</label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[5, 10, 15, 20].map((year) => (
+                    <button
+                      key={year} onClick={() => setTenor(year)}
+                      className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all ${
+                        tenor === year
+                          ? "bg-emerald-500 text-black"
+                          : "bg-slate-800 text-gray-400 hover:text-white border border-slate-700"
+                      }`}
+                    >
+                      {year}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-gray-500 text-center">Tahun</p>
+              </div>
+
+              {/* Interest Rate */}
+              <div className="space-y-2">
+                <label className="text-[10px] text-gray-400 uppercase font-bold block">Suku Bunga</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.25" min="3" max="15"
+                    value={interestRate || ""}
+                    onChange={handleInterestRateChange}
+                    onBlur={(e) => {
+                      if (!e.target.value || parseFloat(e.target.value) < 3) setInterestRate(6.75);
+                    }}
+                    placeholder="6.75"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-semibold focus:outline-none focus:border-emerald-500 transition-colors pr-8 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-bold">%</span>
+                </div>
+                <p className="text-[10px] text-gray-500">Rata-rata: 6-8%</p>
+              </div>
+            </div>
+
+            {/* Results */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="bg-slate-900/50 border border-slate-700/30 rounded-lg p-3">
+                <p className="text-[10px] text-gray-500 uppercase font-bold mb-1.5 truncate">Uang Muka</p>
+                <p className="text-base font-black text-white leading-tight break-words">{formatRupiah(kprData.dp)}</p>
+              </div>
+              <div className="bg-slate-900/50 border border-slate-700/30 rounded-lg p-3">
+                <p className="text-[10px] text-gray-500 uppercase font-bold mb-1.5 truncate">Pokok Pinjaman</p>
+                <p className="text-base font-black text-white leading-tight break-words">{formatRupiah(hargaFinal - kprData.dp)}</p>
+              </div>
+              <div className="bg-slate-900/50 border border-orange-500/30 rounded-lg p-3">
+                <p className="text-[10px] text-gray-500 uppercase font-bold mb-1.5 truncate">Total Bunga</p>
+                <p className="text-base font-black text-orange-400 leading-tight break-words">{formatRupiah(kprData.interest)}</p>
+              </div>
+              <div className="bg-slate-900/50 border border-emerald-500/30 rounded-lg p-3">
+                <p className="text-[10px] text-gray-500 uppercase font-bold mb-1.5 truncate">Total Bayar</p>
+                <p className="text-base font-black text-emerald-400 leading-tight break-words">{formatRupiah(kprData.total)}</p>
+              </div>
+            </div>
+
+            {/* Breakdown */}
+            <div className="bg-slate-900/30 border border-slate-700/20 rounded-lg p-4">
+              <p className="text-[10px] font-bold text-gray-500 uppercase mb-3">Rincian Pembayaran</p>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-400">Tenor</span>
+                  <span className="font-bold text-white">{tenor} Tahun ({tenor * 12} Bulan)</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-400">Suku Bunga</span>
+                  <span className="font-bold text-white">{interestRate}% per tahun</span>
+                </div>
+                <div className="flex justify-between items-center text-sm pt-2 border-t border-slate-700/30">
+                  <span className="text-gray-400">Cicilan x {tenor * 12} bulan</span>
+                  <span className="font-bold text-emerald-400">{formatRupiah(kprData.monthly * tenor * 12)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Disclaimer */}
+            <div className="flex items-start gap-2 p-3 bg-slate-900/20 rounded-lg">
+              <Icon icon="solar:info-circle-bold" className="text-gray-500 text-sm flex-shrink-0 mt-0.5" />
+              <p className="text-[10px] text-gray-500 leading-relaxed">
+                Kalkulasi ini adalah estimasi. Nilai aktual dapat berbeda tergantung kebijakan bank dan kelengkapan dokumen.
+              </p>
+            </div>
+          </div>
         </div>
       )}
     </div>

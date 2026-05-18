@@ -72,7 +72,7 @@ export function Step2Location({ form }: Step2Props) {
   } = form;
 
   const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_GEOCODING_API_KEY || '',
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
     libraries,
   });
 

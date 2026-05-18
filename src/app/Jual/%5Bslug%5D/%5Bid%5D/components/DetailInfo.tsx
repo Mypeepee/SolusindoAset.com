@@ -4,7 +4,7 @@ import { Icon } from "@iconify/react";
 import dynamic from "next/dynamic";
 
 const Maps = dynamic(
-  () => import("../../../../../components/Maps/maps"),
+  () => import("../../../../../components/Maps/GoogleMapView"),
   {
     ssr: false,
     loading: () => (

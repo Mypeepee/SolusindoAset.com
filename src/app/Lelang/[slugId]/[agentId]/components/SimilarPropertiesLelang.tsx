@@ -70,7 +70,7 @@ const getCategoryIcon = (kategori: string) => {
 
 const getPropertyUrl = (property: Property) => {
   const baseUrl = property.jenis_transaksi === "LELANG" ? "/Lelang" : "/Jual";
-  return `${baseUrl}/${property.slug}/${property.id_property}`;
+  return `${baseUrl}/${property.slug}-${property.id_property}`;
 };
 
 // --- ALGORITMA LOKASI 3 LEVEL + HOT DEAL ---
@@ -275,7 +275,7 @@ const PropertyCard = ({
               </button>
               <button
                 onClick={nextImage}
-                className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/55 hover:bg-emerald-500 text-white hover:text-black rounded-full flex itemsCenter justify-center opacity-0 group-hover/img:opacity-100 transition-all backdrop-blur-sm z-20"
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/55 hover:bg-emerald-500 text-white hover:text-black rounded-full flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-all backdrop-blur-sm z-20"
               >
                 <Icon icon="solar:alt-arrow-right-linear" />
               </button>

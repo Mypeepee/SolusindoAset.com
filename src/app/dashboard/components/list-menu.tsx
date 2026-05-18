@@ -41,12 +41,17 @@ export interface MenuItem {
   ];
   
   export const appsMenu: MenuItem[] = [
-    { 
-      label: "Jadwal & Acara", 
+    {
+      label: "Jadwal & Acara",
       icon: "solar:calendar-linear",
       href: "/dashboard/jadwal-acara"
     },
-    { 
+    {
+      label: "Scrape",
+      icon: "solar:spider-linear",
+      href: "/dashboard/scrape"
+    },
+    {
       label: "E-commerce", 
       icon: "solar:bag-4-linear",
       href: "/dashboard/e-commerce"

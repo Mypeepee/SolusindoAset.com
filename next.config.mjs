@@ -3,7 +3,7 @@ const nextConfig = {
   reactStrictMode: false,
 
   // Exclude heavy Node-only packages from webpack bundling (runs only on server)
-  serverExternalPackages: ["pdf-parse", "pdfjs-dist", "pdf-lib", "docxtemplater", "pizzip"],
+  serverExternalPackages: ["pdf-parse", "pdfjs-dist", "pdf-lib", "docxtemplater", "pizzip", "puppeteer"],
 
   images: {
     remotePatterns: [
