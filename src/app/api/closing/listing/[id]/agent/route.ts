@@ -33,6 +33,7 @@ export async function GET(
 
     const [allAgentsRaw, selectedAgent] = await Promise.all([
       prisma.agent.findMany({
+        where: { id_agent: { not: "COBROKE" } },
         include: {
           pengguna: true,
         },

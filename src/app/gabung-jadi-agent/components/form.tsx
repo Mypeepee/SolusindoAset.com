@@ -81,7 +81,10 @@ function normalizePhoneDigits(raw: string) {
   let digits = (raw || "").replace(/\D/g, "");
   if (digits.startsWith("62")) digits = digits.slice(2);
   digits = digits.replace(/^0+/, "");
-  return digits;
+  // Format: 3-4-4
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 12)}`;
 }
 
 function normalizeAgentCode(raw: string) {
@@ -557,8 +560,9 @@ export default function AgentApplyForm({
       if (!namaKantor.trim()) return "Nama kantor/tim wajib diisi.";
       if (!kotaArea.trim()) return "Kota/area wajib dipilih.";
 
-      if (noTelp.trim().length < 9) return "No. WhatsApp terlalu pendek.";
-      if (noTelp.trim().length > 13) return "No. WhatsApp terlalu panjang.";
+      const noTelpDigits = noTelp.replace(/-/g, "").trim();
+      if (noTelpDigits.length < 9) return "No. WhatsApp terlalu pendek.";
+      if (noTelpDigits.length > 13) return "No. WhatsApp terlalu panjang.";
     }
 
     if (s === 2) {
@@ -659,7 +663,7 @@ export default function AgentApplyForm({
       const fd = new FormData();
       fd.append("id_pengguna", user?.id || "");
       fd.append("nama_lengkap", nama.trim());
-      fd.append("nomor_whatsapp", `+62${noTelp.trim()}`);
+      fd.append("nomor_whatsapp", `+62${noTelp.replace(/-/g, "").trim()}`);
       fd.append("email", email.trim());
       fd.append("nama_kantor", namaKantor.trim());
       fd.append("kota_area", kotaArea.trim());
@@ -940,7 +944,7 @@ export default function AgentApplyForm({
                         onChange={(e) => setNoTelp(normalizePhoneDigits(e.target.value))}
                         disabled={lockFromAccount.phone || isFormLocked}
                         className={`${inputClass} rounded-l-none border-l-0`}
-                        placeholder="81234567890"
+                        placeholder="812-3456-7890"
                         inputMode="numeric"
                         autoComplete="tel-national"
                       />

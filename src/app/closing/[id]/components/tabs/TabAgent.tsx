@@ -8,12 +8,23 @@ import {
   ChevronDown,
   Crown,
   GitBranch,
+  Globe2,
+  Phone,
   Save,
   Search,
   ShieldCheck,
   User2,
   Users,
 } from "lucide-react";
+
+const COBROKE_AGENT_ID = "COBROKE";
+
+function formatPhoneId(raw: string): string {
+  const digits = raw.replace(/\D/g, "").replace(/^0+/, "");
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 12)}`;
+}
 
 type Agent = {
   id_agent: string;
@@ -42,6 +53,17 @@ type AgentRelationsResponse = {
 type PersistedSelection = {
   selectedAgentId: string;
   selectedLeaderId: string;
+  agentLuarNama?: string;
+  agentLuarKantor?: string;
+  agentLuarTelepon?: string;
+};
+
+const COBROKE_RELATION: AgentRelation = {
+  id_agent: COBROKE_AGENT_ID,
+  nama: "Agent Luar",
+  kantor: "Luar Kantor",
+  jabatan: null,
+  foto: null,
 };
 
 function cn(...classes: Array<string | false | null | undefined>) {
@@ -398,6 +420,7 @@ function AgentSelector({
   onSelect,
   disabled = false,
   accent = false,
+  showExternalOption = false,
 }: {
   value: AgentRelation | null;
   options: AgentRelation[];
@@ -406,6 +429,7 @@ function AgentSelector({
   onSelect: (item: AgentRelation) => void;
   disabled?: boolean;
   accent?: boolean;
+  showExternalOption?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
@@ -462,17 +486,33 @@ function AgentSelector({
         )}
       >
         {value ? (
-          <>
-            <Avatar person={value} size={44} accent={accent} />
-            <div className="min-w-0 flex-1">
-              <div className={cn("truncate text-sm font-semibold", accent ? "text-emerald-200" : "text-white")}>
-                {value.nama}
+          value.id_agent === COBROKE_AGENT_ID ? (
+            <>
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-violet-500/10 ring-1 ring-violet-500/25">
+                <Globe2 size={18} className="text-violet-400" />
               </div>
-              <div className="mt-0.5 truncate text-[11px] text-zinc-400">
-                {value.id_agent}{value.kantor ? ` · ${value.kantor}` : ""}
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-semibold text-violet-200">
+                  Agent Luar
+                </div>
+                <div className="mt-0.5 truncate text-[11px] text-zinc-400">
+                  Data agent diisi di bawah
+                </div>
               </div>
-            </div>
-          </>
+            </>
+          ) : (
+            <>
+              <Avatar person={value} size={44} accent={accent} />
+              <div className="min-w-0 flex-1">
+                <div className={cn("truncate text-sm font-semibold", accent ? "text-emerald-200" : "text-white")}>
+                  {value.nama}
+                </div>
+                <div className="mt-0.5 truncate text-[11px] text-zinc-400">
+                  {value.id_agent}{value.kantor ? ` · ${value.kantor}` : ""}
+                </div>
+              </div>
+            </>
+          )
         ) : (
           <>
             <div className={cn(
@@ -548,6 +588,35 @@ function AgentSelector({
                 Tidak ada hasil
               </div>
             )}
+
+            {showExternalOption && (
+              <>
+                <div className="mx-2 my-1.5 h-px bg-white/[0.06]" />
+                <button
+                  type="button"
+                  onClick={() => { onSelect(COBROKE_RELATION); setOpen(false); setKeyword(""); }}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition",
+                    value?.id_agent === COBROKE_AGENT_ID
+                      ? "bg-violet-500/10 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.20)]"
+                      : "hover:bg-white/[0.04]"
+                  )}
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-500/10 ring-1 ring-violet-500/20">
+                    <Globe2 size={14} className="text-violet-400" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className={cn("truncate text-sm font-medium", value?.id_agent === COBROKE_AGENT_ID ? "text-violet-200" : "text-zinc-200")}>
+                      Agent Luar
+                    </div>
+                    <div className="truncate text-[11px] text-zinc-500">
+                      Input manual nama, kantor & telepon
+                    </div>
+                  </div>
+                  {value?.id_agent === COBROKE_AGENT_ID && <Check size={14} className="shrink-0 text-violet-400" />}
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -581,6 +650,12 @@ export default function TabAgent({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const [agentLuarNama, setAgentLuarNama] = useState("");
+  const [agentLuarKantor, setAgentLuarKantor] = useState("");
+  const [agentLuarTelepon, setAgentLuarTelepon] = useState("");
+
+  const isCobroke = selectedAgentId === COBROKE_AGENT_ID;
+
   const initialAgentId = useMemo(() => agent?.id_agent ?? "", [agent]);
   const storageKey = useMemo(
     () => (initialAgentId ? `tab-agent-selection:${initialAgentId}` : ""),
@@ -601,6 +676,9 @@ export default function TabAgent({
       return {
         selectedAgentId: parsed.selectedAgentId ?? "",
         selectedLeaderId: parsed.selectedLeaderId ?? "",
+        agentLuarNama: parsed.agentLuarNama ?? "",
+        agentLuarKantor: parsed.agentLuarKantor ?? "",
+        agentLuarTelepon: parsed.agentLuarTelepon ?? "",
       };
     } catch (error) {
       console.error("Gagal membaca localStorage tab agent:", error);
@@ -608,13 +686,22 @@ export default function TabAgent({
     }
   }
 
-  function persistSelection(agentId: string, leaderId: string) {
+  function persistSelection(
+    agentId: string,
+    leaderId: string,
+    luarNama = agentLuarNama,
+    luarKantor = agentLuarKantor,
+    luarTelepon = agentLuarTelepon,
+  ) {
     if (typeof window === "undefined" || !storageKey) return;
 
     try {
       const payload: PersistedSelection = {
         selectedAgentId: agentId ?? "",
         selectedLeaderId: leaderId ?? "",
+        agentLuarNama: luarNama,
+        agentLuarKantor: luarKantor,
+        agentLuarTelepon: luarTelepon,
       };
       window.localStorage.setItem(storageKey, JSON.stringify(payload));
     } catch (error) {
@@ -623,6 +710,7 @@ export default function TabAgent({
   }
 
   const selectedAgentObject = useMemo(() => {
+    if (selectedAgentId === COBROKE_AGENT_ID) return COBROKE_RELATION;
     return (
       data.agents.find((item) => item.id_agent === selectedAgentId) ??
       data.selectedAgent ??
@@ -719,7 +807,25 @@ export default function TabAgent({
         const leaderIdToKeep = persisted?.selectedLeaderId || "";
 
         if (!cancelled) {
-          await fetchAgentRelations(agentIdToLoad, leaderIdToKeep);
+          if (agentIdToLoad === COBROKE_AGENT_ID) {
+            // Tetap fetch agents list pakai initialAgentId supaya dropdown tidak kosong,
+            // lalu override selection kembali ke COBROKE setelah fetch selesai.
+            await fetchAgentRelations(initialAgentId, "");
+            if (!cancelled) {
+              const luarNama = persisted?.agentLuarNama ?? "";
+              const luarKantor = persisted?.agentLuarKantor ?? "";
+              const luarTelepon = persisted?.agentLuarTelepon ?? "";
+              setSelectedAgentId(COBROKE_AGENT_ID);
+              setSelectedLeaderId(leaderIdToKeep);
+              setAgentLuarNama(luarNama);
+              setAgentLuarKantor(luarKantor);
+              setAgentLuarTelepon(luarTelepon);
+              // fetchAgentRelations di atas menimpa localStorage — tulis ulang data COBROKE
+              persistSelection(COBROKE_AGENT_ID, leaderIdToKeep, luarNama, luarKantor, luarTelepon);
+            }
+          } else {
+            await fetchAgentRelations(agentIdToLoad, leaderIdToKeep);
+          }
           hasHydratedRef.current = true;
         }
       } catch (error) {
@@ -754,6 +860,26 @@ export default function TabAgent({
         teamLeader: null,
         downlines: [],
       }));
+      return;
+    }
+
+    if (nextAgentId === COBROKE_AGENT_ID) {
+      setData((prev) => ({
+        ...prev,
+        selectedAgent: null,
+        upline: null,
+        teamLeader: null,
+        downlines: [],
+      }));
+      // Pastikan agents list tetap terisi agar user bisa switch kembali ke agent internal
+      if (data.agents.length === 0 && initialAgentId) {
+        fetchAgentRelations(initialAgentId, "").then(() => {
+          setSelectedAgentId(COBROKE_AGENT_ID);
+          setSelectedLeaderId("");
+          // fetchAgentRelations menimpa localStorage — tulis ulang data COBROKE
+          persistSelection(COBROKE_AGENT_ID, "", agentLuarNama, agentLuarKantor, agentLuarTelepon);
+        }).catch(console.error);
+      }
       return;
     }
 
@@ -794,8 +920,12 @@ export default function TabAgent({
 
   // sync nama ke hero card ClosingShell
   useEffect(() => {
-    onAgentChange?.(selectedAgentObject?.nama ?? "");
-  }, [selectedAgentObject?.nama]);
+    if (isCobroke) {
+      onAgentChange?.(agentLuarNama || "Agent Luar");
+    } else {
+      onAgentChange?.(selectedAgentObject?.nama ?? "");
+    }
+  }, [isCobroke, agentLuarNama, selectedAgentObject?.nama]);
 
   useEffect(() => {
     onLeaderChange?.(displayedLeader?.nama ?? "");
@@ -829,6 +959,7 @@ export default function TabAgent({
               options={data.agents}
               placeholder="Cari & pilih agent..."
               searchPlaceholder="Nama, ID, kantor..."
+              showExternalOption
               onSelect={(item) => handleChangeAgent(item.id_agent)}
             />
           </div>
@@ -849,22 +980,109 @@ export default function TabAgent({
             <AgentSelector
               value={displayedLeader}
               options={data.teamLeaderOptions}
-              placeholder={selectedAgentId ? "Pilih team leader..." : "Pilih agent dulu"}
+              placeholder={isCobroke ? "Pilih team leader (opsional)..." : selectedAgentId ? "Pilih team leader..." : "Pilih agent dulu"}
               searchPlaceholder="Cari team leader..."
               disabled={!selectedAgentId}
               accent
               onSelect={(item) => {
                 setSelectedLeaderId(item.id_agent);
                 persistSelection(selectedAgentId, item.id_agent);
-                saveLeader(selectedAgentId, item.id_agent);
+                // Untuk agent luar, cukup simpan di localStorage — jangan PATCH ke DB
+                if (!isCobroke) {
+                  saveLeader(selectedAgentId, item.id_agent);
+                }
               }}
             />
           </div>
         </div>
+
+        {/* ── Panel Agent Luar ── */}
+        {isCobroke && (
+          <div className="mt-4 overflow-hidden rounded-2xl border border-violet-500/20 bg-violet-500/[0.06]">
+            <div className="flex items-center gap-2.5 border-b border-violet-500/15 px-4 py-3">
+              <Globe2 size={14} className="shrink-0 text-violet-400" />
+              <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-violet-400/80">
+                Data Agent Luar
+              </span>
+            </div>
+            <div className="grid gap-3 p-4 sm:grid-cols-3">
+              {/* Nama */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+                  Nama Agent
+                </label>
+                <div className="flex h-10 items-center overflow-hidden rounded-xl bg-white/[0.05] shadow-[inset_0_0_0_1px_rgba(139,92,246,0.18)]">
+                  <div className="flex h-full w-9 shrink-0 items-center justify-center border-r border-white/[0.07]">
+                    <User2 size={13} className="text-zinc-500" />
+                  </div>
+                  <input
+                    type="text"
+                    value={agentLuarNama}
+                    onChange={(e) => {
+                      setAgentLuarNama(e.target.value);
+                      persistSelection(selectedAgentId, selectedLeaderId, e.target.value, agentLuarKantor, agentLuarTelepon);
+                    }}
+                    placeholder="Nama lengkap"
+                    className="h-full w-full bg-transparent px-3 text-sm text-white outline-none placeholder:text-zinc-600"
+                  />
+                </div>
+              </div>
+
+              {/* Kantor */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+                  Kantor / Perusahaan
+                </label>
+                <div className="flex h-10 items-center overflow-hidden rounded-xl bg-white/[0.05] shadow-[inset_0_0_0_1px_rgba(139,92,246,0.18)]">
+                  <div className="flex h-full w-9 shrink-0 items-center justify-center border-r border-white/[0.07]">
+                    <Building2 size={13} className="text-zinc-500" />
+                  </div>
+                  <input
+                    type="text"
+                    value={agentLuarKantor}
+                    onChange={(e) => {
+                      setAgentLuarKantor(e.target.value);
+                      persistSelection(selectedAgentId, selectedLeaderId, agentLuarNama, e.target.value, agentLuarTelepon);
+                    }}
+                    placeholder="Nama kantor / developer"
+                    className="h-full w-full bg-transparent px-3 text-sm text-white outline-none placeholder:text-zinc-600"
+                  />
+                </div>
+              </div>
+
+              {/* Telepon */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+                  Nomor Telepon
+                </label>
+                <div className="flex h-10 items-center overflow-hidden rounded-xl bg-white/[0.05] shadow-[inset_0_0_0_1px_rgba(139,92,246,0.18)]">
+                  <div className="flex h-full shrink-0 items-center justify-center border-r border-white/[0.07] px-3 text-sm font-semibold text-zinc-400">
+                    +62
+                  </div>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    value={agentLuarTelepon}
+                    onChange={(e) => {
+                      const val = formatPhoneId(e.target.value);
+                      setAgentLuarTelepon(val);
+                      persistSelection(selectedAgentId, selectedLeaderId, agentLuarNama, agentLuarKantor, val);
+                    }}
+                    placeholder="812-3456-7890"
+                    className="h-full w-full bg-transparent px-3 text-sm text-white outline-none placeholder:text-zinc-600"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="border-t border-violet-500/15 px-4 py-2.5 text-[11px] text-zinc-500">
+              Data ini akan disimpan bersama transaksi. Team leader bisa dipilih untuk keperluan pembagian fee.
+            </div>
+          </div>
+        )}
       </GlassCard>
 
       {/* ── Upline | Downline ── */}
-      {loading ? (
+      {!isCobroke && (loading ? (
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="h-[180px] animate-pulse rounded-[30px] bg-white/[0.035]" />
           <div className="h-[180px] animate-pulse rounded-[30px] bg-white/[0.035]" />
@@ -899,14 +1117,14 @@ export default function TabAgent({
             </div>
           </GlassCard>
         </div>
-      )}
+      ))}
 
       {/* ── Lanjut button — paling bawah ── */}
       {onNext && (
         <div className="flex justify-end">
           <button
             type="button"
-            disabled={!selectedAgentId || saving}
+            disabled={!selectedAgentId || saving || (isCobroke && !agentLuarNama.trim())}
             onClick={() => onNext()}
             className="inline-flex h-11 items-center gap-2.5 rounded-xl bg-emerald-500 px-6 text-sm font-semibold text-white shadow-[0_0_24px_rgba(16,185,129,0.35)] transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
           >

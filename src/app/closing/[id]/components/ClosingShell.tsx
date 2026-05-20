@@ -110,8 +110,9 @@ export default function ClosingShell({
   const [riwayatData, setRiwayatData] = useState<any>(null);
   const [riwayatLoading, setRiwayatLoading] = useState(false);
 
-  async function openRiwayat() {
-    setShowRiwayat(true);
+  const riwayatCount: number = riwayatData?.rows?.length ?? 0;
+
+  async function fetchRiwayatData() {
     if (riwayatData) return;
     try {
       setRiwayatLoading(true);
@@ -122,10 +123,15 @@ export default function ClosingShell({
       const json = await res.json();
       setRiwayatData(json);
     } catch {
-      setRiwayatData({ rows: [] });
+      setRiwayatData({ rows: [], matchCriteria: null });
     } finally {
       setRiwayatLoading(false);
     }
+  }
+
+  async function openRiwayat() {
+    setShowRiwayat(true);
+    await fetchRiwayatData();
   }
 
   const priceMain = listing.harga_promo ?? listing.harga;
@@ -136,6 +142,11 @@ export default function ClosingShell({
     pickFirstImageUrl((listing as any).gambar);
 
   const isLelang = listing.jenis_transaksi === "LELANG";
+
+  useEffect(() => {
+    if (isLelang) fetchRiwayatData();
+  }, [isLelang]);
+
   const skemaOptions: Skema[] = useMemo(
     () => (isLelang ? ["PERSENTASE", "SELISIH"] : ["PERSENTASE"]),
     [isLelang]
@@ -281,10 +292,15 @@ export default function ClosingShell({
                         <button
                           type="button"
                           onClick={openRiwayat}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/10 px-3 py-1 text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/15 active:scale-[0.97]"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-[11px] font-semibold text-red-300 transition hover:bg-red-500/15 active:scale-[0.97]"
                         >
                           <Icon icon="solar:history-bold-duotone" className="text-sm" />
                           Riwayat Lelang
+                          {riwayatCount > 0 && (
+                            <span className="ml-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-[0_0_8px_rgba(239,68,68,0.5)]">
+                              {riwayatCount}
+                            </span>
+                          )}
                         </button>
                       )}
                     </div>
@@ -397,20 +413,7 @@ export default function ClosingShell({
                             }}
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <div className="overflow-hidden rounded-3xl border border-white/10 bg-zinc-950/92 shadow-[0_28px_90px_rgba(0,0,0,0.75)] ">
-                              <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
-                                <div className="text-[12px] text-zinc-300">
-                                  Pilih skema yang dipakai untuk closing
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => setOpen(false)}
-                                  className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[12px] font-semibold text-zinc-100 transition hover:bg-white/10"
-                                >
-                                  Tutup
-                                </button>
-                              </div>
-
+                            <div className="overflow-hidden rounded-3xl border border-white/10 bg-zinc-950 shadow-[0_28px_90px_rgba(0,0,0,0.75)]">
                               <div className="p-2">
                                 {skemaOptions.map((k) => {
                                   const active = k === skema;
@@ -551,6 +554,7 @@ export default function ClosingShell({
             rows={riwayatData?.rows ?? []}
             currentId={String((listing as any).id_property)}
             loading={riwayatLoading}
+            matchCriteria={riwayatData?.matchCriteria ?? null}
             onClose={() => setShowRiwayat(false)}
           />,
           document.body
@@ -565,189 +569,315 @@ export default function ClosingShell({
 type RiwayatRow = {
   id_property: string;
   tanggal_lelang: string | null;
+  tanggal_dibuat: string | null;
   nilai_limit_lelang: string | null;
   uang_jaminan: string | null;
   agent_nama: string;
   link: string | null;
   imageUrl?: string;
+  gambar_list?: string[];
+  kelurahan?: string | null;
+  kecamatan?: string | null;
+  kota?: string | null;
+  legalitas?: string | null;
+  nomor_legalitas?: string | null;
+  alamat_lengkap?: string | null;
 };
+
+type MatchCriteria = {
+  kota?: string | null;
+  legalitas: string | null;
+  nomor_legalitas: string | null;
+} | null;
+
+const PLACEHOLDER_SVG =
+  "data:image/svg+xml;charset=utf-8," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="180"><rect width="100%" height="100%" fill="#0d1014"/><text x="50%" y="52%" dominant-baseline="middle" text-anchor="middle" fill="#374151" font-family="Arial" font-size="13">No Image</text></svg>`
+  );
 
 function RiwayatLelangModal({
   rows,
   currentId,
   loading,
+  matchCriteria,
   onClose,
 }: {
   rows: RiwayatRow[];
   currentId: string;
   loading: boolean;
+  matchCriteria: MatchCriteria;
   onClose: () => void;
 }) {
   const fmt = new Intl.NumberFormat("id-ID");
   const fmtRp = (v: string | null) => {
     if (!v) return "-";
     const n = Number(v);
-    return Number.isFinite(n) ? "Rp " + fmt.format(n) : "-";
+    return Number.isFinite(n) ? "Rp " + fmt.format(n) : "-";
   };
   const fmtDate = (d: string | null) => {
-    if (!d) return "-";
+    if (!d) return "Tanggal belum ditentukan";
     return new Intl.DateTimeFormat("id-ID", {
-      day: "numeric", month: "short", year: "numeric",
+      day: "numeric", month: "long", year: "numeric",
     }).format(new Date(d));
   };
 
-  return (
-    <div className="fixed inset-0 z-[500] flex items-center justify-center p-4">
-      {/* overlay */}
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+  const legalitasLabel: Record<string, string> = {
+    SHM: "SHM", HGB: "HGB", HGU: "HGU", HP: "HP",
+    STRATA_TITLE: "Strata Title", PPJB: "PPJB", AJB: "AJB", LAINNYA: "Lainnya",
+  };
 
-      {/* card */}
+  return (
+    <div className="fixed inset-0 z-[500] flex items-end justify-center sm:items-center p-0 sm:p-4">
+      {/* overlay */}
       <div
-        className="relative z-10 flex w-full max-w-[480px] flex-col overflow-hidden rounded-[24px]"
+        className="absolute inset-0 bg-black/75 backdrop-blur-md"
+        onClick={onClose}
+      />
+
+      {/* sheet / card */}
+      <div
+        className="relative z-10 flex w-full flex-col overflow-hidden rounded-t-[28px] sm:rounded-[28px] sm:max-w-[560px]"
         style={{
-          maxHeight: "calc(100dvh - 2rem)",
-          background: "#0f1117",
-          boxShadow: "0 0 0 1px rgba(255,255,255,0.07), 0 40px_100px rgba(0,0,0,0.80), inset 0 1px 0 rgba(255,255,255,0.05)",
+          maxHeight: "92dvh",
+          background: "linear-gradient(160deg, #0e1318 0%, #0a0d10 100%)",
+          boxShadow:
+            "0 0 0 1px rgba(255,255,255,0.06), 0 -4px 60px rgba(0,0,0,0.6), 0 60px 120px rgba(0,0,0,0.85)",
         }}
       >
+        {/* drag handle — mobile */}
+        <div className="flex shrink-0 justify-center pt-3 pb-1 sm:hidden">
+          <div className="h-1 w-10 rounded-full bg-white/[0.12]" />
+        </div>
+
         {/* amber accent line */}
-        <div className="h-[1px] w-full shrink-0 bg-gradient-to-r from-transparent via-amber-400/60 to-transparent" />
+        <div className="h-[1.5px] w-full shrink-0 bg-gradient-to-r from-transparent via-amber-400/70 to-transparent" />
 
         {/* header */}
-        <div className="flex shrink-0 items-center gap-3 px-5 py-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-amber-500/10 ring-1 ring-amber-500/20">
-            <Icon icon="solar:history-bold-duotone" className="text-xl text-amber-400" />
+        <div className="flex shrink-0 items-center gap-3 px-5 pt-4 pb-3">
+          <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-[16px] bg-amber-500/10 ring-1 ring-amber-500/25 overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-amber-400/10 to-transparent" />
+            <Icon icon="solar:history-bold-duotone" className="relative text-2xl text-amber-400" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-[15px] font-bold text-white">Riwayat Lelang</div>
-            <div className="text-[11px] text-zinc-500">{rows.length} kali penawaran tercatat</div>
+            <div className="text-[16px] font-bold tracking-tight text-white">Riwayat Lelang</div>
+            <div className="text-[11px] text-zinc-500">
+              {loading ? "Memuat..." : `${rows.length} penawaran tercatat pada aset yang sama`}
+            </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.06] text-zinc-500 transition hover:bg-white/10 hover:text-white"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/[0.05] text-zinc-500 transition hover:bg-white/10 hover:text-white active:scale-95"
           >
-            <Icon icon="solar:close-circle-bold" className="text-base" />
+            <Icon icon="solar:close-circle-bold-duotone" className="text-lg" />
           </button>
         </div>
 
+        {/* criteria pill */}
+        {matchCriteria && !loading && (
+          <div className="mx-5 mb-3 flex flex-wrap gap-1.5">
+            {matchCriteria.kota && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold text-zinc-400">
+                <Icon icon="solar:city-linear" className="text-[11px] text-zinc-500" />
+                {matchCriteria.kota}
+              </span>
+            )}
+            {matchCriteria.legalitas && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold text-zinc-400">
+                <Icon icon="solar:document-linear" className="text-[11px] text-zinc-500" />
+                {legalitasLabel[matchCriteria.legalitas] ?? matchCriteria.legalitas}
+              </span>
+            )}
+            {matchCriteria.nomor_legalitas && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold text-zinc-400">
+                <Icon icon="solar:hashtag-circle-linear" className="text-[11px] text-zinc-500" />
+                No.&nbsp;{matchCriteria.nomor_legalitas}
+              </span>
+            )}
+          </div>
+        )}
+
         {/* divider */}
-        <div className="mx-5 h-px shrink-0 bg-white/[0.06]" />
+        <div className="mx-5 h-px shrink-0 bg-white/[0.05]" />
 
         {/* scrollable content */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4" style={{ scrollbarWidth: "none" }}>
+        <div
+          className="min-h-0 flex-1 overflow-y-auto px-5 py-4"
+          style={{ scrollbarWidth: "none" }}
+        >
           {loading ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-16">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-amber-500/30 border-t-amber-400" />
-              <span className="text-[12px] text-zinc-600">Memuat riwayat...</span>
+            <div className="flex flex-col items-center justify-center gap-4 py-20">
+              <div className="relative h-12 w-12">
+                <div className="absolute inset-0 animate-spin rounded-full border-2 border-amber-500/20 border-t-amber-400" />
+                <div className="absolute inset-2 rounded-full bg-amber-400/10" />
+              </div>
+              <span className="text-[12px] text-zinc-600">Menelusuri riwayat aset...</span>
             </div>
           ) : rows.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-              <Icon icon="solar:history-bold-duotone" className="text-4xl text-zinc-800" />
-              <div className="text-sm font-medium text-zinc-500">Belum ada riwayat lelang</div>
-              <div className="text-[12px] text-zinc-700">Properti ini belum pernah ditawarkan sebelumnya.</div>
+            <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/[0.03] ring-1 ring-white/[0.06]">
+                <Icon icon="solar:history-bold-duotone" className="text-3xl text-zinc-700" />
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-zinc-400">Tidak ada riwayat lelang</div>
+                <div className="mt-1 text-[12px] text-zinc-600 leading-relaxed max-w-[240px]">
+                  Properti ini belum pernah ditawarkan pada lelang sebelumnya.
+                </div>
+              </div>
             </div>
           ) : (
             <div className="relative">
-              {/* timeline line */}
-              <div className="absolute left-[19px] top-0 bottom-0 w-px bg-white/[0.06]" />
+              {/* timeline spine */}
+              <div className="absolute left-[21px] top-6 bottom-6 w-px bg-gradient-to-b from-transparent via-white/[0.07] to-transparent" />
 
               <div className="space-y-3">
                 {rows.map((row, idx) => {
                   const isCurrent = row.id_property === currentId;
                   const attempt = idx + 1;
+                  const imgSrc = row.imageUrl && row.imageUrl !== "/placeholder.jpg"
+                    ? row.imageUrl
+                    : null;
+                  const dateLabel = fmtDate(row.tanggal_lelang ?? row.tanggal_dibuat ?? null);
 
                   return (
-                    <div key={row.id_property} className="relative flex gap-4">
-                      {/* dot */}
-                      <div className={[
-                        "relative z-10 mt-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[12px] font-black",
-                        isCurrent
-                          ? "bg-amber-500 text-black shadow-[0_0_16px_rgba(245,158,11,0.50)]"
-                          : "bg-[#1a1e28] text-zinc-500 ring-1 ring-white/[0.08]",
-                      ].join(" ")}>
+                    <div key={row.id_property} className="relative flex gap-3.5">
+                      {/* timeline dot */}
+                      <div
+                        className={[
+                          "relative z-10 mt-[18px] flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full text-[13px] font-black tracking-tight",
+                          isCurrent
+                            ? "bg-gradient-to-br from-amber-400 to-amber-500 text-black shadow-[0_0_20px_rgba(245,158,11,0.45),0_0_0_1px_rgba(245,158,11,0.35)]"
+                            : "bg-[#14191f] text-zinc-500 ring-1 ring-white/[0.07]",
+                        ].join(" ")}
+                      >
                         {attempt}
                       </div>
 
-                      {/* content card */}
+                      {/* card */}
                       <div
                         className={[
-                          "min-w-0 flex-1 overflow-hidden rounded-2xl p-4 transition",
+                          "min-w-0 flex-1 overflow-hidden rounded-[20px] transition-all",
                           isCurrent
-                            ? "bg-amber-500/[0.08] ring-1 ring-amber-500/20"
-                            : "bg-white/[0.04] ring-1 ring-white/[0.05]",
+                            ? "bg-gradient-to-br from-amber-500/[0.10] via-amber-500/[0.06] to-amber-400/[0.04] ring-1 ring-amber-500/[0.22]"
+                            : "bg-white/[0.03] ring-1 ring-white/[0.06] hover:bg-white/[0.05]",
                         ].join(" ")}
                       >
-                        {/* top row */}
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className={[
-                                  "text-[11px] font-bold uppercase tracking-[0.14em]",
-                                  isCurrent ? "text-amber-400" : "text-zinc-500",
-                                ].join(" ")}>
-                                  Penawaran ke-{attempt}
-                                </span>
-                                <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-mono font-semibold text-zinc-500">
-                                  #{row.id_property}
-                                </span>
-                                {isCurrent && (
-                                  <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
-                                    Saat ini
-                                  </span>
-                                )}
-                              </div>
+                        {/* image strip */}
+                        <div className="relative h-[120px] w-full overflow-hidden">
+                          {imgSrc ? (
+                            <img
+                              src={imgSrc}
+                              alt={row.alamat_lengkap ?? `Lelang #${row.id_property}`}
+                              className="h-full w-full object-cover"
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                              onError={(e) => {
+                                const img = e.currentTarget as HTMLImageElement;
+                                img.onerror = null;
+                                img.src = PLACEHOLDER_SVG;
+                              }}
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-zinc-900/60">
+                              <Icon icon="solar:gallery-minimalistic-linear" className="text-3xl text-zinc-700" />
                             </div>
-                            <div className={[
-                              "mt-1 text-[13px] font-semibold",
-                              isCurrent ? "text-white" : "text-zinc-300",
-                            ].join(" ")}>
-                              {fmtDate(row.tanggal_lelang)}
-                            </div>
+                          )}
+                          {/* gradient overlay */}
+                          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+
+                          {/* badges over image */}
+                          <div className="absolute left-3 top-3 flex flex-wrap items-center gap-1.5">
+                            <span
+                              className={[
+                                "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em]",
+                                isCurrent
+                                  ? "bg-amber-400 text-black"
+                                  : "bg-black/60 text-zinc-300 ring-1 ring-white/10",
+                              ].join(" ")}
+                            >
+                              Penawaran ke-{attempt}
+                            </span>
+                            {isCurrent && (
+                              <span className="rounded-full bg-amber-500/90 px-2.5 py-0.5 text-[10px] font-bold text-black">
+                                ● Saat ini
+                              </span>
+                            )}
                           </div>
 
+                          {/* link button over image */}
                           {row.link && (
                             <a
                               href={row.link}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-zinc-500 transition hover:bg-white/10 hover:text-zinc-200"
+                              className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-zinc-300 ring-1 ring-white/10 backdrop-blur-sm transition hover:bg-black/70 hover:text-white"
                             >
-                              <Icon icon="solar:link-minimalistic-2-linear" className="text-sm" />
+                              <Icon icon="solar:link-minimalistic-2-bold" className="text-sm" />
                             </a>
                           )}
-                        </div>
 
-                        {/* stats */}
-                        <div className="mt-3 grid grid-cols-2 gap-2">
-                          <div className="rounded-xl bg-black/20 px-3 py-2.5">
-                            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
-                              Nilai Limit
-                            </div>
+                          {/* date over image bottom */}
+                          <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-2">
                             <div className={[
-                              "mt-1 text-[13px] font-bold tabular-nums",
-                              isCurrent ? "text-amber-300" : "text-zinc-200",
+                              "text-[13px] font-semibold drop-shadow-md",
+                              isCurrent ? "text-amber-200" : "text-white",
                             ].join(" ")}>
-                              {fmtRp(row.nilai_limit_lelang)}
+                              {dateLabel}
                             </div>
-                          </div>
-                          <div className="rounded-xl bg-black/20 px-3 py-2.5">
-                            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
-                              Uang Jaminan
-                            </div>
-                            <div className="mt-1 text-[13px] font-bold tabular-nums text-zinc-200">
-                              {fmtRp(row.uang_jaminan)}
-                            </div>
+                            <span className="rounded-full bg-black/50 px-2 py-0.5 font-mono text-[9px] font-semibold text-zinc-400 ring-1 ring-white/[0.07] backdrop-blur-sm">
+                              #{row.id_property}
+                            </span>
                           </div>
                         </div>
 
-                        {/* agent */}
-                        <div className="mt-2.5 flex items-center gap-2">
-                          <Icon icon="solar:user-rounded-linear" className="shrink-0 text-sm text-zinc-600" />
-                          <span className="truncate text-[12px] text-zinc-400">
-                            {row.agent_nama}
-                          </span>
+                        {/* body */}
+                        <div className="p-3.5">
+                          {/* address */}
+                          {row.alamat_lengkap && (
+                            <div className="mb-3 flex items-start gap-1.5">
+                              <Icon icon="solar:map-point-bold-duotone" className="mt-0.5 shrink-0 text-[13px] text-zinc-600" />
+                              <span className="line-clamp-2 text-[12px] leading-snug text-zinc-400">
+                                {row.alamat_lengkap}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* stats grid */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className={[
+                              "rounded-[14px] px-3 py-2.5",
+                              isCurrent ? "bg-amber-500/[0.08] ring-1 ring-amber-500/[0.15]" : "bg-black/25 ring-1 ring-white/[0.04]",
+                            ].join(" ")}>
+                              <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-600">
+                                Nilai Limit
+                              </div>
+                              <div className={[
+                                "mt-1 text-[13px] font-bold tabular-nums leading-none",
+                                isCurrent ? "text-amber-300" : "text-zinc-200",
+                              ].join(" ")}>
+                                {fmtRp(row.nilai_limit_lelang)}
+                              </div>
+                            </div>
+                            <div className="rounded-[14px] bg-black/25 px-3 py-2.5 ring-1 ring-white/[0.04]">
+                              <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-600">
+                                Uang Jaminan
+                              </div>
+                              <div className="mt-1 text-[13px] font-bold tabular-nums leading-none text-zinc-200">
+                                {fmtRp(row.uang_jaminan)}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* agent */}
+                          <div className="mt-3 flex items-center gap-2 border-t border-white/[0.04] pt-3">
+                            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/[0.05] ring-1 ring-white/[0.07]">
+                              <Icon icon="solar:user-rounded-bold" className="text-[10px] text-zinc-500" />
+                            </div>
+                            <span className="truncate text-[11px] text-zinc-500">
+                              {row.agent_nama}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -759,12 +889,12 @@ function RiwayatLelangModal({
         </div>
 
         {/* footer */}
-        <div className="shrink-0 px-5 pb-4 pt-3">
-          <div className="mb-3 h-px bg-white/[0.05]" />
+        <div className="shrink-0 px-5 pb-5 pt-3">
+          <div className="mb-3 h-px bg-white/[0.04]" />
           <button
             type="button"
             onClick={onClose}
-            className="flex h-11 w-full items-center justify-center rounded-2xl bg-white/[0.06] text-sm font-semibold text-zinc-300 transition hover:bg-white/10"
+            className="flex h-12 w-full items-center justify-center rounded-[16px] bg-white/[0.05] text-[14px] font-semibold text-zinc-300 ring-1 ring-white/[0.07] transition hover:bg-white/[0.08] hover:text-white active:scale-[0.98]"
           >
             Tutup
           </button>

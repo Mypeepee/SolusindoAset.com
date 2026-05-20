@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useRouter } from "next/navigation";
 import type { Listing, Agent } from "../../page";
 import type { SkemaPenjualan } from "./TabTransaksi.client";
 import Money from "../ui/Money";
@@ -866,6 +867,8 @@ export default function TabPembagian({
 }: Props) {
   void skemaPenjualan;
 
+  const router = useRouter();
+
   const transaksiKey = useMemo(() => storageKeyTransaksi(listing), [listing]);
   const pembagianKey = useMemo(() => storageKeyPembagian(listing), [listing]);
   const listingId = useMemo(() => getListingId(listing), [listing]);
@@ -900,6 +903,9 @@ export default function TabPembagian({
   const [persistedAgentSelection, setPersistedAgentSelection] = useState<{
     selectedAgentId: string;
     selectedLeaderId: string;
+    agentLuarNama?: string;
+    agentLuarKantor?: string;
+    agentLuarTelepon?: string;
   }>({
     selectedAgentId: "",
     selectedLeaderId: "",
@@ -1013,11 +1019,17 @@ export default function TabPembagian({
         const parsed = JSON.parse(raw) as Partial<{
           selectedAgentId: string;
           selectedLeaderId: string;
+          agentLuarNama: string;
+          agentLuarKantor: string;
+          agentLuarTelepon: string;
         }>;
 
         setPersistedAgentSelection({
           selectedAgentId: String(parsed?.selectedAgentId ?? "").trim(),
           selectedLeaderId: String(parsed?.selectedLeaderId ?? "").trim(),
+          agentLuarNama: parsed?.agentLuarNama ?? "",
+          agentLuarKantor: parsed?.agentLuarKantor ?? "",
+          agentLuarTelepon: parsed?.agentLuarTelepon ?? "",
         });
       } catch {
         setPersistedAgentSelection({
@@ -1197,6 +1209,19 @@ export default function TabPembagian({
   const agentCatalog = useMemo<AgentCatalogItem[]>(() => {
     const map = new Map<string, AgentCatalogItem>();
 
+    // Inject entry agent luar supaya nama muncul di baris THC
+    if (closingAgentId === "COBROKE") {
+      const luarNama = persistedAgentSelection.agentLuarNama || "Agent Luar";
+      const luarKantor = persistedAgentSelection.agentLuarKantor || "Luar Kantor";
+      map.set("COBROKE", {
+        id: "COBROKE",
+        name: luarNama,
+        office: luarKantor,
+        jabatan: "Agent Luar",
+        label: buildAgentLabel(luarNama, luarKantor, "COBROKE"),
+      });
+    }
+
     for (const item of [...baseAgentCatalog, ...copicSyntheticAgents]) {
       if (!item.id || !item.name) continue;
       if (map.has(item.id)) continue;
@@ -1206,7 +1231,7 @@ export default function TabPembagian({
     return Array.from(map.values()).sort((a, b) =>
       a.name.localeCompare(b.name, "id-ID")
     );
-  }, [baseAgentCatalog, copicSyntheticAgents]);
+  }, [baseAgentCatalog, copicSyntheticAgents, closingAgentId, persistedAgentSelection]);
 
   const templateAssignments = useMemo<Record<string, string>>(() => {
     const byName = (name: string) => findAgentIdByName(agentCatalog, name);
@@ -1549,6 +1574,12 @@ export default function TabPembagian({
       (listing as any).id_property ?? (listing as any).id ?? ""
     );
 
+    const isCobroke = closingAgentId === "COBROKE";
+    const rawTelepon = persistedAgentSelection.agentLuarTelepon ?? "";
+    const teleponFormatted = rawTelepon
+      ? `+62${rawTelepon.replace(/-/g, "").replace(/^0+/, "")}`
+      : null;
+
     const apiBody = {
       skema: skemaPenjualan,
       agentId: closingAgentId,
@@ -1569,6 +1600,11 @@ export default function TabPembagian({
         nominal: row.nominal,
         agentId: row.agentId,
       })),
+      ...(isCobroke && {
+        agentLuarNama: persistedAgentSelection.agentLuarNama || null,
+        agentLuarKantor: persistedAgentSelection.agentLuarKantor || null,
+        agentLuarTelepon: teleponFormatted,
+      }),
     };
 
     try {
@@ -1603,6 +1639,9 @@ export default function TabPembagian({
       }
       // simpan kode untuk ditampilkan di success state modal
       (handleConfirmSave as any).__lastKode = json.kode;
+
+      // Redirect ke tab Progress Transaksi
+      router.push("/dashboard/transaksi?tab=progress");
     } catch (err: any) {
       throw err; // lempar ke modal supaya modal yang handle error state
     }
@@ -1612,6 +1651,8 @@ export default function TabPembagian({
     listing,
     onSave,
     persisted,
+    persistedAgentSelection,
+    router,
     rowsCalculated,
     selisihFinal,
     skemaPenjualan,

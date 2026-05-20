@@ -377,8 +377,11 @@ export async function GET(request: NextRequest) {
     const kota = (searchParams.get("kota") || "").trim();
     const kecamatan = (searchParams.get("kecamatan") || "").trim();
     const kelurahan = (searchParams.get("kelurahan") || "").trim();
+    const statusTayang = (searchParams.get("status_tayang") || "").trim();
 
     const where: any = {};
+
+    if (statusTayang) where.status_tayang = statusTayang;
 
     // scope
     if (agentIdParam) {

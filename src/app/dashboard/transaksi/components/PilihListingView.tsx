@@ -101,23 +101,46 @@ function useIsDesktopLG() {
   return isDesktop;
 }
 
+const FILTER_STORAGE_KEY = "transaksi:pilih-listing:filters";
+
+function readSavedFilters(): ListingFilterState | null {
+  try {
+    const raw = sessionStorage.getItem(FILTER_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function PilihListingView() {
-  const router = useRouter(); // ✅ ADD
+  const router = useRouter();
   const TAKE = 30;
 
-  const [filters, setFilters] = useState<ListingFilterState>({
-    q: "",
-    jenis: "ALL",
-    vendor: "",
-    minHarga: "",
-    maxHarga: "",
-    provinsi: "",
-    kota: "",
-    kecamatan: "",
-    kelurahan: "",
+  const [filters, setFilters] = useState<ListingFilterState>(() => {
+    const saved = typeof window !== "undefined" ? readSavedFilters() : null;
+    return saved ?? {
+      q: "",
+      jenis: "ALL",
+      vendor: "",
+      minHarga: "",
+      maxHarga: "",
+      provinsi: "",
+      kota: "",
+      kecamatan: "",
+      kelurahan: "",
+    };
   });
 
-  const queryString = useMemo(() => buildListingQuery(filters), [filters]);
+  // Simpan filter ke sessionStorage setiap kali berubah
+  useEffect(() => {
+    try { sessionStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(filters)); } catch { /* ignore */ }
+  }, [filters]);
+
+  // Selalu tambah status_tayang=TERSEDIA — hanya listing tersedia yang bisa di-closing
+  const queryString = useMemo(
+    () => buildListingQuery({ ...filters, status_tayang: "TERSEDIA" } as any),
+    [filters]
+  );
   const debouncedQuery = useDebouncedValue(queryString, 350);
 
   const [page, setPage] = useState(1);

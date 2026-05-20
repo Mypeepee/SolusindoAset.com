@@ -315,7 +315,11 @@ model Transaksi {
   status_transaksi         String               @default("CLOSING") @db.VarChar(50)
   pendapatan_bersih_kantor BigInt               @default(0)
   thc_agent                BigInt               @default(0)
+  agent_luar_nama          String?              @db.VarChar(100)
+  agent_luar_kantor        String?              @db.VarChar(100)
+  agent_luar_telepon       String?              @db.VarChar(20)
   detail                   DetailTransaksi[]
+  invoice                  Invoice[]
   agent                    Agent                @relation("TransaksiAgent", fields: [id_agent], references: [id_agent], map: "transaksi_agent_fk")
   klien                    Pengguna?            @relation("TransaksiKlien", fields: [id_klien], references: [id_pengguna], map: "transaksi_klien_fk")
   listing                  Listing              @relation(fields: [id_listing], references: [id_property], map: "transaksi_listing_fk")
@@ -339,6 +343,22 @@ model DetailTransaksi {
   @@index([id_agent], map: "detail_transaksi_agent_idx")
   @@index([id_transaksi], map: "detail_transaksi_trans_idx")
   @@map("detail_transaksi")
+}
+
+model Invoice {
+  id_invoice       String    @id @db.VarChar(50)
+  id_kuitansi      String?   @db.VarChar(50)
+  id_transaksi     BigInt
+  ditagihkan_ke    String    @db.VarChar(255)
+  keterangan       String
+  nominal          BigInt
+  tanggal_invoice  DateTime  @db.Timestamptz(6)
+  tanggal_kuitansi DateTime? @db.Timestamptz(6)
+  transaksi        Transaksi @relation(fields: [id_transaksi], references: [id], map: "invoice_transaksi_fk")
+
+  @@index([id_transaksi], map: "idx_invoice_transaksi")
+  @@index([tanggal_invoice], map: "idx_invoice_tanggal")
+  @@map("invoice")
 }
 
 model ListingBoost {

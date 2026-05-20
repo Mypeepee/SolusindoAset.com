@@ -48,7 +48,7 @@ export interface MenuItem {
     },
     {
       label: "Scrape",
-      icon: "solar:spider-linear",
+      icon: "solar:cloud-plus-linear",
       href: "/dashboard/scrape"
     },
     {

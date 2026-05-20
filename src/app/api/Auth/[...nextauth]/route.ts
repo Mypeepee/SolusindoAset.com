@@ -239,7 +239,7 @@ export const authOptions: AuthOptions = {
             email: true,
             peran: true,
             status_akun: true,
-            agent: { select: { id_agent: true, status_keanggotaan: true, foto_profil_url: true } },
+            agent: { select: { id_agent: true, status_keanggotaan: true, foto_profil_url: true, jabatan: true } },
           },
         });
 
@@ -256,6 +256,7 @@ export const authOptions: AuthOptions = {
 
           // agent id (boleh null)
           token.agentId = dbUser.agent?.id_agent ?? null;
+          token.jabatan = dbUser.agent?.jabatan ?? null;
 
           // optional: bisa dipakai UI
           token.agentStatus = dbUser.agent?.status_keanggotaan ?? null;
@@ -297,6 +298,7 @@ export const authOptions: AuthOptions = {
         session.user.role = token.role ?? token.peran ?? "USER";
 
         session.user.agentId = token.agentId ?? null;
+        session.user.jabatan = token.jabatan ?? null;
 
         // optional untuk UI
         session.user.agentStatus = token.agentStatus ?? null;

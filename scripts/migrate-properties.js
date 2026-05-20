@@ -56,6 +56,50 @@ function generateSlugFromAlamat(kategori, alamat, kota, idListing) {
   return `${base}-${idListing}`;
 }
 
+function parseWilayahFromAlamat(alamat) {
+  if (!alamat) return { provinsi: null, kecamatan: null, kelurahan: null };
+
+  const s = alamat.replace(/\s+/g, ' ').trim();
+
+  const clean = (v) => {
+    if (!v) return null;
+    return v
+      .trim()
+      .replace(/\s*\([^)]*\)/g, '')   // hilangkan "(dahulu ...)" dll
+      .replace(/\s+/g, ' ')
+      .replace(/\s*\d{5}\s*$/, '')    // hilangkan kode pos di akhir
+      .replace(/[,.\s]+$/, '')
+      .trim() || null;
+  };
+
+  // Stop boundary: koma/titik/kurung, kode pos 5 digit, atau keyword admin berikutnya
+  const KW_STOP =
+    '(?=\\s*[,.(]|\\s*\\d{5}|\\s+(?:Kec(?:amatan)?|Kab(?:upaten)?|Kota\\b|Prov(?:insi)?|Propinsi|Prop\\b)|\\s*$)';
+
+  // ── Provinsi ──
+  const provRe = new RegExp(
+    `(?:Provinsi|Propinsi|Prov\\.?|Prop\\.?)\\s+([A-Za-z][A-Za-z\\s]+?)${KW_STOP}`,
+    'i'
+  );
+  const provinsi = clean(s.match(provRe)?.[1]);
+
+  // ── Kecamatan ──
+  const kecRe = new RegExp(
+    `(?:Kecamatan|Kec\\.?)\\s+([A-Za-z0-9][A-Za-z0-9\\s]+?)${KW_STOP}`,
+    'i'
+  );
+  const kecamatan = clean(s.match(kecRe)?.[1]);
+
+  // ── Kelurahan / Desa ──
+  const kelRe = new RegExp(
+    `(?:Desa\\/Kelurahan|Desa\\/Kel\\.|Kelurahan|Kel\\.?|Desa|DS\\.?)\\s+([A-Za-z0-9][A-Za-z0-9\\s]+?)${KW_STOP}`,
+    'i'
+  );
+  const kelurahan = clean(s.match(kelRe)?.[1]);
+
+  return { provinsi, kecamatan, kelurahan };
+}
+
 function revertHarga(hargaNaik) {
   if (hargaNaik == null) return 0;
   const h = Number(hargaNaik);
@@ -238,6 +282,12 @@ async function migrateProperties() {
         const kotaFinal = kota && kota.trim().length > 0 ? kota : 'KOTA TIDAK DIKETAHUI';
         const slug = generateSlugFromAlamat(kategori, lokasi || '', kotaFinal, id_listing);
 
+        // Parse wilayah dari alamat_lengkap (jauh lebih akurat dari kolom raw)
+        const wilayah = parseWilayahFromAlamat(lokasi || '');
+        const provinsiParsed  = wilayah.provinsi  ?? provinsi  ?? null;
+        const kecamatanParsed = wilayah.kecamatan ?? kecamatan ?? null;
+        const kelurahanParsed = wilayah.kelurahan ?? kelurahan ?? null;
+
         const { legalitas, nomor: nomorLegalitas } = parseSertifikat(sertifikat);
 
         const luasNum = luas ? Number(luas) : null;
@@ -323,16 +373,16 @@ async function migrateProperties() {
             kategori,                           // 5
             vendor || null,                     // 6
             status || null,                     // 7 (untuk CASE TERJUAL/TERSEDIA)
-            hargaLimitAsli,                     // 8  -> harga
+            0,                                  // 8  -> harga (0, nilai asli di nilai_limit_lelang)
             batas_akhir_penawaran || null,      // 9  -> tanggal_lelang
             jaminanAsli,                        // 10 -> uang_jaminan
             hargaLimitAsli,                     // 11 -> nilai_limit_lelang
             link || null,                       // 12 -> link
             lokasi || null,                     // 13 -> alamat_lengkap
-            provinsi || null,                   // 14
+            provinsiParsed,                     // 14
             kotaFinal,                          // 15
-            kecamatan || null,                  // 16
-            kelurahan || null,                  // 17
+            kecamatanParsed,                    // 16
+            kelurahanParsed,                    // 17
             luasNum,                            // 18 -> luas_tanah
             legalitas,                          // 19 -> legalitas (enum)
             nomorLegalitas || null,             // 20 -> nomor_legalitas

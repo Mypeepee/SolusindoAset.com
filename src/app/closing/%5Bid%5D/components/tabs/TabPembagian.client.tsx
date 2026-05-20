@@ -879,6 +879,9 @@ export default function TabPembagian({
   const [auctionRows, setAuctionRows] = useState<AuctionHistoryRow[]>([]);
   const [isLoadingAuctionHistory, setIsLoadingAuctionHistory] = useState(false);
 
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveResult, setSaveResult] = useState<"ok" | "error" | null>(null);
+
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newPercentInput, setNewPercentInput] = useState("0");
@@ -886,6 +889,9 @@ export default function TabPembagian({
   const [persistedAgentSelection, setPersistedAgentSelection] = useState<{
     selectedAgentId: string;
     selectedLeaderId: string;
+    agentLuarNama?: string;
+    agentLuarKantor?: string;
+    agentLuarTelepon?: string;
   }>({
     selectedAgentId: "",
     selectedLeaderId: "",
@@ -999,11 +1005,17 @@ export default function TabPembagian({
         const parsed = JSON.parse(raw) as Partial<{
           selectedAgentId: string;
           selectedLeaderId: string;
+          agentLuarNama: string;
+          agentLuarKantor: string;
+          agentLuarTelepon: string;
         }>;
 
         setPersistedAgentSelection({
           selectedAgentId: String(parsed?.selectedAgentId ?? "").trim(),
           selectedLeaderId: String(parsed?.selectedLeaderId ?? "").trim(),
+          agentLuarNama: parsed?.agentLuarNama ?? "",
+          agentLuarKantor: parsed?.agentLuarKantor ?? "",
+          agentLuarTelepon: parsed?.agentLuarTelepon ?? "",
         });
       } catch {
         setPersistedAgentSelection({
@@ -1178,6 +1190,19 @@ export default function TabPembagian({
   const agentCatalog = useMemo<AgentCatalogItem[]>(() => {
     const map = new Map<string, AgentCatalogItem>();
 
+    // Inject entry untuk agent luar/cobroke supaya nama muncul di THC
+    if (closingAgentId === "COBROKE") {
+      const luarNama = persistedAgentSelection.agentLuarNama || "Agent Luar";
+      const luarKantor = persistedAgentSelection.agentLuarKantor || "Luar Kantor";
+      map.set("COBROKE", {
+        id: "COBROKE",
+        name: luarNama,
+        office: luarKantor,
+        jabatan: "Agent Luar",
+        label: buildAgentLabel(luarNama, luarKantor, "COBROKE"),
+      });
+    }
+
     for (const item of [...baseAgentCatalog, ...copicSyntheticAgents]) {
       if (!item.id || !item.name) continue;
       if (map.has(item.id)) continue;
@@ -1187,7 +1212,7 @@ export default function TabPembagian({
     return Array.from(map.values()).sort((a, b) =>
       a.name.localeCompare(b.name, "id-ID")
     );
-  }, [baseAgentCatalog, copicSyntheticAgents]);
+  }, [baseAgentCatalog, copicSyntheticAgents, closingAgentId, persistedAgentSelection]);
 
   const templateAssignments = useMemo<Record<string, string>>(() => {
     const byName = (name: string) => findAgentIdByName(agentCatalog, name);
@@ -1498,7 +1523,7 @@ export default function TabPembagian({
     setIsAddModalOpen(false);
   }, [newLabel, newPercentInput, newAgentId, rows]);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     if (!isInputPercentValid) {
       alert("Total porsi harus tepat 100%.");
       return;
@@ -1530,8 +1555,65 @@ export default function TabPembagian({
       return;
     }
 
-    console.log("SAVE PEMBAGIAN", payload);
-    alert("Payload pembagian siap disimpan.");
+    // Kirim ke save API
+    if (!listingId || !closingAgentId) {
+      alert("Data tidak lengkap untuk disimpan.");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setSaveResult(null);
+
+      const komisiStr = persisted?.komisiStr ?? "2,5";
+      const komisiPct = parseFloat(komisiStr.replace(",", ".")) || 0;
+      const komisiAgentBase = Math.round(Math.max(0, selisihFinal) * 0.4);
+      const komisiAgentVal = Math.max(0, komisiAgentBase - Math.max(0, cobroke));
+      const pendapatanBersihKantorVal = Math.max(0, selisihFinal - komisiAgentVal - royaltyFee);
+
+      const body = {
+        skema: skemaPenjualan,
+        agentId: closingAgentId,
+        deal,
+        bidding,
+        limit: n((listing as any)?.nilai_limit_lelang),
+        komisiPct,
+        balikNama,
+        eksekusi,
+        cobroke,
+        royaltyFee,
+        komisiAgent: komisiAgentVal,
+        pendapatanBersihKantor: pendapatanBersihKantorVal,
+        jenis_transaksi: listing.jenis_transaksi,
+        rows: payload.rows,
+        ...(closingAgentId === "COBROKE" && {
+          agentLuarNama: persistedAgentSelection.agentLuarNama ?? "",
+          agentLuarKantor: persistedAgentSelection.agentLuarKantor ?? "",
+          agentLuarTelepon: persistedAgentSelection.agentLuarTelepon ?? "",
+        }),
+      };
+
+      const res = await fetch(
+        `/api/closing/listing/${encodeURIComponent(listingId)}/save`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }
+      );
+
+      const json = await res.json().catch(() => null);
+
+      if (!res.ok) throw new Error(json?.error ?? "Gagal menyimpan");
+
+      setSaveResult("ok");
+    } catch (err: any) {
+      console.error("[handleSave]", err);
+      setSaveResult("error");
+      alert(err?.message ?? "Terjadi kesalahan saat menyimpan.");
+    } finally {
+      setIsSaving(false);
+    }
   }, [
     getAgentById,
     isEffectivePercentValid,
@@ -1540,6 +1622,18 @@ export default function TabPembagian({
     onSave,
     rowsCalculated,
     selisihFinal,
+    listingId,
+    closingAgentId,
+    persisted,
+    cobroke,
+    royaltyFee,
+    deal,
+    bidding,
+    balikNama,
+    eksekusi,
+    skemaPenjualan,
+    listing,
+    persistedAgentSelection,
   ]);
 
   return (
@@ -1745,11 +1839,11 @@ export default function TabPembagian({
 
                   <ActionButton
                     onClick={handleSave}
-                    icon="solar:diskette-linear"
+                    icon={isSaving ? "solar:loading-bold" : saveResult === "ok" ? "solar:check-circle-linear" : "solar:diskette-linear"}
                     tone="primary"
-                    disabled={!isTotalValid}
+                    disabled={!isTotalValid || isSaving}
                   >
-                    Simpan Pembagian
+                    {isSaving ? "Menyimpan..." : saveResult === "ok" ? "Tersimpan!" : "Simpan Pembagian"}
                   </ActionButton>
                 </div>
 

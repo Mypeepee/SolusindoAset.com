@@ -26,8 +26,9 @@ export async function GET(
       select: {
         id_property: true,
         jenis_transaksi: true,
+        kelurahan: true,
+        legalitas: true,
         nomor_legalitas: true,
-        luas_tanah: true,
         kota: true,
       },
     });
@@ -43,16 +44,20 @@ export async function GET(
       });
     }
 
-    // history (aset sama)
+    // Cari listing lain yang merupakan aset yang sama:
+    // kota (selalu ada) + legalitas + nomor_legalitas → unik per aset.
+    // Kelurahan tidak dipakai karena sering tidak konsisten antar listing.
+    const canMatch = current.legalitas && current.nomor_legalitas;
+
     const rows = await prisma.listing.findMany({
-      where: {
-        id_property: { not: id_property },
-        kota: current.kota,
-        ...(current.nomor_legalitas
-          ? { nomor_legalitas: current.nomor_legalitas }
-          : {}),
-        ...(current.luas_tanah ? { luas_tanah: current.luas_tanah } : {}),
-      },
+      where: canMatch
+        ? {
+            id_property: { not: id_property },
+            kota: { equals: current.kota, mode: "insensitive" },
+            legalitas: current.legalitas!,
+            nomor_legalitas: { equals: current.nomor_legalitas!, mode: "insensitive" },
+          }
+        : { id_property: -1n },
       orderBy: [{ tanggal_lelang: "asc" }, { tanggal_dibuat: "asc" }],
       select: {
         id_property: true,
@@ -62,6 +67,12 @@ export async function GET(
         uang_jaminan: true,
         link: true,
         gambar: true,
+        kelurahan: true,
+        kecamatan: true,
+        kota: true,
+        legalitas: true,
+        nomor_legalitas: true,
+        alamat_lengkap: true,
         id_agent: true,
         agent: {
           select: {
@@ -83,6 +94,12 @@ export async function GET(
         uang_jaminan: true,
         link: true,
         gambar: true,
+        kelurahan: true,
+        kecamatan: true,
+        kota: true,
+        legalitas: true,
+        nomor_legalitas: true,
+        alamat_lengkap: true,
         id_agent: true,
         agent: {
           select: {
@@ -102,12 +119,15 @@ export async function GET(
         nilai_limit_lelang: x.nilai_limit_lelang?.toString?.() ?? null,
         uang_jaminan: x.uang_jaminan?.toString?.() ?? null,
         link: x.link ?? null,
-
-        // ✅ penting untuk UI gambar
         gambar: x.gambar ?? null,
         gambar_list: gambarList,
         imageUrl: firstImage(x.gambar),
-
+        kelurahan: x.kelurahan ?? null,
+        kecamatan: x.kecamatan ?? null,
+        kota: x.kota ?? null,
+        legalitas: x.legalitas ?? null,
+        nomor_legalitas: x.nomor_legalitas ?? null,
+        alamat_lengkap: x.alamat_lengkap ?? null,
         id_agent: x.id_agent,
         agent_nama:
           x.agent?.pengguna?.nama_lengkap ??
@@ -128,6 +148,13 @@ export async function GET(
     return NextResponse.json({
       current: { ...current, id_property: current.id_property.toString() },
       rows: merged,
+      matchCriteria: canMatch
+        ? {
+            kota: current.kota,
+            legalitas: current.legalitas,
+            nomor_legalitas: current.nomor_legalitas,
+          }
+        : null,
     });
   } catch (e: any) {
     return NextResponse.json(

@@ -55,8 +55,16 @@ export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const agentId = (session.user as { agentId?: string }).agentId;
+  const user = session.user as { agentId?: string | null };
+  const agentId = user.agentId;
   if (!agentId) return NextResponse.json({ error: "Bukan agent" }, { status: 403 });
+
+  // Query jabatan langsung dari DB — jangan andalkan session yang bisa stale
+  const agentRow = await prisma.agent.findUnique({
+    where: { id_agent: agentId },
+    select: { jabatan: true },
+  });
+  const isOwner = agentRow?.jabatan === "OWNER";
 
   const { searchParams } = new URL(req.url);
   const take = Math.min(Math.max(Number(searchParams.get("take") ?? 50), 1), 100);
@@ -65,7 +73,8 @@ export async function GET(req: Request) {
   const jenisFilter  = searchParams.get("jenis") ?? "";
   const q = searchParams.get("q") ?? "";
 
-  const baseWhere: Record<string, unknown> = { id_agent: agentId };
+  // Owner melihat semua transaksi, agent biasa hanya miliknya sendiri
+  const baseWhere: Record<string, unknown> = isOwner ? {} : { id_agent: agentId };
 
   if (statusFilter && statusFilter !== "ALL") {
     baseWhere.status_transaksi = statusFilter;
@@ -81,7 +90,7 @@ export async function GET(req: Request) {
     ];
   }
 
-  const agentBaseWhere = { id_agent: agentId };
+  const agentBaseWhere = isOwner ? {} : { id_agent: agentId };
 
   const [rows, total, selesaiCount, allForStats] = await Promise.all([
     prisma.transaksi.findMany({
@@ -110,6 +119,9 @@ export async function GET(req: Request) {
         biaya_pengosongan: true,
         royalty_fee: true,
         cobroke_fee: true,
+        agent_luar_nama: true,
+        agent_luar_kantor: true,
+        agent_luar_telepon: true,
         agent: {
           select: {
             id_agent: true,
@@ -170,9 +182,9 @@ export async function GET(req: Request) {
     nilaiTransaksi: resolveNilai(t.jenis_transaksi, t.tipe_komisi, t.harga_deal, t.harga_bidding),
     tanggal: t.tanggal_transaksi.toISOString().slice(0, 10),
     dibuat: t.dibuat_pada?.toISOString() ?? new Date().toISOString(),
-    agentNama: t.agent?.pengguna?.nama_lengkap ?? "—",
-    agentKantor: t.agent?.nama_kantor ?? "—",
-    agentFoto: toProxyImg(t.agent?.foto_profil_url ?? ""),
+    agentNama: (t as any).agent_luar_nama || t.agent?.pengguna?.nama_lengkap || "—",
+    agentKantor: (t as any).agent_luar_kantor || t.agent?.nama_kantor || "—",
+    agentFoto: (t as any).agent_luar_nama ? "" : toProxyImg(t.agent?.foto_profil_url ?? ""),
     klienNama: t.klien?.nama_lengkap ?? null,
     listingId: t.listing.id_property.toString(),
     listingJudul: t.listing.judul,

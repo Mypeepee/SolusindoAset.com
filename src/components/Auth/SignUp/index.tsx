@@ -71,7 +71,10 @@ function normalizePhoneDigits(raw: string) {
   let digits = (raw || "").replace(/\D/g, "");
   if (digits.startsWith("62")) digits = digits.slice(2);
   digits = digits.replace(/^0+/, "");
-  return digits;
+  // Format: 3-4-4
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 12)}`;
 }
 
 /**
@@ -153,7 +156,7 @@ export default function SignUp({ closeModal, openSigninModal }: SignUpProps) {
           toast.error("No. HP wajib diisi.");
           return;
         }
-        finalData.phone = `+62${normalized}`;
+        finalData.phone = `+62${normalized.replace(/-/g, "")}`;
         finalData.login_mode = "phone";
       }
 
@@ -338,12 +341,9 @@ export default function SignUp({ closeModal, openSigninModal }: SignUpProps) {
                 required
                 inputMode="numeric"
                 autoComplete="tel-national"
-                placeholder="81234567890"
+                placeholder="812-3456-7890"
                 value={phoneDigits}
                 onChange={(e) => setPhoneDigits(normalizePhoneDigits(e.target.value))}
-                onKeyDown={(e) => {
-                  if (phoneDigits.length === 0 && e.key === "0") e.preventDefault();
-                }}
                 className={[inputClass, "rounded-l-none border-l-0"].join(" ")}
               />
             </div>

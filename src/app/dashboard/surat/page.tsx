@@ -5,6 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { Icon } from "@iconify/react";
 import { suratTemplates, type SuratTemplate } from "./components/data";
 import { SuratTemplateModal } from "./components/SuratTemplateModal";
+import { InvoiceModal } from "./components/InvoiceModal";
+import { KuitansiModal } from "./components/KuitansiModal";
 
 // ── Folder definitions ────────────────────────────────────────────────────────
 
@@ -637,10 +639,51 @@ function SuratContent() {
         )}
       </div>
 
+      {/* ── Kuitansi modal ─────────────────────────────────────────────────── */}
+      <KuitansiModal
+        open={selectedTemplate?.id === "kuitansi-solusindo"}
+        template={selectedTemplate?.id === "kuitansi-solusindo" ? selectedTemplate : null}
+        onClose={() => setSelectedTemplate(null)}
+      />
+
+      {/* ── Invoice modal ─────────────────────────────────────────────────── */}
+      <InvoiceModal
+        open={selectedTemplate?.id === "invoice-solusindo"}
+        template={selectedTemplate?.id === "invoice-solusindo" ? selectedTemplate : null}
+        onClose={() => setSelectedTemplate(null)}
+        onSubmit={async ({ values }) => {
+          const res = await fetch("/api/surat/generate-invoice", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify(values),
+          });
+
+          if (!res.ok) {
+            const err = (await res.json().catch(() => ({}))) as { detail?: string };
+            alert(err.detail ?? "Gagal generate invoice. Coba lagi.");
+            return;
+          }
+
+          const disposition = res.headers.get("Content-Disposition") ?? "";
+          const nameMatch   = disposition.match(/filename="([^"]+)"/);
+          const filename    = nameMatch?.[1] ?? "Invoice.docx";
+
+          const blob = await res.blob();
+          const url  = URL.createObjectURL(blob);
+          const a    = document.createElement("a");
+          a.href     = url;
+          a.download = filename;
+          a.click();
+          URL.revokeObjectURL(url);
+
+          setSelectedTemplate(null);
+        }}
+      />
+
       {/* ── Template wizard modal ─────────────────────────────────────────── */}
       <SuratTemplateModal
-        open={Boolean(selectedTemplate)}
-        template={selectedTemplate}
+        open={Boolean(selectedTemplate) && !["invoice-solusindo", "kuitansi-solusindo"].includes(selectedTemplate?.id ?? "")}
+        template={!["invoice-solusindo", "kuitansi-solusindo"].includes(selectedTemplate?.id ?? "") ? selectedTemplate : null}
         onClose={() => setSelectedTemplate(null)}
         onSubmit={async ({ template, values }) => {
           // Saat ini hanya template Akte Grosse yang punya generate PDF

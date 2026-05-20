@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 
 function toBigInt(v: number | null | undefined): bigint {
@@ -24,12 +26,15 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    const sessionAgentId = (session?.user as any)?.agentId as string | undefined;
+
     const id_listing = BigInt(params.id);
     const body = await req.json();
 
     const {
       skema,                  // "PERSENTASE" | "SELISIH"
-      agentId,                // string — agent yang closing
+      agentId: agentIdRaw,    // string — agent yang closing (bisa "COBROKE")
       deal,                   // number — harga deal (hanya untuk SELISIH)
       bidding,                // number — harga bidding
       limit,                  // number — nilai_limit_lelang
@@ -42,7 +47,16 @@ export async function POST(
       pendapatanBersihKantor, // number
       jenis_transaksi,        // string — jenis transaksi listing
       rows,                   // Array<{ code, label, nominal, agentId }>
+      agentLuarNama,          // string? — nama agent luar (hanya jika agentId === 'COBROKE')
+      agentLuarKantor,        // string? — kantor agent luar
+      agentLuarTelepon,       // string? — telepon agent luar
     } = body;
+
+    // Jika agent luar (COBROKE), simpan id_agent = agent yang login (yang merekam transaksi)
+    const isAgentLuar = agentIdRaw === "COBROKE";
+    const agentId = isAgentLuar
+      ? (sessionAgentId ?? agentIdRaw)
+      : agentIdRaw;
 
     if (!agentId) {
       return NextResponse.json({ ok: false, error: "agentId wajib diisi" }, { status: 400 });
@@ -105,6 +119,11 @@ export async function POST(
         pendapatan_bersih_kantor: toBigInt(pendapatanBersihKantor),
         thc_agent: toBigInt(komisiAgent),
         status_transaksi: "CLOSING",
+        ...(isAgentLuar && {
+          agent_luar_nama: agentLuarNama ?? null,
+          agent_luar_kantor: agentLuarKantor ?? null,
+          agent_luar_telepon: agentLuarTelepon ?? null,
+        }),
       };
 
       let transaksi;
@@ -149,25 +168,23 @@ export async function POST(
         select: { nomor_legalitas: true, luas_tanah: true, kota: true },
       });
 
-      if (currentListing) {
-        // Cari semua property yang identik (logika sama dgn auction-history)
-        const relatedWhere: any = {
-          kota: currentListing.kota,
-          ...(currentListing.nomor_legalitas
-            ? { nomor_legalitas: currentListing.nomor_legalitas }
-            : {}),
-          ...(currentListing.luas_tanah
-            ? { luas_tanah: currentListing.luas_tanah }
-            : {}),
-        };
-
-        // Update semua property serupa + property ini sendiri → TERJUAL
+      // Tandai property ini sendiri + semua riwayat lelang terkait sebagai TERJUAL
+      if (currentListing?.nomor_legalitas) {
+        // Hanya cari riwayat terkait jika nomor_legalitas ada — hindari match terlalu luas
         await tx.listing.updateMany({
-          where: { OR: [{ id_property: id_listing }, relatedWhere] },
+          where: {
+            OR: [
+              { id_property: id_listing },
+              {
+                nomor_legalitas: currentListing.nomor_legalitas,
+                kota: currentListing.kota,
+              },
+            ],
+          },
           data: { status_tayang: "TERJUAL" },
         });
       } else {
-        // Minimal tandai property ini sendiri
+        // Nomor legalitas kosong — tandai property ini saja
         await tx.listing.update({
           where: { id_property: id_listing },
           data: { status_tayang: "TERJUAL" },
