@@ -27,7 +27,7 @@ type Props = {
 
 type TransaksiItem = {
   id: string;
-  kode_transaksi: string | null;
+  kode_transaksi: string | null; // mapped from id_transaksi
   tanggal_transaksi: string;
   judul_property: string;
   alamat_property: string | null;

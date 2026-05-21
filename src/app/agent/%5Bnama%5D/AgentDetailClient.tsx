@@ -211,7 +211,7 @@ const AgentDetailClient: React.FC<AgentDetailProps> = ({ agent }) => {
                     <span className="font-semibold text-gray-100">
                       {totalListings} listing aktif
                     </span>{" "}
-                    di Premier Asset.
+                    di Solusindo Aset.
                   </p>
 
                   <div className="mt-2 flex flex-wrap gap-3 text-[11px]">

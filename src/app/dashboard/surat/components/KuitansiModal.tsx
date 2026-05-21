@@ -30,7 +30,7 @@ type InvoiceItem = {
   keterangan:      string;
   nominal:         number;
   tanggal_invoice: string;
-  kode_transaksi:  string | null;
+  kode_transaksi:  string | null; // mapped from id_transaksi
   alamat_property: string | null;
   foto_url:        string;
   sudah_kuitansi:  boolean;

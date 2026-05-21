@@ -35,6 +35,28 @@ function toProxyImg(url: string): string {
   return "";
 }
 
+function resolveAgentFoto(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const s = raw.trim();
+  if (!s) return "";
+  // Extract Drive file ID from any Drive URL format
+  const driveMatch =
+    s.match(/drive\.google\.com\/file\/d\/([^/?]+)/) ??
+    s.match(/drive\.google\.com\/open\?id=([^&]+)/) ??
+    s.match(/drive\.google\.com\/uc\?.*id=([^&]+)/) ??
+    s.match(/drive\.google\.com\/thumbnail\?id=([^&]+)/);
+  if (driveMatch?.[1]) {
+    const thumb = `https://drive.google.com/thumbnail?id=${driveMatch[1]}&sz=w200`;
+    return `/api/img?url=${encodeURIComponent(thumb)}`;
+  }
+  // Bare Drive file ID (no protocol, no dots, 20+ alfanumerik)
+  if (!s.includes("://") && !s.includes(".") && /^[a-zA-Z0-9_-]{20,}$/.test(s)) {
+    const thumb = `https://drive.google.com/thumbnail?id=${s}&sz=w200`;
+    return `/api/img?url=${encodeURIComponent(thumb)}`;
+  }
+  return toProxyImg(s);
+}
+
 // ── Numeric helpers ───────────────────────────────────────────────────────────
 
 function toNum(v: unknown): number {
@@ -84,7 +106,7 @@ export async function GET(req: Request) {
   }
   if (q) {
     baseWhere.OR = [
-      { kode_transaksi: { contains: q, mode: "insensitive" } },
+      { id_transaksi: { contains: q, mode: "insensitive" } },
       { listing: { judul: { contains: q, mode: "insensitive" } } },
       { listing: { kota: { contains: q, mode: "insensitive" } } },
     ];
@@ -100,7 +122,7 @@ export async function GET(req: Request) {
       skip,
       select: {
         id: true,
-        kode_transaksi: true,
+        id_transaksi: true,
         status_transaksi: true,
         jenis_transaksi: true,
         tipe_komisi: true,
@@ -172,7 +194,7 @@ export async function GET(req: Request) {
 
   const data = rows.map((t) => ({
     id: t.id.toString(),
-    kode: t.kode_transaksi ?? `TR-${t.id}`,
+    kode: t.id_transaksi ?? `TR-${t.id}`,
     status: t.status_transaksi,
     jenis: t.jenis_transaksi,
     tipeKomisi: t.tipe_komisi,
@@ -184,7 +206,7 @@ export async function GET(req: Request) {
     dibuat: t.dibuat_pada?.toISOString() ?? new Date().toISOString(),
     agentNama: (t as any).agent_luar_nama || t.agent?.pengguna?.nama_lengkap || "—",
     agentKantor: (t as any).agent_luar_kantor || t.agent?.nama_kantor || "—",
-    agentFoto: (t as any).agent_luar_nama ? "" : toProxyImg(t.agent?.foto_profil_url ?? ""),
+    agentFoto: (t as any).agent_luar_nama ? "" : resolveAgentFoto(t.agent?.foto_profil_url),
     klienNama: t.klien?.nama_lengkap ?? null,
     listingId: t.listing.id_property.toString(),
     listingJudul: t.listing.judul,

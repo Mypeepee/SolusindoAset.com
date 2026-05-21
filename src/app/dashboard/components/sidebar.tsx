@@ -47,7 +47,7 @@ export function OwnerSidebar() {
             "
           />
           <Image
-            src="/images/logo/logopremier.svg"
+            src="/images/logo/LogoSolusindoPremier.png"
             alt="Logo Premier"
             width={40}
             height={40}
@@ -66,9 +66,9 @@ export function OwnerSidebar() {
             group-hover:text-white
           "
         >
-          <span className="text-white">Premier</span>
+          <span className="text-white">Solusindo</span>
           <span className="ml-1 text-[#86efac] group-hover:text-emerald-300">
-            Asset
+            Aset
           </span>
         </span>
 

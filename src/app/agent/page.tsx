@@ -5,9 +5,9 @@ import AgentListClient from "./AgentListClient";
 import { Icon } from "@iconify/react";
 
 export const metadata: Metadata = {
-  title: "Agent Premier Asset | Premier Asset",
+  title: "Agent Solusindo Aset | Solusindo Aset",
   description:
-    "Temukan agent properti profesional Premier Asset dengan keahlian area dan portofolio listing aktif di seluruh Indonesia.",
+    "Temukan agent properti profesional Solusindo Aset dengan keahlian area dan portofolio listing aktif di seluruh Indonesia.",
 };
 
 // convert BigInt → string, selain itu biarkan apa adanya (Date, null, dll.)
@@ -104,7 +104,7 @@ export default async function AgentPage() {
                 untuk Properti Anda
               </h1>
               <p className="mt-3 text-sm md:text-base text-gray-400">
-                Jelajahi jaringan agent tersertifikasi Premier Asset. Lihat area
+                Jelajahi jaringan agent tersertifikasi Solusindo Aset. Lihat area
                 keahlian dan portofolio listing aktif sebelum Anda menghubungi
                 mereka.
               </p>

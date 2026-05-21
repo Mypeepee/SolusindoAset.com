@@ -51,7 +51,7 @@ export async function GET() {
         transaksi: {
           select: {
             id: true,
-            kode_transaksi: true,
+            id_transaksi: true,
             status_transaksi: true,
             jenis_transaksi: true,
             tanggal_transaksi: true,
@@ -79,7 +79,7 @@ export async function GET() {
         id: d.id.toString(),
         role: d.role,
         pendapatan: Number(d.pendapatan),
-        kode: d.transaksi.kode_transaksi ?? `TR-${d.transaksi.id}`,
+        kode: d.transaksi.id_transaksi ?? `TR-${d.transaksi.id}`,
         status: d.transaksi.status_transaksi,
         tanggal: d.transaksi.tanggal_transaksi.toISOString().slice(0, 10),
         alamat,

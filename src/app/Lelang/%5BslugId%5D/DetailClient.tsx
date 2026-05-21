@@ -171,7 +171,7 @@ export default function DetailClient({
             "",
           whatsapp: product.agent.nomor_whatsapp || "",
           email: product.agent.pengguna?.email || "",
-          kantor: product.agent.nama_kantor || "Premier Asset",
+          kantor: product.agent.nama_kantor || "Solusindo Aset",
           foto_url:
             product.agent.foto_profil_url ||
             product.agent.pengguna?.foto_profil_url ||
@@ -199,7 +199,7 @@ export default function DetailClient({
             product.agent.pengguna?.foto_profil_url ||
             "/images/user/user-01.png",
           phone: product.agent.nomor_whatsapp || "",
-          office: product.agent.nama_kantor || "Premier Asset",
+          office: product.agent.nama_kantor || "Solusindo Aset",
           rating: product.agent.rating ?? 5.0,
           closing: product.agent.jumlah_closing ?? 0,
           area: product.agent.kota_area || "Indonesia",
@@ -210,7 +210,7 @@ export default function DetailClient({
           name: "Agent Premier",
           avatar: "/images/user/user-01.png",
           phone: "",
-          office: "Premier Asset",
+          office: "Solusindo Aset",
           rating: 5.0,
           closing: 0,
           area: "Indonesia",

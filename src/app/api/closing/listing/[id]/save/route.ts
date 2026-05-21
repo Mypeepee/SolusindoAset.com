@@ -13,12 +13,24 @@ function toDecimal(v: number | null | undefined) {
   return v;
 }
 
-function generateKode(): string {
+const BULAN_ID = ["JAN","FEB","MAR","APR","MEI","JUN","JUL","AGU","SEP","OKT","NOV","DES"];
+
+async function generateIdTransaksi(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+): Promise<string> {
   const now = new Date();
-  const yy = String(now.getFullYear()).slice(-2);
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
-  return `TRX${yy}${mm}${rand}`;
+  const bulan = BULAN_ID[now.getMonth()];
+  const tahun = now.getFullYear();
+
+  const startOfMonth = new Date(tahun, now.getMonth(), 1);
+  const endOfMonth   = new Date(tahun, now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+  const count = await tx.transaksi.count({
+    where: { dibuat_pada: { gte: startOfMonth, lte: endOfMonth } },
+  });
+
+  const nomor = String(count + 1).padStart(3, "0");
+  return `${nomor}/MOU/SPT-SBY/${bulan}/${tahun}`;
 }
 
 export async function POST(
@@ -143,7 +155,7 @@ export async function POST(
         transaksi = await tx.transaksi.create({
           data: {
             ...transaksiData,
-            kode_transaksi: generateKode(),
+            id_transaksi: await generateIdTransaksi(tx),
           },
         });
       }
@@ -197,7 +209,7 @@ export async function POST(
     return NextResponse.json({
       ok: true,
       id: result.id.toString(),
-      kode: result.kode_transaksi,
+      kode: result.id_transaksi,
     });
   } catch (e: any) {
     console.error("[closing/save]", e);

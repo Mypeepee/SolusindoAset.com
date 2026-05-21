@@ -20,7 +20,7 @@ export default function AgentSidebar({ data, currentAgentId }: AgentSidebarProps
       data.agent_photo ||
       "/images/user/user-01.png",
     phone: data.owner?.phone || "628123456789",
-    office: data.owner?.office || "Premier Asset",
+    office: data.owner?.office || "Solusindo Aset",
     rating: data.owner?.rating ?? 5.0,
     area: data.owner?.area || "Indonesia",
   };

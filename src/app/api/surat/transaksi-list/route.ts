@@ -56,7 +56,7 @@ export async function GET() {
     where: isOwner ? {} : { id_agent: agentId },
     select: {
       id: true,
-      kode_transaksi: true,
+      id_transaksi: true,
       dibuat_pada: true,
       tipe_komisi: true,
       harga_deal: true,
@@ -91,7 +91,7 @@ export async function GET() {
 
     return {
       id: t.id.toString(),
-      kode_transaksi: t.kode_transaksi,
+      kode_transaksi: t.id_transaksi,
       tanggal_transaksi: t.dibuat_pada.toISOString(),
       judul_property: t.listing.judul,
       alamat_property: t.listing.alamat_lengkap ?? t.listing.kota,

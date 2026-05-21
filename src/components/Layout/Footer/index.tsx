@@ -53,8 +53,8 @@ const Footer: FC = () => {
             <div className="flex items-center gap-2.5">
               <div className="w-9 h-9 shrink-0 relative">
                 <Image
-                  src="/images/logo/logopremier.svg"
-                  alt="Premier Asset Logo"
+                  src="/images/logo/LogoSolusindoPremier.png"
+                  alt="Solusindo Aset Logo"
                   fill
                   className="object-contain"
                 />
@@ -64,7 +64,7 @@ const Footer: FC = () => {
                   PT. Solusi Tangguh Rejeki
                 </p>
                 <p className="text-[9px] text-emerald-400/60 font-semibold tracking-widest uppercase leading-none mt-0.5">
-                  SolusindoLelang.com
+                  SolusindoAset.com
                 </p>
               </div>
             </div>
@@ -174,7 +174,7 @@ const Footer: FC = () => {
           </div>
           <div className="flex items-center gap-1.5 text-white/20 text-[11px]">
             <Icon icon="solar:shield-check-bold-duotone" className="text-emerald-500/40 text-sm" />
-            <span>SolusindoLelang.com — Terverifikasi &amp; Terlindungi</span>
+            <span>SolusindoAset.com — Terverifikasi &amp; Terlindungi</span>
           </div>
         </div>
 

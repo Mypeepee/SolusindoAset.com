@@ -173,7 +173,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const idProperty = extractIdPropertyFromSlug(params.slug);
   if (!idProperty) {
     return {
-      title: "Properti Tidak Ditemukan | Premier Asset",
+      title: "Properti Tidak Ditemukan | Solusindo Aset",
       description: "Halaman properti yang Anda cari tidak ditemukan.",
     };
   }
@@ -181,7 +181,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const product = await getProperty(idProperty);
   if (!product) {
     return {
-      title: "Properti Tidak Ditemukan | Premier Asset",
+      title: "Properti Tidak Ditemukan | Solusindo Aset",
       description: "Halaman properti yang Anda cari tidak ditemukan.",
     };
   }
@@ -216,7 +216,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const canonicalUrl = `https://premierasset.com/Jual/${params.slug}`;
 
   return {
-    title: `${product.judul} - ${hargaFormatted} | Premier Asset`,
+    title: `${product.judul} - ${hargaFormatted} | Solusindo Aset`,
     description,
     keywords: [
       product.kategori,
@@ -234,7 +234,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       type: "website",
       locale: "id_ID",
       url: canonicalUrl,
-      siteName: "Premier Asset",
+      siteName: "Solusindo Aset",
       title: `${product.judul} - ${hargaFormatted}`,
       description,
       images: [

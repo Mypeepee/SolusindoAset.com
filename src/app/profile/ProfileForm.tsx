@@ -269,7 +269,7 @@ const ProfileForm = ({ formData, setFormData, isLoading, onSave }: Props) => {
     if (!agentReferralCode) return;
 
     const fullCode = agentReferralCode;
-    const shareText = `Kode referral saya di Premier Asset: ${fullCode}`;
+    const shareText = `Kode referral saya di Solusindo Aset: ${fullCode}`;
 
     if (navigator.share) {
       try {

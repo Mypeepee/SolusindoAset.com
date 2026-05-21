@@ -11,17 +11,16 @@ const Logo: React.FC = () => {
       
       {/* Gambar Logo */}
       <Image
-        src="/images/logo/logopremier.svg"
+        src="/images/logo/LogoSolusindoPremier.png"
         alt="Logo Premier"
         width={40}
         height={40}
         className="w-10 h-10 object-contain"
       />
 
-      {/* Teks Logo: PREMIER (Putih) ASSET (Hijau Tombol) */}
       <span className="text-2xl font-bold tracking-tight">
-        <span className="text-white">Premier</span>
-        <span className="text-[#86efac] ml-1">Asset</span>
+        <span className="text-white">Solusindo</span>
+        <span className="text-[#86efac] ml-1">Aset</span>
       </span>
     </Link>
   );

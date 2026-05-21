@@ -53,7 +53,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   if (!product) {
     return { 
-      title: "Properti Tidak Ditemukan | Premier Asset",
+      title: "Properti Tidak Ditemukan | Solusindo Aset",
       description: "Halaman properti yang Anda cari tidak ditemukan."
     };
   }
@@ -81,7 +81,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const canonicalUrl = `https://premierasset.com/Jual/${product.slug || 'property'}/${product.id_property}`;
 
   return {
-    title: `${product.judul} - ${hargaFormatted} | Premier Asset`,
+    title: `${product.judul} - ${hargaFormatted} | Solusindo Aset`,
     description: description,
     
     keywords: [
@@ -100,7 +100,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       type: 'website',
       locale: 'id_ID',
       url: canonicalUrl,
-      siteName: 'Premier Asset',
+      siteName: 'Solusindo Aset',
       title: `${product.judul} - ${hargaFormatted}`,
       description: description,
       images: [
@@ -177,7 +177,7 @@ export default async function DetailPage({ params }: Props) {
         : "https://schema.org/SoldOut",
       "seller": {
         "@type": "RealEstateAgent",
-        "name": product.agent?.pengguna?.nama_lengkap || "Premier Asset",
+        "name": product.agent?.pengguna?.nama_lengkap || "Solusindo Aset",
         "telephone": product.agent?.nomor_whatsapp || product.agent?.pengguna?.nomor_telepon,
         "email": product.agent?.pengguna?.email,
       },

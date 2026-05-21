@@ -50,12 +50,12 @@ export default function MobileNav() {
           <Icon icon="solar:arrow-left-linear" className="text-xl" />
         </Link>
 
-        {/* 2. LOGO TENGAH (Logo SVG + Teks Premier Asset) */}
+        {/* 2. LOGO TENGAH (Logo SVG + Teks Solusindo Aset) */}
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none">
           {/* Gambar Logo */}
           <div className="relative w-8 h-8">
             <Image
-                src="/images/logo/logopremier.svg"
+                src="/images/logo/LogoSolusindoPremier.png"
                 alt="Logo Premier"
                 fill
                 className="object-contain"
@@ -96,13 +96,13 @@ export default function MobileNav() {
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
               className="fixed top-0 right-0 z-[61] h-full w-[80%] max-w-xs bg-[#121212] border-l border-white/10 shadow-2xl lg:hidden flex flex-col"
             >
-              {/* HEADER DRAWER (Logo SVG + Teks Premier Asset) */}
+              {/* HEADER DRAWER (Logo SVG + Teks Solusindo Aset) */}
               <div className="flex items-center justify-between p-5 border-b border-white/10 bg-[#0F0F0F]">
                 <div className="flex items-center gap-2">
                     {/* Gambar Logo */}
                     <div className="relative w-8 h-8">
                         <Image
-                            src="/images/logo/logopremier.svg"
+                            src="/images/logo/LogoSolusindoPremier.png"
                             alt="Logo Premier"
                             fill
                             className="object-contain"

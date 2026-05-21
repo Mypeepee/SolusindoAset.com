@@ -25,7 +25,7 @@ export default function AgentSidebar({ data }: AgentSidebarProps) {
     name: owner.name || "Agent Premier",
     avatar: avatarSrc,
     phone: owner.phone || "628123456789",
-    office: owner.office || "Premier Asset",
+    office: owner.office || "Solusindo Aset",
     rating: owner.rating || 5,
     area: owner.area || "Indonesia",
   };

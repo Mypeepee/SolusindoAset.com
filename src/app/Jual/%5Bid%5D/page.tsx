@@ -48,7 +48,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const product = await getProperty(params.id);
 
   if (!product) {
-    return { title: "Properti Tidak Ditemukan | Premier Asset" };
+    return { title: "Properti Tidak Ditemukan | Solusindo Aset" };
   }
 
   // Format Harga
@@ -89,7 +89,7 @@ export default async function DetailPage({ params }: Props) {
     sku: product.kode_properti,
     brand: {
       "@type": "Brand",
-      name: "Premier Asset",
+      name: "Solusindo Aset",
     },
     offers: {
       "@type": "Offer",

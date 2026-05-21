@@ -259,7 +259,7 @@ const AgentListClient: React.FC<AgentListClientProps> = ({ agents }) => {
         </h2>
         <p className="text-sm text-gray-400 max-w-md mx-auto">
           Saat ini belum ada agent yang tampil. Silakan kembali beberapa saat
-          lagi atau hubungi tim Premier Asset.
+          lagi atau hubungi tim Solusindo Aset.
         </p>
       </div>
     );

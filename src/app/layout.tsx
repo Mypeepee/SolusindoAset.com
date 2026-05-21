@@ -27,10 +27,10 @@ const dmSans = DM_Sans({
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"),
-  title: "Premier Asset - Satu Aplikasi untuk Semua Kebutuhan Properti Anda",
+  title: "Solusindo Aset - Satu Aplikasi untuk Semua Kebutuhan Properti Anda",
   description:
-    "Platform terintegrasi untuk jual beli properti Primary, Secondary, dan Aset Lelang. Temukan investasi properti terbaik dan aman bersama Premier Asset.",
-  icons: { icon: "/images/logo/logopremier.svg" },
+    "Platform terintegrasi untuk jual beli properti Primary, Secondary, dan Aset Lelang. Temukan investasi properti terbaik dan aman bersama Solusindo Aset.",
+  icons: { icon: "/images/logo/LogoSolusindoPremier.png" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

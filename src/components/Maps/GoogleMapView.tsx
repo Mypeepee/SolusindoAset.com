@@ -239,7 +239,7 @@ export default function GoogleMapView({ address, lat, lng }: GoogleMapViewProps)
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/images/logo/logopremier.svg"
+                src="/images/logo/LogoSolusindoPremier.png"
                 alt="P"
                 style={{ width: 36, height: 36, objectFit: "contain" }}
               />

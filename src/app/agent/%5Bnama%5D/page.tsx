@@ -48,7 +48,7 @@ export async function generateMetadata(
 
   return {
     title: `${nama} | Premier Agent`,
-    description: `Profil agent dan daftar listing dari ${nama} di Premier Asset.`,
+    description: `Profil agent dan daftar listing dari ${nama} di Solusindo Aset.`,
   };
 }
 

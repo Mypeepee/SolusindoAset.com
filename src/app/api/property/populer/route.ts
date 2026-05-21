@@ -60,7 +60,7 @@ function formatRow(item: any) {
       : null,
     agent_name: item.agent?.pengguna?.nama_lengkap ?? 'Agent Premier',
     agent_photo: normalizeAgentPhoto(item.agent?.foto_profil_url),
-    agent_office: item.agent?.nama_kantor ?? 'Premier Asset',
+    agent_office: item.agent?.nama_kantor ?? 'Solusindo Aset',
   };
 }
 

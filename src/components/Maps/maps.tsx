@@ -28,7 +28,7 @@ const premierIcon = L.divIcon({
       position:relative; 
       animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     ">
-      <img src="/images/logo/logopremier.svg" alt="P" style="width:36px; height:36px; object-fit:contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));" />
+      <img src="/images/logo/LogoSolusindoPremier.png" alt="P" style="width:36px; height:36px; object-fit:contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));" />
       <div style="
         position:absolute; 
         bottom:-12px; 

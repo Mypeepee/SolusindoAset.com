@@ -16,7 +16,7 @@ export async function GET(req: Request) {
     take: Math.min(Math.max(take, 1), 50),
     select: {
       id: true,
-      kode_transaksi: true,
+      id_transaksi: true,
       status_transaksi: true,
       tanggal_transaksi: true,
       harga_deal: true,
@@ -36,7 +36,7 @@ export async function GET(req: Request) {
 
   const data = rows.map((t) => ({
     id: t.id.toString(),
-    kode: t.kode_transaksi ?? `TR-${t.id.toString()}`,
+    kode: t.id_transaksi ?? `TR-${t.id.toString()}`,
     status: t.status_transaksi,
     date: t.tanggal_transaksi.toISOString().slice(0, 10),
     price: toNumberSafe(t.harga_deal),

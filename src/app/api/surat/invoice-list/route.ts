@@ -47,7 +47,7 @@ export async function GET() {
     include: {
       transaksi: {
         select: {
-          kode_transaksi: true,
+          id_transaksi: true,
           listing: { select: { alamat_lengkap: true, judul: true, kota: true, gambar: true } },
         },
       },
@@ -65,7 +65,7 @@ export async function GET() {
       keterangan:      inv.keterangan,
       nominal:         toNum(inv.nominal),
       tanggal_invoice: inv.tanggal_invoice.toISOString(),
-      kode_transaksi:  inv.transaksi.kode_transaksi,
+      kode_transaksi:  inv.transaksi.id_transaksi,
       alamat_property: inv.transaksi.listing.alamat_lengkap ?? inv.transaksi.listing.kota,
       foto_url,
       sudah_kuitansi:  inv.id_kuitansi !== null,

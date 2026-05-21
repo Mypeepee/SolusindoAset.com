@@ -217,7 +217,7 @@ export default function SignUp({ closeModal, openSigninModal }: SignUpProps) {
         <div className="flex items-center gap-3">
           <div className="relative h-12 w-12 shrink-0">
             <Image
-              src="/images/logo/logopremier.svg"
+              src="/images/logo/LogoSolusindoPremier.png"
               alt="Premier"
               fill
               priority

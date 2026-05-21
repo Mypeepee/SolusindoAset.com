@@ -316,7 +316,7 @@ export default async function SearchPage({ searchParams }: Props) {
 
       agent_name: item.agent?.pengguna?.nama_lengkap || "Agent Premier",
       agent_photo: agentPhotoUrl,
-      agent_office: item.agent?.nama_kantor || "Premier Asset",
+      agent_office: item.agent?.nama_kantor || "Solusindo Aset",
     };
   });
 

@@ -165,7 +165,7 @@ const MobileNav: React.FC<MobileNavProps> = ({
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none">
           <div className="relative w-8 h-8">
             <Image
-              src="/images/logo/logopremier.svg"
+              src="/images/logo/LogoSolusindoPremier.png"
               alt="Logo Premier"
               fill
               className="object-contain"
@@ -173,8 +173,8 @@ const MobileNav: React.FC<MobileNavProps> = ({
             />
           </div>
           <span className="text-xl font-bold tracking-tight">
-            <span className="text-white">Premier</span>
-            <span className="text-[#86efac] ml-1">Asset</span>
+            <span className="text-white">Solusindo</span>
+            <span className="text-[#86efac] ml-1">Aset</span>
           </span>
         </div>
 
@@ -237,7 +237,7 @@ const MobileNav: React.FC<MobileNavProps> = ({
                 <div className="flex items-center gap-3">
                   <div className="relative w-9 h-9">
                     <Image
-                      src="/images/logo/logopremier.svg"
+                      src="/images/logo/LogoSolusindoPremier.png"
                       alt="Logo Premier"
                       fill
                       className="object-contain"
@@ -245,7 +245,7 @@ const MobileNav: React.FC<MobileNavProps> = ({
                   </div>
                   <div className="flex flex-col">
                     <span className="text-base font-bold text-white leading-tight">
-                      Premier Asset
+                      Solusindo Aset
                     </span>
                     <span className="text-[10px] text-gray-400">
                       Portal properti modern

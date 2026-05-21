@@ -289,15 +289,21 @@ model ProjectArusKas {
 
 model Transaksi {
   id                       BigInt               @id @default(autoincrement())
-  kode_transaksi           String?              @unique @db.VarChar(20)
+  id_transaksi             String?              @unique @db.VarChar(50)
   id_listing               BigInt
   id_agent                 String               @db.VarChar(20)
   id_klien                 String?              @db.VarChar(20)
+  gambar_ktp_klien         String?
+  nama_lengkap_klien       String?              @db.VarChar(200)
+  nik_klien                String?              @db.VarChar(20)
+  alamat_klien             String?
   jenis_transaksi          jenis_transaksi_enum
   tipe_komisi              String               @db.VarChar(50)
   harga_deal               BigInt
   harga_promo_deal         BigInt?              @default(0)
   harga_limit              Decimal?             @db.Decimal(20, 2)
+  termasuk_balik_nama      Boolean              @default(false)
+  termasuk_biaya_eksekusi  Boolean              @default(false)
   harga_bidding            Decimal?             @db.Decimal(20, 2)
   selisih                  BigInt?
   kenaikan_dari_limit      Decimal?             @db.Decimal(10, 6)
@@ -306,6 +312,7 @@ model Transaksi {
   biaya_pengosongan        BigInt?
   royalty_fee              BigInt               @default(0)
   cobroke_fee              BigInt               @default(0)
+  total_biaya              BigInt               @default(0)
   tanggal_transaksi        DateTime             @db.Date
   rating                   Int?
   comment                  String?              @db.VarChar(250)
