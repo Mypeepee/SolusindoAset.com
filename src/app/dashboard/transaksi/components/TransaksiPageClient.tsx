@@ -9,6 +9,7 @@ import ProgressTransaksiView from "./ProgressTransaksiView";
 export default function TransaksiPageClient() {
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab") === "progress" ? "progress" : "pilih";
+  const highlightKode = searchParams.get("kode") ?? undefined;
   const [tab, setTab] = useState<"pilih" | "progress">(initialTab);
   const [closingCount, setClosingCount] = useState<number | null>(null);
 
@@ -184,7 +185,7 @@ export default function TransaksiPageClient() {
         {tab === "pilih" ? (
           <PilihListingView />
         ) : (
-          <ProgressTransaksiView />
+          <ProgressTransaksiView highlightKode={highlightKode} />
         )}
       </div>
     </div>

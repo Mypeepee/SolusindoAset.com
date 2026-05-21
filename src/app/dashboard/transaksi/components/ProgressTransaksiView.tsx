@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Icon } from "@iconify/react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -357,10 +357,14 @@ function StageStepper({
 function TransaksiCard({
   row,
   selected,
+  highlighted,
+  cardRef,
   onClick,
 }: {
   row: TransaksiRow;
   selected: boolean;
+  highlighted?: boolean;
+  cardRef?: React.RefCallback<HTMLButtonElement>;
   onClick: () => void;
 }) {
   const stages   = getStages(row.jenis);
@@ -377,12 +381,15 @@ function TransaksiCard({
   return (
     <button
       type="button"
+      ref={cardRef}
       onClick={onClick}
       className={cx(
         "group w-full rounded-2xl border p-3.5 text-left transition-all",
-        selected
-          ? "border-cyan-400/30 bg-gradient-to-b from-cyan-400/[0.08] to-zinc-950/60 shadow-[0_0_0_1px_rgba(34,211,238,0.10),0_8px_28px_rgba(34,211,238,0.08)]"
-          : "border-zinc-800/70 bg-zinc-950/30 hover:border-zinc-700 hover:bg-zinc-900/30",
+        highlighted
+          ? "border-emerald-400/50 bg-gradient-to-b from-emerald-400/[0.10] to-zinc-950/60 shadow-[0_0_0_2px_rgba(52,211,153,0.25),0_8px_32px_rgba(52,211,153,0.15)] animate-pulse-once"
+          : selected
+            ? "border-cyan-400/30 bg-gradient-to-b from-cyan-400/[0.08] to-zinc-950/60 shadow-[0_0_0_1px_rgba(34,211,238,0.10),0_8px_28px_rgba(34,211,238,0.08)]"
+            : "border-zinc-800/70 bg-zinc-950/30 hover:border-zinc-700 hover:bg-zinc-900/30",
       )}
     >
       <div className="flex items-start gap-3">
@@ -773,7 +780,7 @@ function SkeletonKpi() {
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 
-export default function ProgressTransaksiView() {
+export default function ProgressTransaksiView({ highlightKode }: { highlightKode?: string } = {}) {
   const [rows, setRows]         = useState<TransaksiRow[]>([]);
   const [stats, setStats]       = useState<Stats>({ total: 0, totalNilai: 0, inProgress: 0, selesai: 0 });
   const [loading, setLoading]   = useState(true);
@@ -783,6 +790,8 @@ export default function ProgressTransaksiView() {
   const [search, setSearch]     = useState("");
   const [sheetVisible, setSheetVisible]   = useState(false);
   const [sheetAnimated, setSheetAnimated] = useState(false);
+  const [activeHighlight, setActiveHighlight] = useState<string | null>(highlightKode ?? null);
+  const highlightRef = useRef<HTMLButtonElement | null>(null);
 
   // Reset stage pill when jenis changes
   function handleJenisChange(jenis: JenisKey) {
@@ -818,6 +827,21 @@ export default function ProgressTransaksiView() {
     const t = setTimeout(run, search ? 350 : 0);
     return () => { cancelled = true; clearTimeout(t); };
   }, [search, jenisFilter, stageFilter]);
+
+  // Auto-select + scroll ke card yang baru disimpan
+  useEffect(() => {
+    if (!highlightKode || loading || rows.length === 0) return;
+    const match = rows.find((r) => r.kode === highlightKode);
+    if (!match) return;
+    setSelected(match);
+    setActiveHighlight(highlightKode);
+    setTimeout(() => {
+      highlightRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
+    // hapus highlight setelah 3 detik
+    const t = setTimeout(() => setActiveHighlight(null), 3000);
+    return () => clearTimeout(t);
+  }, [highlightKode, loading, rows]);
 
   async function handleStageChange(id: string, status: string) {
     const update = (r: TransaksiRow) => (r.id === id ? { ...r, status } : r);
@@ -980,6 +1004,8 @@ export default function ProgressTransaksiView() {
                 key={row.id}
                 row={row}
                 selected={selected?.id === row.id}
+                highlighted={activeHighlight === row.kode}
+                cardRef={activeHighlight === row.kode ? (el) => { highlightRef.current = el; } : undefined}
                 onClick={() => openDetail(row)}
               />
             ))

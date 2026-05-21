@@ -1639,9 +1639,6 @@ export default function TabPembagian({
       }
       // simpan kode untuk ditampilkan di success state modal
       (handleConfirmSave as any).__lastKode = json.kode;
-
-      // Redirect ke tab Progress Transaksi
-      router.push("/dashboard/transaksi?tab=progress");
     } catch (err: any) {
       throw err; // lempar ke modal supaya modal yang handle error state
     }
@@ -1967,6 +1964,12 @@ export default function TabPembagian({
         open={showConfirm}
         onClose={() => setShowConfirm(false)}
         onConfirm={handleConfirmSave}
+        onSuccess={(kode) => {
+          const url = kode
+            ? `/dashboard/transaksi?tab=progress&kode=${encodeURIComponent(kode)}`
+            : "/dashboard/transaksi?tab=progress";
+          window.location.href = url;
+        }}
         listing={listing}
         skemaPenjualan={skemaPenjualan}
         selisihFinal={selisihFinal}
@@ -2545,6 +2548,7 @@ function ConfirmSimpanModal({
   open,
   onClose,
   onConfirm,
+  onSuccess,
   listing,
   skemaPenjualan,
   selisihFinal,
@@ -2556,6 +2560,7 @@ function ConfirmSimpanModal({
   open: boolean;
   onClose: () => void;
   onConfirm: () => Promise<void>;
+  onSuccess: (kode: string | null) => void;
   listing: Listing;
   skemaPenjualan: SkemaPenjualan;
   selisihFinal: number;
@@ -2577,8 +2582,13 @@ function ConfirmSimpanModal({
       await onConfirm();
       const kode = (onConfirm as any).__lastKode ?? null;
       setSavedKode(kode);
-      // tutup modal setelah singkat agar user lihat success state
-      setTimeout(() => { setSaving(false); setSavedKode(null); onClose(); }, 1800);
+      // tutup modal setelah singkat, lalu navigate
+      setTimeout(() => {
+        setSaving(false);
+        setSavedKode(null);
+        onClose();
+        onSuccess(kode);
+      }, 800);
     } catch (err: any) {
       setErrorMsg(err?.message ?? "Terjadi kesalahan");
       setSaving(false);
