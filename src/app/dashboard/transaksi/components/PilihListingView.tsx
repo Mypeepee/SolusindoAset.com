@@ -292,7 +292,7 @@ export default function PilihListingView() {
     if (!isDesktop) setMobileOpen(false);
 
     // optional notif
-    toast.success("Masuk halaman closing", { description: `Listing ${id}` });
+    toast.success("Buat transaksi", { description: `Listing ${id}` });
 
     // navigate
     router.push(`/closing/${encodeURIComponent(id)}`);
@@ -356,11 +356,14 @@ export default function PilihListingView() {
             selectedListing ? (
               <button
                 type="button"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                onClick={() => handleClosing(selectedListing.id)} // ✅ connect
+                onClick={() => handleClosing(selectedListing.id)}
+                className="group relative inline-flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl px-4 py-3 text-sm font-bold text-white transition-all duration-300 active:scale-[0.97] focus:outline-none"
+                style={{ background: "linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%)" }}
               >
-                <Icon icon="solar:check-circle-linear" className="text-lg" />
-                Closing
+                <span className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-20deg] bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
+                <span className="pointer-events-none absolute inset-0 rounded-2xl opacity-0 shadow-[0_0_28px_rgba(16,185,129,0.7)] transition-opacity duration-300 group-hover:opacity-100" />
+                <Icon icon="solar:hand-shake-bold-duotone" className="relative text-lg" />
+                <span className="relative">Buat Transaksi</span>
               </button>
             ) : null
           }

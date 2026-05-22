@@ -82,10 +82,12 @@ export default function ClosingShell({
   listing,
   agent,
   leader,
+  statusTransaksi,
 }: {
   listing: Listing;
   agent: Agent | null;
   leader: TeamLeader | null;
+  statusTransaksi: string | null;
 }) {
   const city = safe(listing.kota) || "-";
   const jenis = transaksiLabel(listing.jenis_transaksi);
@@ -134,8 +136,11 @@ export default function ClosingShell({
     await fetchRiwayatData();
   }
 
-  const priceMain = listing.harga_promo ?? listing.harga;
-  const hasPromo = !!listing.harga_promo && Number(listing.harga_promo) > 0;
+  const priceMain = (listing as any).nilai_limit_lelang ?? listing.harga;
+  const tanggalLelang = (listing as any).tanggal_lelang
+    ? new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" })
+        .format(new Date((listing as any).tanggal_lelang))
+    : null;
 
   const imgUrl =
     safe((listing as any).imageUrl) ||
@@ -492,14 +497,6 @@ export default function ClosingShell({
                         <div className="mt-1 break-words text-[22px] font-semibold tracking-tight text-white sm:text-[28px] sm:leading-none xl:text-[32px]">
                           <Money value={priceMain} />
                         </div>
-                        {hasPromo ? (
-                          <div className="mt-1 text-xs text-zinc-300/70">
-                            Harga normal:{" "}
-                            <span className="line-through">
-                              <Money value={listing.harga} />
-                            </span>
-                          </div>
-                        ) : null}
                       </div>
 
                       <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/5 text-emerald-100">
@@ -513,10 +510,10 @@ export default function ClosingShell({
                     <div className="mt-4 grid grid-cols-2 gap-2">
                       <div className="rounded-2xl border border-white/10 bg-zinc-950/20 p-3">
                         <div className="text-[11px] text-zinc-300/70">
-                          Transaksi
+                          Tanggal Lelang
                         </div>
                         <div className="mt-1 truncate text-sm font-semibold text-white">
-                          {jenis}
+                          {tanggalLelang ?? "-"}
                         </div>
                       </div>
 
@@ -540,6 +537,7 @@ export default function ClosingShell({
             agent={agent}
             leader={leader}
             skemaPenjualan={skema}
+            statusTransaksi={statusTransaksi}
             onAgentChange={(name) => setAgentName(name || "-")}
             onLeaderChange={(name) => setLeaderName(name || "-")}
           />

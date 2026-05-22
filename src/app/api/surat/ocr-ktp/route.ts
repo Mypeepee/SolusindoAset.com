@@ -352,6 +352,42 @@ function isValidNIK(nik: string): boolean {
 }
 
 /**
+ * Normalize OCR-misread characters in a NIK string.
+ * NIK is always 16 digits — map common letter↔digit confusions then strip non-digits.
+ * Mapping based on visual similarity under KTP background pattern noise.
+ */
+function normalizeNikOcr(raw: string): string {
+  // Per-character replacement before stripping non-digits
+  const charMap: Record<string, string> = {
+    // 0-like
+    O: "0", o: "0", Q: "0", D: "0", U: "0", u: "0",
+    // 1-like
+    I: "1", i: "1", l: "1", L: "1", "|": "1",
+    // 2-like
+    Z: "2", z: "2",
+    // 3-like
+    E: "3", e: "3",
+    // 4-like
+    A: "4",
+    // 5-like
+    S: "5", s: "5",
+    // 6-like
+    G: "6", b: "6",
+    // 7-like
+    T: "7",
+    // 8-like
+    B: "8",
+    // 9-like
+    g: "9", q: "9",
+  };
+  return raw
+    .split("")
+    .map((c) => charMap[c] ?? c)
+    .join("")
+    .replace(/\D/g, "");
+}
+
+/**
  * Decode birth date from NIK (validation cross-check)
  * NIK format: PPRRSS DDMMYY NNNN
  * - For females: DD = actual day + 40
@@ -398,10 +434,23 @@ function parseKTP(rawText: string) {
 
   // ── NIK: 16 digit dari teks penuh (paling reliable) ─────────────────
   let nik = rawText.replace(/\D/g, "").match(/(\d{16})/)?.[1] ?? "";
-  // Validasi: kalau invalid, coba dari field langsung
+
+  // Fallback 1: field NIK raw (tanpa normalisasi)
   if (!isValidNIK(nik)) {
     const fromField = findField(fields, "NIK").replace(/\D/g, "");
     if (isValidNIK(fromField)) nik = fromField;
+  }
+
+  // Fallback 2: normalisasi karakter OCR dari field NIK (E→3, O→0, S→5, dll)
+  if (!isValidNIK(nik)) {
+    const normalized = normalizeNikOcr(findField(fields, "NIK"));
+    if (isValidNIK(normalized)) nik = normalized;
+  }
+
+  // Fallback 3: normalisasi dari seluruh raw text, ambil 16 digit pertama
+  if (!isValidNIK(nik)) {
+    const normalizedFull = normalizeNikOcr(rawText).match(/(\d{16})/)?.[1] ?? "";
+    if (isValidNIK(normalizedFull)) nik = normalizedFull;
   }
 
   // ── Provinsi & Kota ─────────────────────────────────────────────────

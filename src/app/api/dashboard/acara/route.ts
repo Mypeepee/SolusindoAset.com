@@ -27,29 +27,63 @@ export async function GET(request: NextRequest) {
       where.tanggal_mulai = { gte: start, lte: end };
     }
 
-    const acara = await prisma.acara.findMany({
-      where,
-      include: {
-        agent: {
-          select: {
-            id_agent: true,
-            pengguna: {
-              select: { nama_lengkap: true },
+    const session = await getServerSession(authOptions);
+    const agentId = (session?.user as any)?.agentId as string | undefined;
+
+    const [acara, mouTransaksi] = await Promise.all([
+      prisma.acara.findMany({
+        where,
+        include: {
+          agent: {
+            select: {
+              id_agent: true,
+              pengguna: { select: { nama_lengkap: true } },
             },
           },
-        },
-        listing: {
-          select: {
-            id_property: true,
-            judul: true,
-            alamat_lengkap: true,
+          listing: {
+            select: { id_property: true, judul: true, alamat_lengkap: true },
           },
         },
-      },
-      orderBy: { tanggal_mulai: "asc" },
-    });
+        orderBy: { tanggal_mulai: "asc" },
+      }),
+      // Tambah MOU transaksi yang punya tanggal_lelang di bulan ini
+      (year && month) ? prisma.mou.findMany({
+        where: {
+          tanggal_transaksi: {
+            gte: new Date(Number(year), Number(month) - 1, 1),
+            lte: new Date(Number(year), Number(month), 0, 23, 59, 59),
+          },
+          ...(agentId ? { id_agent: agentId } : {}),
+        },
+        select: {
+          id: true,
+          id_transaksi: true,
+          tanggal_transaksi: true,
+          status: true,
+          listing: { select: { judul: true, kota: true, alamat_lengkap: true } },
+          agent: { select: { id_agent: true, pengguna: { select: { nama_lengkap: true } } } },
+        },
+      }) : Promise.resolve([]),
+    ]);
 
-    return NextResponse.json(serializeBigInt(acara), { status: 200 });
+    // Konversi MOU ke format event kalender
+    const mouEvents = mouTransaksi.map((m) => ({
+      id_acara: `MOU-${m.id}`,
+      judul_acara: `Lelang: ${m.listing.judul ?? m.listing.kota ?? "Properti"}`,
+      deskripsi: m.listing.alamat_lengkap ?? null,
+      tipe_acara: "CLOSING",
+      tanggal_mulai: m.tanggal_transaksi,
+      tanggal_selesai: m.tanggal_transaksi,
+      status_acara: m.status === "proses" ? "SCHEDULED" : "COMPLETED",
+      lokasi: m.listing.kota ?? null,
+      agent: m.agent,
+      listing: { id_property: null, judul: m.listing.judul, alamat_lengkap: m.listing.alamat_lengkap },
+      _isMou: true,
+      id_mou: m.id.toString(),
+      kode: m.id_transaksi,
+    }));
+
+    return NextResponse.json(serializeBigInt([...acara, ...mouEvents]), { status: 200 });
   } catch (error) {
     console.error("Error fetching acara:", error);
     return NextResponse.json({ error: "Gagal mengambil data acara" }, { status: 500 });

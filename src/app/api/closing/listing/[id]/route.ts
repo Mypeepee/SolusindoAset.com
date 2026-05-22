@@ -1,19 +1,14 @@
-// src/app/api/closing/listing/[id]/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonSafeNumber } from "@/lib/jsonSafeNumber";
 
 function splitImages(gambar: any): string[] {
   const raw = (gambar ?? "").toString();
-  return raw
-    .split(",")
-    .map((x) => x.trim())
-    .filter(Boolean);
+  return raw.split(",").map((x: string) => x.trim()).filter(Boolean);
 }
 
 function firstImage(gambar: any): string {
-  const arr = splitImages(gambar);
-  return arr[0] || "/placeholder.jpg";
+  return splitImages(gambar)[0] || "/placeholder.jpg";
 }
 
 export async function GET(
@@ -28,10 +23,7 @@ export async function GET(
     const listing = await prisma.listing.findFirst({
       where: isNumericId ? { id_property: BigInt(raw) } : { slug: raw },
       include: {
-        agent: {
-          // biar FE bisa pakai agent_nama tanpa bingung
-          include: { pengguna: true },
-        },
+        agent: { include: { pengguna: true } },
       },
     });
 
@@ -42,9 +34,9 @@ export async function GET(
       );
     }
 
-    // Leader (optional)
+    // Team Leader
     let leader = null as any;
-    const tlId = (listing.agent as any)?.team_leader_id;
+    const tlId = (listing.agent as any)?.id_team_leader;
     if (tlId) {
       leader = await prisma.agent.findUnique({
         where: { id_agent: tlId },
@@ -52,29 +44,45 @@ export async function GET(
       });
     }
 
-    // ✅ normalize gambar => imageUrl + list
-    const gambarList = splitImages((listing as any).gambar);
-    const imageUrl = firstImage((listing as any).gambar);
+    // MOU aktif (bukan kalah/batal)
+    const mouAktif = await prisma.mou.findFirst({
+      where: {
+        id_listing: listing.id_property,
+        status: { notIn: ["kalah", "batal"] },
+      },
+      orderBy: { dibuat_pada: "desc" },
+      select: {
+        id: true,
+        id_transaksi: true,
+        status: true,
+        mou_generated: true,
+        invoice_utm_generated: true,
+      },
+    });
 
-    // ✅ optional: agent display name (CO PIC)
-    const agentNama =
+    const gambarList = splitImages((listing as any).gambar);
+    const imageUrl   = firstImage((listing as any).gambar);
+    const agentNama  =
       (listing.agent as any)?.pengguna?.nama_lengkap ??
       (listing.agent as any)?.nama_kantor ??
-      (listing as any).id_agent ??
       "-";
 
     return NextResponse.json(
       jsonSafeNumber({
         ok: true,
         data: {
-          listing: {
-            ...listing,
-            imageUrl, // ✅ foto pertama
-            gambar_list: gambarList, // ✅ array semua foto
-            agent_nama: agentNama, // ✅ display name
-          },
+          listing: { ...listing, imageUrl, gambar_list: gambarList, agent_nama: agentNama },
           agent: listing.agent ?? null,
           leader,
+          mou: mouAktif
+            ? {
+                id: mouAktif.id.toString(),
+                kode: mouAktif.id_transaksi,
+                status: mouAktif.status,
+                mou_generated: mouAktif.mou_generated,
+                invoice_utm_generated: mouAktif.invoice_utm_generated,
+              }
+            : null,
         },
       })
     );

@@ -24,7 +24,7 @@ model Pengguna {
   dibuat_pada      DateTime?        @default(now()) @db.Timestamptz(6)
   diperbarui_pada  DateTime?        @default(now()) @db.Timestamptz(6)
   agent            Agent?
-  transaksiKlien   Transaksi[]      @relation("TransaksiKlien")
+  mouKlien         Mou[]            @relation("MouKlien")
 
   @@index([kode_referral], map: "idx_kode_referral")
   @@index([email], map: "idx_pengguna_email")
@@ -73,7 +73,7 @@ model Agent {
   projectInvestor        ProjectInvestor[]
   projectSelesaiInvestor ProjectSelesaiInvestor[]
   riwayatPoin            RiwayatPoin[]
-  transaksiAgent         Transaksi[]              @relation("TransaksiAgent")
+  mouAgent               Mou[]                    @relation("MouAgent")
 
   @@index([jabatan], map: "idx_agent_jabatan")
   @@index([nama_kantor], map: "idx_agent_kantor")
@@ -130,7 +130,7 @@ model Listing {
   pilihanPemilu      PilihanPemilu[]
   project            Project[]
   projectSelesai     ProjectSelesai[]
-  transaksi          Transaksi[]
+  mou                Mou[]
 
   @@index([kota], map: "idx_property_lokasi")
   @@index([jenis_transaksi], map: "idx_property_jenis")
@@ -287,64 +287,80 @@ model ProjectArusKas {
   @@map("project_arus_kas")
 }
 
+// ── MOU: data pra-closing (dibuat saat buat transaksi) ───────────────────────
+model Mou {
+  id                    BigInt               @id @default(autoincrement())
+  id_transaksi          String?              @unique @db.VarChar(50)
+  id_listing            BigInt
+  id_agent              String               @db.VarChar(20)
+  id_klien              String?              @db.VarChar(20)
+  jenis_transaksi       jenis_transaksi_enum
+  tipe_komisi           String               @db.VarChar(50)
+  gambar_ktp_klien      String?
+  nama_lengkap_klien    String?              @db.VarChar(200)
+  nik_klien             String?              @db.VarChar(20)
+  alamat_klien          String?
+  harga_deal            BigInt?
+  harga_limit           Decimal?             @db.Decimal(20, 2)
+  persentase_komisi     Decimal?             @db.Decimal(10, 6)
+  biaya_baliknama       BigInt?
+  biaya_pengosongan     BigInt?
+  termasuk_baliknama    Boolean              @default(false)
+  termasuk_pengosongan  Boolean              @default(false)
+  maksimum_bidding      Decimal?             @db.Decimal(20, 2)
+  agent_luar_nama       String?              @db.VarChar(100)
+  agent_luar_kantor     String?              @db.VarChar(100)
+  agent_luar_telepon    String?              @db.VarChar(20)
+  tanggal_transaksi     DateTime?            @db.Date
+  status                status_mou_enum      @default(proses)
+  mou_generated         Boolean              @default(false)
+  invoice_utm_generated Boolean              @default(false)
+  dibuat_pada           DateTime             @default(now()) @db.Timestamptz(6)
+  diperbarui_pada       DateTime             @default(now()) @db.Timestamptz(6)
+  listing               Listing              @relation(fields: [id_listing], references: [id_property], map: "mou_listing_fk")
+  agent                 Agent                @relation("MouAgent", fields: [id_agent], references: [id_agent], map: "mou_agent_fk")
+  klien                 Pengguna?            @relation("MouKlien", fields: [id_klien], references: [id_pengguna], map: "mou_klien_fk")
+  transaksi             Transaksi?
+
+  @@index([id_listing], map: "mou_listing_idx")
+  @@index([id_agent], map: "mou_agent_idx")
+  @@map("mou")
+}
+
+// ── Transaksi: data realisasi closing (dibuat setelah closing dikonfirmasi) ───
 model Transaksi {
-  id                       BigInt               @id @default(autoincrement())
-  id_transaksi             String?              @unique @db.VarChar(50)
-  id_listing               BigInt
-  id_agent                 String               @db.VarChar(20)
-  id_klien                 String?              @db.VarChar(20)
-  gambar_ktp_klien         String?
-  nama_lengkap_klien       String?              @db.VarChar(200)
-  nik_klien                String?              @db.VarChar(20)
-  alamat_klien             String?
-  jenis_transaksi          jenis_transaksi_enum
-  tipe_komisi              String               @db.VarChar(50)
-  harga_deal               BigInt
-  harga_promo_deal         BigInt?              @default(0)
-  harga_limit              Decimal?             @db.Decimal(20, 2)
-  termasuk_balik_nama      Boolean              @default(false)
-  termasuk_biaya_eksekusi  Boolean              @default(false)
+  id_transaksi             String               @id @db.VarChar(50)
   harga_bidding            Decimal?             @db.Decimal(20, 2)
   selisih                  BigInt?
   kenaikan_dari_limit      Decimal?             @db.Decimal(10, 6)
-  persentase_komisi        Decimal?             @db.Decimal(10, 6)
   biaya_baliknama          BigInt?
   biaya_pengosongan        BigInt?
-  royalty_fee              BigInt               @default(0)
   cobroke_fee              BigInt               @default(0)
-  total_biaya              BigInt               @default(0)
   tanggal_transaksi        DateTime             @db.Date
   rating                   Int?
   comment                  String?              @db.VarChar(250)
   catatan                  String?
-  dibuat_pada              DateTime             @default(now()) @db.Timestamptz(6)
-  diperbarui_pada          DateTime             @default(now()) @db.Timestamptz(6)
-  status_transaksi         String               @default("CLOSING") @db.VarChar(50)
   pendapatan_bersih_kantor BigInt               @default(0)
   thc_agent                BigInt               @default(0)
-  agent_luar_nama          String?              @db.VarChar(100)
-  agent_luar_kantor        String?              @db.VarChar(100)
-  agent_luar_telepon       String?              @db.VarChar(20)
+  status_transaksi         status_transaksi_enum @default(closing)
+  dibuat_pada              DateTime             @default(now()) @db.Timestamptz(6)
+  diperbarui_pada          DateTime             @default(now()) @db.Timestamptz(6)
+  mou                      Mou                  @relation(fields: [id_transaksi], references: [id_transaksi], map: "transaksi_mou_fk")
   detail                   DetailTransaksi[]
   invoice                  Invoice[]
-  agent                    Agent                @relation("TransaksiAgent", fields: [id_agent], references: [id_agent], map: "transaksi_agent_fk")
-  klien                    Pengguna?            @relation("TransaksiKlien", fields: [id_klien], references: [id_pengguna], map: "transaksi_klien_fk")
-  listing                  Listing              @relation(fields: [id_listing], references: [id_property], map: "transaksi_listing_fk")
 
-  @@index([id_agent], map: "transaksi_agent_idx")
-  @@index([id_listing], map: "transaksi_listing_idx")
   @@index([tanggal_transaksi], map: "transaksi_date_idx")
   @@map("transaksi")
 }
 
 model DetailTransaksi {
   id           BigInt    @id @default(autoincrement())
-  id_transaksi BigInt
+  id_transaksi String    @db.VarChar(50)
   id_agent     String    @db.VarChar(50)
   role         String    @db.VarChar(50)
   pendapatan   BigInt
   agent        Agent     @relation(fields: [id_agent], references: [id_agent], onDelete: Cascade, map: "detail_transaksi_agent_fk")
-  transaksi    Transaksi @relation(fields: [id_transaksi], references: [id], onDelete: Cascade, map: "detail_transaksi_trans_fk")
+  transaksi    Transaksi @relation(fields: [id_transaksi], references: [id_transaksi], onDelete: Cascade, map: "detail_transaksi_trans_fk")
 
   @@unique([id_transaksi, id_agent, role], map: "detail_transaksi_unique_per_role")
   @@index([id_agent], map: "detail_transaksi_agent_idx")
@@ -355,13 +371,13 @@ model DetailTransaksi {
 model Invoice {
   id_invoice       String    @id @db.VarChar(50)
   id_kuitansi      String?   @db.VarChar(50)
-  id_transaksi     BigInt
+  id_transaksi     String    @db.VarChar(50)
   ditagihkan_ke    String    @db.VarChar(255)
   keterangan       String
   nominal          BigInt
   tanggal_invoice  DateTime  @db.Timestamptz(6)
   tanggal_kuitansi DateTime? @db.Timestamptz(6)
-  transaksi        Transaksi @relation(fields: [id_transaksi], references: [id], map: "invoice_transaksi_fk")
+  transaksi        Transaksi @relation(fields: [id_transaksi], references: [id_transaksi], map: "invoice_transaksi_fk")
 
   @@index([id_transaksi], map: "idx_invoice_transaksi")
   @@index([tanggal_invoice], map: "idx_invoice_tanggal")
@@ -802,4 +818,33 @@ enum kategori_arus_kas_enum {
 enum status_arus_kas_enum {
   tercatat
   dibatalkan
+}
+
+enum status_mou_enum {
+  proses
+  closing
+  kalah
+  batal
+}
+
+enum status_transaksi_enum {
+  uang_tanda_jaminan
+  closing
+  kalah
+  batal
+  pengurusan_kuitansi
+  kuitansi_selesai
+  pengurusan_risalah_lelang
+  risalah_lelang_selesai
+  pengurusan_balik_nama
+  balik_nama_selesai
+  mediasi
+  mediasi_gagal
+  permohonan_eksekusi
+  aanmaning
+  penetapan
+  rakor
+  pelaksanaan_eksekusi
+  serah_terima_kunci
+  selesai
 }

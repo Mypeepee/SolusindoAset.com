@@ -11,6 +11,7 @@ import {
 import { useRouter } from "next/navigation";
 import type { Listing, Agent } from "../../page";
 import type { SkemaPenjualan } from "./TabTransaksi.client";
+import type { KlienData } from "./TabKlien";
 import Money from "../ui/Money";
 import { Icon } from "@iconify/react";
 
@@ -106,6 +107,7 @@ type Props = {
   skemaPenjualan: SkemaPenjualan;
   agents?: AgentOption[];
   teamLeaderName?: string;
+  klienData?: KlienData;
   onSave?: (payload: SavePayload) => void;
   onBack?: () => void;
 };
@@ -862,6 +864,7 @@ export default function TabPembagian({
   skemaPenjualan,
   agents = [],
   teamLeaderName = "",
+  klienData,
   onSave,
   onBack,
 }: Props) {
@@ -1604,6 +1607,12 @@ export default function TabPembagian({
         agentLuarNama: persistedAgentSelection.agentLuarNama || null,
         agentLuarKantor: persistedAgentSelection.agentLuarKantor || null,
         agentLuarTelepon: teleponFormatted,
+      }),
+      ...(klienData && {
+        id_klien: klienData.id_klien || null,
+        nama_lengkap_klien: klienData.nama_klien || null,
+        nik_klien: klienData.nik_klien || null,
+        alamat_klien: klienData.alamat_klien || null,
       }),
     };
 

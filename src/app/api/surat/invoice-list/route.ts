@@ -48,15 +48,20 @@ export async function GET() {
       transaksi: {
         select: {
           id_transaksi: true,
-          listing: { select: { alamat_lengkap: true, judul: true, kota: true, gambar: true } },
+          mou: {
+            select: {
+              listing: { select: { alamat_lengkap: true, judul: true, kota: true, gambar: true } },
+            },
+          },
         },
       },
     },
   });
 
   const result = rows.map((inv) => {
-    const rawGambar = extractFirstImageUrl(inv.transaksi.listing.gambar);
-    const foto_url  = toProxyImg(rawGambar);
+    const listing    = inv.transaksi.mou?.listing;
+    const rawGambar  = extractFirstImageUrl(listing?.gambar);
+    const foto_url   = toProxyImg(rawGambar);
 
     return {
       id_invoice:      inv.id_invoice,
@@ -66,7 +71,7 @@ export async function GET() {
       nominal:         toNum(inv.nominal),
       tanggal_invoice: inv.tanggal_invoice.toISOString(),
       kode_transaksi:  inv.transaksi.id_transaksi,
-      alamat_property: inv.transaksi.listing.alamat_lengkap ?? inv.transaksi.listing.kota,
+      alamat_property: listing?.alamat_lengkap ?? listing?.kota ?? "",
       foto_url,
       sudah_kuitansi:  inv.id_kuitansi !== null,
     };

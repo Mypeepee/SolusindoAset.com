@@ -624,17 +624,29 @@ function AgentSelector({
   );
 }
 
+export type AgentSelection = {
+  id_agent: string;
+  isLuar: boolean;
+  luarNama?: string;
+  luarKantor?: string;
+  luarTelepon?: string;
+};
+
 export default function TabAgent({
   agent,
   onNext,
+  onBack,
   onAgentChange,
   onLeaderChange,
+  onAgentSelect,
 }: {
   agent: Agent | null;
   leader?: unknown;
   onNext?: () => void;
+  onBack?: () => void;
   onAgentChange?: (name: string) => void;
   onLeaderChange?: (name: string) => void;
+  onAgentSelect?: (selection: AgentSelection | null) => void;
 }) {
   const [data, setData] = useState<AgentRelationsResponse>({
     agents: [],
@@ -931,6 +943,16 @@ export default function TabAgent({
     onLeaderChange?.(displayedLeader?.nama ?? "");
   }, [displayedLeader?.nama]);
 
+  // sync pilihan agent untuk keperluan save
+  useEffect(() => {
+    if (!selectedAgentId) { onAgentSelect?.(null); return; }
+    if (isCobroke) {
+      onAgentSelect?.({ id_agent: selectedAgentId, isLuar: true, luarNama: agentLuarNama, luarKantor: agentLuarKantor, luarTelepon: agentLuarTelepon });
+    } else {
+      onAgentSelect?.({ id_agent: selectedAgentId, isLuar: false });
+    }
+  }, [selectedAgentId, isCobroke, agentLuarNama, agentLuarKantor, agentLuarTelepon]);
+
   return (
     <div className="space-y-4">
       {/* ── Selector card ── */}
@@ -1119,18 +1141,32 @@ export default function TabAgent({
         </div>
       ))}
 
-      {/* ── Lanjut button — paling bawah ── */}
-      {onNext && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            disabled={!selectedAgentId || saving || (isCobroke && !agentLuarNama.trim())}
-            onClick={() => onNext()}
-            className="inline-flex h-11 items-center gap-2.5 rounded-xl bg-emerald-500 px-6 text-sm font-semibold text-white shadow-[0_0_24px_rgba(16,185,129,0.35)] transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Lanjut ke Transaksi
-            <ChevronDown size={16} className="-rotate-90" />
-          </button>
+      {/* ── Navigation buttons ── */}
+      {(onBack || onNext) && (
+        <div className="flex items-center justify-between">
+          {onBack ? (
+            <button
+              type="button"
+              onClick={() => onBack()}
+              className="inline-flex h-11 items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-5 text-sm font-semibold text-zinc-400 transition hover:border-white/[0.14] hover:bg-white/[0.06] hover:text-white"
+            >
+              <ChevronDown size={16} className="rotate-90" />
+              Kembali ke Pilih Klien
+            </button>
+          ) : (
+            <div />
+          )}
+          {onNext && (
+            <button
+              type="button"
+              disabled={!selectedAgentId || saving || (isCobroke && !agentLuarNama.trim())}
+              onClick={() => onNext()}
+              className="inline-flex h-11 items-center gap-2.5 rounded-xl bg-emerald-500 px-6 text-sm font-semibold text-white shadow-[0_0_24px_rgba(16,185,129,0.35)] transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Lanjut ke Transaksi
+              <ChevronDown size={16} className="-rotate-90" />
+            </button>
+          )}
         </div>
       )}
     </div>

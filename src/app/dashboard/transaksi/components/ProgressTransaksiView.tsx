@@ -16,6 +16,9 @@ type TransaksiRow = {
   hargaDeal: number;
   hargaPromoDeal: number;
   hargaBidding: number;
+  maksimumBidding: number;
+  mouGenerated: boolean;
+  invoiceUtmGenerated: boolean;
   nilaiTransaksi: number;
   tanggal: string;
   dibuat: string;
@@ -52,49 +55,48 @@ type Stats = {
 
 type StageItem = { id: string; label: string; icon: string };
 
-const STAGES_UMUM: StageItem[] = [
-  { id: "CLOSING",            label: "Closing",            icon: "solar:handshake-bold-duotone" },
-  { id: "VERIFIKASI_DOKUMEN", label: "Verifikasi Dokumen", icon: "solar:document-add-bold-duotone" },
-  { id: "AJB",                label: "AJB",                icon: "solar:document-text-bold-duotone" },
-  { id: "SELESAI",            label: "Selesai",            icon: "solar:verified-check-bold-duotone" },
+// Satu pipeline untuk semua jenis transaksi setelah closing dikonfirmasi
+const STAGES_CLOSING: StageItem[] = [
+  { id: "closing",               label: "Closing",       icon: "solar:handshake-bold-duotone" },
+  { id: "pengurusan_balik_nama", label: "Balik Nama",    icon: "solar:document-text-bold-duotone" },
+  { id: "pelaksanaan_eksekusi",  label: "Eksekusi",      icon: "solar:home-bold-duotone" },
+  { id: "serah_terima_kunci",    label: "Serah Terima",  icon: "solar:key-bold-duotone" },
 ];
 
-const STAGES_LELANG: StageItem[] = [
-  { id: "CLOSING",               label: "Closing",               icon: "solar:handshake-bold-duotone" },
-  { id: "PENGURUSAN_DOKUMEN",    label: "Pengurusan Dokumen",    icon: "solar:folder-open-bold-duotone" },
-  { id: "EKSEKUSI_PENGOSONGAN",  label: "Eksekusi Pengosongan",  icon: "solar:home-2-bold-duotone" },
-  { id: "SELESAI",               label: "Selesai",               icon: "solar:verified-check-bold-duotone" },
-];
+// Status yang masuk pipeline closing
+const CLOSING_STATUSES = new Set([
+  "closing", "pengurusan_balik_nama", "balik_nama_selesai",
+  "pengurusan_risalah_lelang", "risalah_lelang_selesai",
+  "mediasi", "mediasi_gagal", "permohonan_eksekusi",
+  "aanmaning", "penetapan", "rakor",
+  "pelaksanaan_eksekusi", "serah_terima_kunci", "selesai",
+]);
 
-function getStages(jenis: string): StageItem[] {
-  return jenis === "LELANG" ? STAGES_LELANG : STAGES_UMUM;
-}
+// Status terminal negatif
+const TERMINAL_STATUSES = new Set(["kalah", "batal"]);
+
+function isClosingPipeline(status: string) { return CLOSING_STATUSES.has(status); }
+function isTerminal(status: string) { return TERMINAL_STATUSES.has(status); }
+function isPending(status: string) { return status === "proses" || status === "pending" || status === "uang_tanda_jaminan"; }
 
 function getStageIdx(stages: StageItem[], status: string): number {
-  const idx = stages.findIndex((s) => s.id === status.toUpperCase());
+  const idx = stages.findIndex((s) => s.id === status);
   return idx >= 0 ? idx : 0;
 }
 
-// Stage pills definition per jenis
+// Stage pills untuk filter
 type PillItem = { id: string; label: string };
 
-function getStagePills(jenis: string): PillItem[] {
-  const base: PillItem[] = [{ id: "ALL", label: "Semua" }];
-  if (jenis === "LELANG") {
-    return [
-      ...base,
-      { id: "CLOSING",              label: "Closing" },
-      { id: "PENGURUSAN_DOKUMEN",   label: "Pengurusan Dokumen" },
-      { id: "EKSEKUSI_PENGOSONGAN", label: "Eksekusi Pengosongan" },
-      { id: "SELESAI",              label: "Selesai" },
-    ];
-  }
+function getStagePills(): PillItem[] {
   return [
-    ...base,
-    { id: "CLOSING",            label: "Closing" },
-    { id: "VERIFIKASI_DOKUMEN", label: "Verifikasi Dokumen" },
-    { id: "AJB",                label: "AJB" },
-    { id: "SELESAI",            label: "Selesai" },
+    { id: "ALL",                  label: "Semua" },
+    { id: "proses",               label: "Proses" },
+    { id: "closing",              label: "Closing" },
+    { id: "pelaksanaan_eksekusi", label: "Eksekusi" },
+    { id: "serah_terima_kunci",   label: "Serah Terima" },
+    { id: "selesai",              label: "Selesai" },
+    { id: "kalah",                label: "Kalah" },
+    { id: "batal",                label: "Batal" },
   ];
 }
 
@@ -270,87 +272,602 @@ function StageStepper({
   onChange: (s: string) => void;
 }) {
   const currentIdx = getStageIdx(stages, status);
-  const batal = status.toUpperCase() === "BATAL";
+  const done_all   = status === "selesai";
 
   return (
-    <div>
-      <div className="flex items-start">
-        {stages.map((stage, idx) => {
-          const done    = !batal && idx < currentIdx;
-          const active  = !batal && idx === currentIdx;
-          const last    = idx === stages.length - 1;
+    <div className="flex items-start">
+      {stages.map((stage, idx) => {
+        const done   = done_all || idx < currentIdx;
+        const active = !done_all && idx === currentIdx;
+        const last   = idx === stages.length - 1;
 
-          return (
-            <div key={stage.id} className="flex flex-1 min-w-0 items-start">
-              <div className="flex flex-1 min-w-0 flex-col items-center">
-                {/* Connector + node row */}
-                <div className="flex w-full items-center">
-                  {/* left connector */}
-                  <div
-                    className={cx(
-                      "h-0.5 flex-1 transition-all duration-500",
-                      idx === 0 ? "invisible" : done || active ? "bg-gradient-to-r from-emerald-500/50 to-emerald-400/30" : "bg-zinc-800/80",
-                    )}
-                  />
+        return (
+          <div key={stage.id} className="flex flex-1 min-w-0 items-start">
+            <div className="flex flex-1 min-w-0 flex-col items-center">
+              <div className="flex w-full items-center">
+                {/* left connector */}
+                <div className={cx(
+                  "h-0.5 flex-1 transition-all duration-500",
+                  idx === 0 ? "invisible" : done ? "bg-emerald-500/60" : "bg-zinc-800",
+                )} />
 
-                  {/* node */}
-                  <button
-                    type="button"
-                    onClick={() => !batal && onChange(stage.id)}
-                    title={`Tandai: ${stage.label}`}
-                    className={cx(
-                      "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40",
-                      done    ? "cursor-pointer bg-emerald-500 hover:bg-emerald-400" : "",
-                      active  ? "cursor-pointer bg-cyan-500 ring-4 ring-cyan-400/25 shadow-[0_0_18px_rgba(34,211,238,0.40)] hover:bg-cyan-400" : "",
-                      !done && !active && !batal ? "cursor-pointer border-2 border-zinc-700 bg-zinc-900 hover:border-zinc-500 hover:bg-zinc-800" : "",
-                      batal   ? "cursor-not-allowed border-2 border-zinc-800 bg-zinc-900 opacity-35" : "",
-                    )}
-                  >
-                    {done ? (
-                      <Icon icon="solar:check-bold" className="text-sm text-white" />
-                    ) : (
-                      <Icon
-                        icon={stage.icon}
-                        className={cx("text-sm", active ? "text-white" : "text-zinc-500")}
-                      />
-                    )}
-                    {active && !batal && (
-                      <span className="absolute inset-0 animate-ping rounded-full bg-cyan-400/20" />
-                    )}
-                  </button>
-
-                  {/* right connector */}
-                  <div
-                    className={cx(
-                      "h-0.5 flex-1 transition-all duration-500",
-                      last ? "invisible" : done ? "bg-gradient-to-r from-emerald-400/30 to-emerald-500/50" : "bg-zinc-800/80",
-                    )}
-                  />
-                </div>
-
-                {/* label */}
-                <div
+                {/* node — clickable to advance */}
+                <button
+                  type="button"
+                  onClick={() => onChange(stage.id)}
+                  title={`Tandai: ${stage.label}`}
                   className={cx(
-                    "mt-1.5 px-0.5 text-center text-[10px] font-black leading-tight",
-                    done    ? "text-emerald-300" : "",
-                    active  ? "text-cyan-300"    : "",
-                    !done && !active ? "text-zinc-600" : "",
+                    "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all duration-200 focus:outline-none",
+                    done   ? "bg-emerald-500 hover:bg-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.40)]" : "",
+                    active ? "bg-cyan-500 ring-4 ring-cyan-400/20 shadow-[0_0_18px_rgba(34,211,238,0.45)] hover:bg-cyan-400" : "",
+                    !done && !active ? "border-2 border-zinc-700 bg-zinc-900 hover:border-zinc-500" : "",
                   )}
                 >
-                  {stage.label}
-                </div>
+                  {done
+                    ? <Icon icon="solar:check-bold" className="text-sm text-white" />
+                    : <Icon icon={stage.icon} className={cx("text-sm", active ? "text-white" : "text-zinc-500")} />
+                  }
+                  {active && <span className="absolute inset-0 animate-ping rounded-full bg-cyan-400/15" />}
+                </button>
+
+                {/* right connector */}
+                <div className={cx(
+                  "h-0.5 flex-1 transition-all duration-500",
+                  last ? "invisible" : done ? "bg-emerald-500/60" : "bg-zinc-800",
+                )} />
               </div>
+
+              <p className={cx(
+                "mt-1.5 px-0.5 text-center text-[9px] font-black leading-tight",
+                done ? "text-emerald-400" : active ? "text-cyan-300" : "text-zinc-600",
+              )}>
+                {stage.label}
+              </p>
             </div>
-          );
-        })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Decision buttons (uang_tanda_jaminan → closing / kalah / batal) ───────────
+
+// ── Unified step-by-step proses transaksi ─────────────────────────────────────
+
+const MOU_STEPS = [
+  "Menyiapkan data MOU…",
+  "Memproses template PDF…",
+  "Mengunduh dokumen…",
+  "Menyimpan status…",
+];
+
+const INV_STEPS = [
+  "Menghitung nilai UTM…",
+  "Memproses template invoice…",
+  "Mengunduh invoice…",
+  "Menyimpan ke database…",
+];
+
+function ProsesSteps({
+  row,
+  onUpdate,
+}: {
+  row: TransaksiRow;
+  onUpdate: (status?: string) => void;
+}) {
+  const [loadingDecision, setLoadingDecision] = useState<string | null>(null);
+  const [markingDoc,      setMarkingDoc]      = useState<string | null>(null);
+  const [mouStep,         setMouStep]         = useState<string | null>(null);
+  const [mouError,        setMouError]        = useState<string | null>(null);
+  const [mouSuccess,      setMouSuccess]      = useState(false);
+  const [invStep,         setInvStep]         = useState<string | null>(null);
+  const [invError,        setInvError]        = useState<string | null>(null);
+  const [invSuccess,      setInvSuccess]      = useState(false);
+  const suratBase = `/dashboard/surat?transaksi=${row.id}`;
+
+  const mouDone     = row.mouGenerated || mouSuccess;
+  const invoiceDone = row.invoiceUtmGenerated || invSuccess;
+  const allDone     = mouDone && invoiceDone;
+
+  async function markDoc(jenis: "mou" | "invoice_utm") {
+    await fetch("/api/closing/dokumen-flag", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_mou: row.id, jenis }),
+    }).catch((e) => console.warn("[markDoc]", e));
+  }
+
+  async function generateMouPdf(e: React.MouseEvent<HTMLAnchorElement>) {
+    e.preventDefault();
+    if (mouStep) return;
+    setMouError(null);
+    setMouSuccess(false);
+    const idTrx = row.kode ?? row.id;
+    setMarkingDoc("mou");
+    try {
+      setMouStep(MOU_STEPS[0]);
+      const res = await fetch("/api/surat/generate-MOU", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_transaksi: String(idTrx) }),
+      });
+      setMouStep(MOU_STEPS[1]);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        setMouError(err.error ?? "Gagal generate MOU. Coba lagi.");
+        return;
+      }
+      setMouStep(MOU_STEPS[2]);
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = `MOU_${idTrx}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setMouStep(MOU_STEPS[3]);
+      await markDoc("mou");
+      setMouSuccess(true);
+      onUpdate();
+    } catch {
+      // silent
+    } finally {
+      setMouStep(null);
+      setMarkingDoc(null);
+    }
+  }
+
+  async function generateInvoicePdf(e: React.MouseEvent<HTMLAnchorElement>) {
+    e.preventDefault();
+    if (invStep) return;
+    setInvError(null);
+    setInvSuccess(false);
+    const idTrx = row.kode ?? row.id;
+    setMarkingDoc("invoice_utm");
+    try {
+      setInvStep(INV_STEPS[0]);
+      const res = await fetch("/api/surat/generate-invoice-utm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_transaksi: String(idTrx) }),
+      });
+      setInvStep(INV_STEPS[1]);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        setInvError(err.error ?? "Gagal generate Invoice UTM. Coba lagi.");
+        return;
+      }
+      setInvStep(INV_STEPS[2]);
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = `Invoice_UTM_${idTrx}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setInvStep(INV_STEPS[3]);
+      await markDoc("invoice_utm");
+      setInvSuccess(true);
+      onUpdate();
+    } catch {
+      // silent
+    } finally {
+      setInvStep(null);
+      setMarkingDoc(null);
+    }
+  }
+
+  async function decide(status: string) {
+    setLoadingDecision(status);
+    try {
+      const res = await fetch("/api/dashboard/transaksi/progress", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: row.id, status }),
+      });
+      if (!res.ok) throw new Error();
+      onUpdate(status);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingDecision(null);
+    }
+  }
+
+  // Progress bar pct
+  const donePct = [mouDone, invoiceDone, allDone].filter(Boolean).length;
+
+  return (
+    <div className="space-y-3">
+      {/* ── Progress indicator ── */}
+      <div className="flex items-center justify-between gap-3 px-0.5">
+        <div className="flex items-center gap-2">
+          {allDone
+            ? <span className="relative flex h-2 w-2 shrink-0"><span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" /></span>
+            : <span className="relative flex h-2 w-2 shrink-0"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-60" /><span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400" /></span>}
+          <span className="text-[11px] font-black uppercase tracking-[0.15em] text-zinc-500">
+            {allDone ? "Siap konfirmasi hasil" : "Langkah diperlukan"}
+          </span>
+        </div>
+        <span className="text-[11px] font-black text-zinc-600">{donePct}/3</span>
       </div>
 
-      {batal && (
-        <div className="mt-3 flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2">
-          <Icon icon="solar:close-circle-bold-duotone" className="shrink-0 text-base text-red-400" />
-          <span className="text-xs font-black text-red-300">Transaksi dibatalkan</span>
+      {/* ── MOU Button ── */}
+      <DocButton
+        done={mouDone}
+        locked={false}
+        loading={!!mouStep}
+        loadingStep={mouStep ?? undefined}
+        icon="solar:file-text-bold-duotone"
+        label="Generate MOU"
+        sub="Memorandum of Understanding · Kantor & Klien"
+        href="#"
+        color="violet"
+        onGenerate={() => {}}
+        onDirectClick={generateMouPdf}
+      />
+      {mouError && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-red-500/20 bg-red-500/[0.07] px-3 py-2.5">
+          <Icon icon="solar:danger-circle-bold-duotone" className="mt-0.5 shrink-0 text-base text-red-400" />
+          <p className="flex-1 text-[12px] leading-relaxed text-red-300">{mouError}</p>
+          <button type="button" onClick={() => setMouError(null)} className="shrink-0 text-red-600 transition-colors hover:text-red-400">
+            <Icon icon="solar:close-circle-linear" className="text-sm" />
+          </button>
         </div>
       )}
+
+      {/* ── Invoice Button (locked until MOU done) ── */}
+      <DocButton
+        done={invoiceDone}
+        locked={!mouDone}
+        loading={!!invStep}
+        loadingStep={invStep ?? undefined}
+        icon="solar:bill-bold-duotone"
+        label="Generate Invoice UTM"
+        sub="Invoice Uang Tanda Minat · Untuk Klien"
+        href="#"
+        color="cyan"
+        onGenerate={() => {}}
+        onDirectClick={generateInvoicePdf}
+      />
+      {invError && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-red-500/20 bg-red-500/[0.07] px-3 py-2.5">
+          <Icon icon="solar:danger-circle-bold-duotone" className="mt-0.5 shrink-0 text-base text-red-400" />
+          <p className="flex-1 text-[12px] leading-relaxed text-red-300">{invError}</p>
+          <button type="button" onClick={() => setInvError(null)} className="shrink-0 text-red-600 transition-colors hover:text-red-400">
+            <Icon icon="solar:close-circle-linear" className="text-sm" />
+          </button>
+        </div>
+      )}
+
+      {/* ── Hasil Transaksi ── */}
+      <div className={cx(
+        "overflow-hidden rounded-2xl border transition-all duration-500",
+        allDone
+          ? "border-zinc-700/60 bg-zinc-900/60"
+          : "border-zinc-800/40 bg-zinc-950/50 opacity-50",
+      )}>
+        <div className="flex items-center gap-3 border-b border-zinc-800/50 px-4 py-3">
+          <div className={cx(
+            "grid h-7 w-7 shrink-0 place-items-center rounded-xl ring-1 transition-all duration-300",
+            allDone ? "bg-emerald-500/15 ring-emerald-500/25" : "bg-zinc-800 ring-zinc-700/50",
+          )}>
+            <Icon
+              icon={allDone ? "solar:flag-bold-duotone" : "solar:lock-bold-duotone"}
+              className={cx("text-sm", allDone ? "text-emerald-300" : "text-zinc-600")}
+            />
+          </div>
+          <div>
+            <p className={cx("text-[12px] font-black", allDone ? "text-white" : "text-zinc-500")}>
+              Hasil Transaksi
+            </p>
+            <p className="text-[10px] text-zinc-600">
+              {allDone ? "Pilih hasil transaksi ini" : "Selesaikan dokumen di atas dahulu"}
+            </p>
+          </div>
+        </div>
+
+        {allDone && (
+          <div className="space-y-2 p-3">
+            {/* Closing — hero button */}
+            <button
+              type="button"
+              disabled={!!loadingDecision}
+              onClick={() => decide("closing")}
+              className="group relative flex w-full items-center gap-4 overflow-hidden rounded-xl px-4 py-4 transition-all duration-300 active:scale-[0.985] disabled:opacity-60"
+              style={{ background: "linear-gradient(135deg, rgba(5,150,105,0.25) 0%, rgba(16,185,129,0.12) 50%, rgba(0,0,0,0.20) 100%)", border: "1px solid rgba(52,211,153,0.25)" }}
+            >
+              <span className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-18deg] bg-gradient-to-r from-transparent via-white/[0.06] to-transparent transition-transform duration-700 group-hover:translate-x-full" />
+              <div className="pointer-events-none absolute -left-4 top-1/2 h-20 w-20 -translate-y-1/2 rounded-full bg-emerald-500/20 blur-2xl transition-all duration-500 group-hover:bg-emerald-400/30" />
+              <div className="relative shrink-0">
+                <div className="absolute inset-0 rounded-[14px] bg-emerald-500/30 blur-md" />
+                <div className="relative grid h-11 w-11 place-items-center rounded-[14px] bg-gradient-to-br from-emerald-500/40 to-emerald-700/20 ring-1 ring-emerald-400/40">
+                  {loadingDecision === "closing"
+                    ? <Icon icon="solar:spinner-linear" className="animate-spin text-xl text-emerald-200" />
+                    : <Icon icon="solar:handshake-bold-duotone" className="text-xl text-emerald-200" />}
+                </div>
+              </div>
+              <div className="relative min-w-0 flex-1 text-left">
+                <p className="text-[15px] font-black text-white">Closing — Menang 🏆</p>
+                <p className="mt-0.5 text-[11px] text-zinc-400">Konfirmasi deal berhasil, lanjut proses balik nama</p>
+              </div>
+              <Icon icon="solar:arrow-right-bold" className="relative shrink-0 text-sm text-emerald-400" />
+            </button>
+
+            {/* Kalah + Batal — secondary */}
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { key: "kalah", label: "Kalah Lelang", sub: "Tidak menang penawaran", icon: "solar:sad-circle-bold-duotone",
+                  style: { background: "rgba(217,119,6,0.07)", border: "1px solid rgba(217,119,6,0.20)" }, textCls: "text-amber-200", iconCls: "bg-amber-500/12 ring-amber-500/20 text-amber-300" },
+                { key: "batal", label: "Batalkan",     sub: "Transaksi dibatalkan",   icon: "solar:close-circle-bold-duotone",
+                  style: { background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.15)" }, textCls: "text-red-300", iconCls: "bg-red-500/12 ring-red-500/15 text-red-300" },
+              ] as const).map(({ key, label, sub, icon, style, textCls, iconCls }) => (
+                <button
+                  key={key}
+                  type="button"
+                  disabled={!!loadingDecision}
+                  onClick={() => decide(key)}
+                  className="group flex items-center gap-2.5 rounded-xl px-3 py-3 transition-all duration-200 active:scale-[0.97] disabled:opacity-60 hover:brightness-110"
+                  style={style}
+                >
+                  <div className={cx("grid h-8 w-8 shrink-0 place-items-center rounded-lg ring-1", iconCls)}>
+                    {loadingDecision === key
+                      ? <Icon icon="solar:spinner-linear" className="animate-spin text-sm" />
+                      : <Icon icon={icon} className="text-sm" />}
+                  </div>
+                  <div className="min-w-0 text-left">
+                    <p className={cx("text-[12px] font-black", textCls)}>{label}</p>
+                    <p className="text-[10px] text-zinc-600">{sub}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── DocButton — tombol generate dokumen ───────────────────────────────────────
+
+function DocButton({
+  done, locked, loading, loadingStep, icon, label, sub, href, color, onGenerate, onDirectClick,
+}: {
+  done: boolean; locked: boolean; loading: boolean;
+  loadingStep?: string;
+  icon: string; label: string; sub: string; href: string;
+  color: "violet" | "cyan";
+  onGenerate: () => void;
+  onDirectClick?: (e: React.MouseEvent<HTMLAnchorElement>) => void;
+}) {
+  const palette = {
+    violet: {
+      from: "rgba(139,92,246,0.22)", border: "rgba(139,92,246,0.30)",
+      loadingBg: "rgba(109,40,217,0.28)", loadingBorder: "rgba(139,92,246,0.55)",
+      blob: "rgba(139,92,246,0.20)", ring: "rgba(139,92,246,0.35)",
+      iconFrom: "rgba(139,92,246,0.50)", iconTo: "rgba(109,40,217,0.25)",
+      text: "text-violet-200", glow: "rgba(139,92,246,0.40)",
+      barColor: "rgba(167,139,250,0.8)", dotColor: "bg-violet-300",
+    },
+    cyan: {
+      from: "rgba(34,211,238,0.18)", border: "rgba(34,211,238,0.28)",
+      loadingBg: "rgba(8,145,178,0.28)", loadingBorder: "rgba(34,211,238,0.55)",
+      blob: "rgba(34,211,238,0.15)", ring: "rgba(34,211,238,0.30)",
+      iconFrom: "rgba(34,211,238,0.50)", iconTo: "rgba(8,145,178,0.25)",
+      text: "text-cyan-200", glow: "rgba(34,211,238,0.35)",
+      barColor: "rgba(103,232,249,0.8)", dotColor: "bg-cyan-300",
+    },
+  }[color];
+
+  // ── Locked ──────────────────────────────────────────────────────────────────
+  if (locked) {
+    return (
+      <div className="flex items-center gap-4 rounded-2xl border border-zinc-800/50 bg-zinc-950/40 px-4 py-4 opacity-45">
+        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] bg-zinc-800 ring-1 ring-zinc-700/50">
+          <Icon icon="solar:lock-bold-duotone" className="text-xl text-zinc-600" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[14px] font-black text-zinc-500">{label}</p>
+          <p className="mt-0.5 text-[11px] text-zinc-700">{sub}</p>
+        </div>
+        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-zinc-800/60 ring-1 ring-zinc-700/40">
+          <Icon icon="solar:lock-bold" className="text-xs text-zinc-700" />
+        </div>
+      </div>
+    );
+  }
+
+  // ── Loading — premium state ──────────────────────────────────────────────────
+  if (loading) {
+    // Jika re-generate (sudah done sebelumnya), gunakan tema emerald agar tidak ada flash ungu
+    const isRegen = done;
+    const ld = isRegen
+      ? {
+          bg:     "rgba(5,150,105,0.22)",
+          border: "rgba(52,211,153,0.45)",
+          glow:   "rgba(52,211,153,0.30)",
+          iconBg: "linear-gradient(135deg, rgba(52,211,153,0.45) 0%, rgba(16,185,129,0.20) 100%)",
+          bar:    "rgba(110,231,183,0.85)",
+          dot:    "bg-emerald-300",
+          text:   "text-emerald-200",
+        }
+      : {
+          bg:     palette.loadingBg,
+          border: palette.loadingBorder,
+          glow:   palette.glow,
+          iconBg: `linear-gradient(135deg, ${palette.iconFrom} 0%, ${palette.iconTo} 100%)`,
+          bar:    palette.barColor,
+          dot:    palette.dotColor,
+          text:   palette.text,
+        };
+
+    return (
+      <div
+        className="relative overflow-hidden rounded-2xl px-4 py-4 select-none"
+        style={{
+          background: `linear-gradient(135deg, ${ld.bg} 0%, rgba(0,0,0,0.40) 100%)`,
+          border: `1px solid ${ld.border}`,
+          boxShadow: `0 0 28px ${ld.glow}, inset 0 1px 0 rgba(255,255,255,0.04)`,
+        }}
+      >
+        {/* Sweep shimmer */}
+        <span className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-18deg] animate-[shimmer_1.8s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/[0.07] to-transparent" />
+
+        {/* Bottom progress bar */}
+        <div className="absolute bottom-0 inset-x-0 h-[2px] overflow-hidden rounded-b-2xl">
+          <div
+            className="absolute inset-y-0 w-1/2 animate-[progressBar_1.6s_ease-in-out_infinite]"
+            style={{ background: `linear-gradient(90deg, transparent, ${ld.bar}, transparent)` }}
+          />
+        </div>
+
+        <div className="flex items-center gap-4">
+          {/* Spinning orb */}
+          <div className="relative shrink-0">
+            <div className="absolute inset-0 rounded-[14px] blur-xl animate-pulse" style={{ background: ld.glow }} />
+            <div
+              className="relative grid h-11 w-11 place-items-center rounded-[14px] ring-1"
+              style={{ background: ld.iconBg, borderColor: ld.border, boxShadow: `0 0 18px ${ld.glow}` }}
+            >
+              <Icon icon="solar:spinner-bold-duotone" className={cx("animate-spin text-xl", ld.text)} />
+            </div>
+          </div>
+
+          {/* Step text */}
+          <div className="relative min-w-0 flex-1">
+            <p className="text-[14px] font-black text-white">{loadingStep ?? "Memproses…"}</p>
+            <div className="mt-1.5 flex items-center gap-1.5">
+              <span className={cx("h-1.5 w-1.5 rounded-full animate-[bounce_1s_ease-in-out_0ms_infinite]",   ld.dot, "opacity-90")} />
+              <span className={cx("h-1.5 w-1.5 rounded-full animate-[bounce_1s_ease-in-out_180ms_infinite]", ld.dot, "opacity-60")} />
+              <span className={cx("h-1.5 w-1.5 rounded-full animate-[bounce_1s_ease-in-out_360ms_infinite]", ld.dot, "opacity-30")} />
+            </div>
+          </div>
+
+          {/* Circular progress ring */}
+          <div className="relative shrink-0">
+            <svg className="h-7 w-7 -rotate-90 animate-[spin_3s_linear_infinite]" viewBox="0 0 28 28">
+              <circle cx="14" cy="14" r="11" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="2" />
+              <circle cx="14" cy="14" r="11" fill="none" strokeWidth="2"
+                stroke={ld.bar} strokeDasharray="22 47" strokeLinecap="round" />
+            </svg>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Done ────────────────────────────────────────────────────────────────────
+  if (done) {
+    return (
+      <a
+        href={href}
+        onClick={onDirectClick}
+        className="group flex items-center gap-4 rounded-2xl border px-4 py-4 transition-all duration-300 active:scale-[0.985]"
+        style={{
+          background: "rgba(16,185,129,0.08)",
+          borderColor: "rgba(52,211,153,0.25)",
+          textDecoration: "none",
+          boxShadow: "0 0 20px rgba(52,211,153,0.08)",
+        }}
+      >
+        <div className="relative shrink-0">
+          <div className="absolute inset-0 rounded-[14px] bg-emerald-500/20 blur-md" />
+          <div className="relative grid h-11 w-11 place-items-center rounded-[14px] bg-gradient-to-br from-emerald-500/35 to-emerald-700/15 ring-1 ring-emerald-400/35">
+            <Icon icon="solar:check-circle-bold-duotone" className="text-xl text-emerald-300" />
+          </div>
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="text-[14px] font-black text-emerald-100">{label}</p>
+            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[9px] font-black text-emerald-300 ring-1 ring-emerald-500/20">
+              ✓ Selesai
+            </span>
+          </div>
+          <p className="mt-0.5 text-[11px] text-zinc-500">PDF telah diunduh · Klik untuk generate ulang</p>
+        </div>
+        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-emerald-500/10 ring-1 ring-emerald-500/20 transition-all duration-200 group-hover:bg-emerald-500/20">
+          <Icon icon="solar:restart-bold" className="text-xs text-emerald-400" />
+        </div>
+      </a>
+    );
+  }
+
+  // ── Idle ────────────────────────────────────────────────────────────────────
+  return (
+    <a
+      href={href}
+      onClick={onDirectClick ?? (() => onGenerate())}
+      className="group relative flex items-center gap-4 overflow-hidden rounded-2xl px-4 py-4 transition-all duration-300 hover:-translate-y-px active:scale-[0.985]"
+      style={{
+        background: `linear-gradient(135deg, ${palette.from} 0%, rgba(0,0,0,0.25) 100%)`,
+        border: `1px solid ${palette.border}`,
+        textDecoration: "none",
+      }}
+    >
+      {/* Hover shimmer */}
+      <span className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-18deg] bg-gradient-to-r from-transparent via-white/[0.06] to-transparent transition-transform duration-700 group-hover:translate-x-full" />
+      {/* Ambient blob */}
+      <div
+        className="pointer-events-none absolute -left-4 top-1/2 h-20 w-20 -translate-y-1/2 rounded-full blur-2xl transition-opacity duration-500 opacity-60 group-hover:opacity-100"
+        style={{ background: palette.blob }}
+      />
+
+      {/* Icon orb */}
+      <div className="relative shrink-0">
+        <div className="absolute inset-0 rounded-[14px] blur-md opacity-70 group-hover:opacity-100 transition-opacity duration-300" style={{ background: palette.blob }} />
+        <div
+          className="relative grid h-11 w-11 place-items-center rounded-[14px] ring-1 transition-transform duration-300 group-hover:scale-105"
+          style={{ background: `linear-gradient(135deg, ${palette.iconFrom} 0%, ${palette.iconTo} 100%)`, borderColor: palette.ring }}
+        >
+          <Icon icon={icon} className={cx("text-xl", palette.text)} />
+        </div>
+      </div>
+
+      <div className="relative min-w-0 flex-1">
+        <p className="text-[14px] font-black text-white">{label}</p>
+        <p className="mt-0.5 text-[11px] text-zinc-500">{sub}</p>
+      </div>
+
+      <div
+        className="relative grid h-8 w-8 shrink-0 place-items-center rounded-xl ring-1 transition-all duration-200 group-hover:scale-110"
+        style={{ background: palette.iconFrom, borderColor: palette.ring }}
+      >
+        <Icon icon="solar:arrow-right-up-bold" className={cx("text-xs transition-transform duration-200 group-hover:translate-x-px group-hover:-translate-y-px", palette.text)} />
+      </div>
+    </a>
+  );
+}
+
+// ── Terminal state card (kalah / batal) ───────────────────────────────────────
+
+function TerminalState({ status }: { status: string }) {
+  const isKalah = status === "kalah";
+  return (
+    <div className={cx(
+      "flex items-center gap-4 rounded-2xl border px-4 py-4",
+      isKalah
+        ? "border-amber-500/25 bg-gradient-to-r from-amber-500/[0.10] to-zinc-950"
+        : "border-red-500/20 bg-gradient-to-r from-red-500/[0.08] to-zinc-950",
+    )}>
+      <div className={cx(
+        "grid h-11 w-11 shrink-0 place-items-center rounded-2xl ring-1",
+        isKalah ? "bg-amber-500/15 ring-amber-500/25" : "bg-red-500/12 ring-red-500/20",
+      )}>
+        <Icon
+          icon={isKalah ? "solar:sad-circle-bold-duotone" : "solar:close-circle-bold-duotone"}
+          className={cx("text-2xl", isKalah ? "text-amber-300" : "text-red-400")}
+        />
+      </div>
+      <div>
+        <p className={cx("text-[14px] font-black", isKalah ? "text-amber-200" : "text-red-300")}>
+          Transaksi {isKalah ? "Kalah" : "Dibatalkan"}
+        </p>
+        <p className="mt-0.5 text-[11px] text-zinc-600">
+          {isKalah ? "Tidak berhasil memenangkan lelang" : "Transaksi ini telah dibatalkan"}
+        </p>
+      </div>
     </div>
   );
 }
@@ -367,21 +884,33 @@ function TransaksiCard({
   cardRef?: React.RefCallback<HTMLButtonElement>;
   onClick: () => void;
 }) {
-  const stages   = getStages(row.jenis);
-  const stageIdx = getStageIdx(stages, row.status);
-  const batal    = row.status.toUpperCase() === "BATAL";
-  const selesai  = row.status.toUpperCase() === "SELESAI";
+  const batal    = row.status === "batal";
+  const selesai  = row.status === "selesai";
   const jenis    = JENIS[row.jenis] ?? { label: row.jenis, cls: "bg-zinc-500/12 text-zinc-200 ring-zinc-500/20" };
 
-  const isLelangPersentase = row.jenis === "LELANG" && row.tipeKomisi.toUpperCase() === "PERSENTASE";
-  const displayPrice       = isLelangPersentase ? row.hargaBidding : row.hargaDeal;
+  const isPersen     = row.tipeKomisi.toUpperCase() === "PERSENTASE";
+  const displayPrice = isPersen ? row.maksimumBidding : row.hargaDeal;
 
-  const statusLabel = batal ? "Batal" : selesai ? "Selesai" : (stages[stageIdx]?.label ?? row.status);
+  const STATUS_LABEL_MAP: Record<string, string> = {
+    proses: "Proses",
+    pending: "Proses",
+    uang_tanda_jaminan: "Uang Tanda",
+    closing: "Closing",
+    pengurusan_balik_nama: "Balik Nama",
+    pelaksanaan_eksekusi: "Eksekusi",
+    serah_terima_kunci: "Serah Terima",
+    selesai: "Selesai",
+    kalah: "Kalah",
+    batal: "Batal",
+  };
+  const statusLabel = STATUS_LABEL_MAP[row.status] ?? row.status.replace(/_/g, " ");
   const statusCls = batal
     ? "bg-red-500/20 text-red-300 ring-1 ring-red-500/30"
     : selesai
       ? "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30"
-      : "bg-cyan-500/15 text-cyan-200 ring-1 ring-cyan-400/25";
+      : isPending(row.status)
+        ? "bg-amber-500/15 text-amber-200 ring-1 ring-amber-400/25"
+        : "bg-cyan-500/15 text-cyan-200 ring-1 ring-cyan-400/25";
 
   return (
     <button
@@ -389,59 +918,59 @@ function TransaksiCard({
       ref={cardRef}
       onClick={onClick}
       className={cx(
-        "group relative flex w-full flex-col rounded-3xl text-left",
-        "border transition-[box-shadow,border-color] duration-300",
-        "shadow-[0_4px_24px_rgba(0,0,0,0.40)] hover:shadow-[0_16px_48px_rgba(0,0,0,0.65)]",
+        "group relative flex w-full flex-col overflow-hidden rounded-2xl text-left",
+        "border transition-[border-color,box-shadow] duration-300 ease-out",
         highlighted
-          ? "border-emerald-400/40 shadow-[0_0_0_2px_rgba(52,211,153,0.20),0_8px_32px_rgba(52,211,153,0.12)]"
-          : "border-zinc-800/60 hover:border-zinc-600/70",
+          ? "border-emerald-500/40 shadow-[0_0_0_2px_rgba(52,211,153,0.15),0_8px_32px_rgba(0,0,0,0.50)]"
+          : "border-zinc-800/70 shadow-[0_2px_12px_rgba(0,0,0,0.40)]",
+        "hover:border-zinc-600/80 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_8px_32px_rgba(0,0,0,0.55),0_0_40px_rgba(16,185,129,0.06)]",
+        "active:shadow-[0_2px_8px_rgba(0,0,0,0.40)] active:border-zinc-800/70",
       )}
     >
-      {/* ── Property image header ────────────────────────────────────── */}
-      <div className="relative h-44 w-full overflow-hidden rounded-t-3xl bg-zinc-900">
+      {/* ═══ IMAGE ZONE — explicit height container, img absolute inside ═══ */}
+      <div className="relative h-44 w-full flex-shrink-0 overflow-hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={row.listingGambar}
           alt={row.listingJudul}
-          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+          style={{ display: "block", position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+          className="transition-[filter] duration-500 ease-out group-hover:brightness-110"
           loading="lazy"
         />
+        {/* dark gradient bottom */}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/30 to-transparent" />
+        {/* dark gradient top */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-zinc-950/60 to-transparent" />
+        {/* hover illuminate overlay */}
+        <div className="pointer-events-none absolute inset-0 bg-white/0 transition-colors duration-300 group-hover:bg-white/[0.03]" />
 
-        {/* Gradient overlays */}
-        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/30 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/50 via-transparent to-transparent" />
-
-        {/* Top badges */}
+        {/* Badges */}
         <div className="absolute left-3 top-3 flex items-center gap-1.5">
-          <span className={cx(
-            "inline-flex items-center rounded-lg px-2 py-1 text-[10px] font-black backdrop-blur-sm ring-1",
-            jenis.cls,
-          )}>
+          <span className={cx("inline-flex items-center rounded-lg px-2 py-1 text-[10px] font-black backdrop-blur-sm ring-1", jenis.cls)}>
             {jenis.label}
           </span>
         </div>
         <div className="absolute right-3 top-3">
-          <span className={cx(
-            "inline-flex items-center rounded-lg px-2 py-1 text-[10px] font-black backdrop-blur-sm",
-            statusCls,
-          )}>
-            {batal ? <Icon icon="solar:close-circle-bold" className="mr-1 text-xs" /> : selesai ? <Icon icon="solar:check-circle-bold" className="mr-1 text-xs" /> : <Icon icon="solar:pulse-bold" className="mr-1 text-xs" />}
+          <span className={cx("inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-black backdrop-blur-sm", statusCls)}>
+            {batal ? <Icon icon="solar:close-circle-bold" className="text-xs" />
+              : selesai ? <Icon icon="solar:check-circle-bold" className="text-xs" />
+              : <Icon icon="solar:pulse-bold" className="text-xs" />}
             {statusLabel}
           </span>
         </div>
 
-        {/* Agent avatar — bottom-left */}
+        {/* Agent — pinned bottom */}
         <div className="absolute bottom-3 left-3 flex items-center gap-2">
-          <div className="relative">
+          <div className="relative shrink-0">
             <AgentAvatar foto={row.agentFoto} nama={row.agentNama} size="sm" />
-            <div className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-1 ring-zinc-900" />
+            <div className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-[1.5px] ring-zinc-950" />
           </div>
           <div className="min-w-0">
-            <p className="truncate text-[11px] font-black text-white drop-shadow-sm" style={{ maxWidth: 120 }}>
+            <p className="truncate text-[11px] font-black text-white" style={{ maxWidth: 130, textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>
               {row.agentNama}
             </p>
             {row.agentKantor && (
-              <p className="truncate text-[9px] text-zinc-300/70" style={{ maxWidth: 120 }}>
+              <p className="truncate text-[9px] text-zinc-300/60" style={{ maxWidth: 130 }}>
                 {row.agentKantor}
               </p>
             )}
@@ -449,37 +978,37 @@ function TransaksiCard({
         </div>
       </div>
 
-      {/* ── Card body ───────────────────────────────────────────────────── */}
-      <div className="flex flex-1 flex-col gap-2 rounded-b-3xl bg-gradient-to-b from-zinc-900/95 to-zinc-950 px-4 pb-4 pt-3">
-        {/* Kode + tanggal dibuat */}
+      {/* ═══ BODY ZONE — starts immediately, zero gap ═══ */}
+      <div className="flex flex-col gap-2 bg-zinc-950 px-4 pb-4 pt-3">
+        {/* Kode + tanggal */}
         <div className="flex items-center justify-between gap-2">
           <span className="font-mono text-[10px] font-black tracking-wider text-cyan-300/80">
             {row.kode}
           </span>
-          <span className="shrink-0 text-[10px] text-zinc-500">
+          <span className="shrink-0 text-[10px] text-zinc-600">
             {fmtDate(row.dibuat)}
           </span>
         </div>
 
         {/* Alamat */}
         <div className="flex items-start gap-1.5">
-          <Icon icon="solar:map-point-bold-duotone" className="mt-0.5 shrink-0 text-xs text-emerald-400/70" />
+          <Icon icon="solar:map-point-bold-duotone" className="mt-0.5 shrink-0 text-xs text-emerald-400/60" />
           <p className="line-clamp-2 text-[11px] leading-snug text-zinc-400">
             {row.listingAlamat || row.listingKota}
           </p>
         </div>
 
         {/* Divider */}
-        <div className="h-px bg-gradient-to-r from-transparent via-zinc-800/60 to-transparent" />
+        <div className="h-px bg-zinc-800/60" />
 
-        {/* Price */}
+        {/* Price + detail */}
         <div className="flex items-center justify-between gap-2">
           <p className="text-[15px] font-black leading-none text-white">
             {fmtFull(displayPrice)}
           </p>
-          <div className="flex items-center gap-1 rounded-lg bg-zinc-800/60 px-2 py-1 ring-1 ring-zinc-700/40">
-            <Icon icon="solar:arrow-right-up-bold" className="text-[10px] text-zinc-400" />
-            <span className="text-[9px] font-black uppercase tracking-wider text-zinc-400">Detail</span>
+          <div className="flex items-center gap-1 rounded-lg bg-zinc-800/80 px-2 py-1 ring-1 ring-zinc-700/50 transition-colors duration-200 group-hover:bg-zinc-700/70 group-hover:ring-zinc-600/60">
+            <Icon icon="solar:arrow-right-up-bold" className="text-[10px] text-zinc-400 transition-colors duration-200 group-hover:text-white" />
+            <span className="text-[9px] font-black uppercase tracking-wider text-zinc-400 transition-colors duration-200 group-hover:text-white">Detail</span>
           </div>
         </div>
       </div>
@@ -550,6 +1079,10 @@ function DetailPanel({
 }) {
   const jenis = JENIS[row.jenis] ?? { label: row.jenis, cls: "bg-zinc-500/12 text-zinc-200 ring-zinc-500/20" };
 
+  const showDecision   = isPending(row.status);
+  const showPipeline   = isClosingPipeline(row.status);
+  const showTerminal   = isTerminal(row.status);
+
   return (
     <div className="space-y-3">
       {/* ── Property image card ─────────────────────────────────────────── */}
@@ -610,31 +1143,44 @@ function DetailPanel({
         </div>
       </div>
 
-      {/* ── Stage stepper card ──────────────────────────────────────────── */}
-      <div className="rounded-2xl border border-zinc-800/70 bg-zinc-950/60 p-4">
-        <div className="mb-4 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <div className="grid h-7 w-7 place-items-center rounded-xl bg-cyan-500/15 ring-1 ring-cyan-500/25">
-              <Icon icon="solar:diagram-up-bold-duotone" className="text-sm text-cyan-300" />
-            </div>
-            <span className="text-xs font-black text-zinc-200">Stage Transaksi</span>
-          </div>
-          <span className={cx(
-            "rounded-full px-2.5 py-0.5 text-[10px] font-black",
-            row.status === "SELESAI" ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/25" :
-            row.status === "BATAL"   ? "bg-red-500/15 text-red-300 ring-1 ring-red-500/20" :
-                                       "bg-cyan-500/12 text-cyan-300 ring-1 ring-cyan-500/20",
-          )}>
-            {row.status}
-          </span>
-        </div>
-        <StageStepper
-          stages={getStages(row.jenis)}
-          status={row.status}
-          onChange={(s) => onStageChange(row.id, s)}
+      {/* ── Proses step-by-step (uang_tanda_jaminan) ── */}
+      {showDecision && (
+        <ProsesSteps
+          row={row}
+          onUpdate={(status) => status !== undefined ? onStageChange(row.id, status) : setRefreshTick((t) => t + 1)}
         />
-        <p className="mt-3 text-[10px] text-zinc-600">Klik stage untuk memperbarui status transaksi.</p>
-      </div>
+      )}
+
+      {/* ── Closing pipeline stepper ── */}
+      {showPipeline && (
+        <div className="rounded-2xl border border-zinc-800/60 bg-zinc-950/70 p-4">
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="grid h-7 w-7 place-items-center rounded-xl bg-emerald-500/15 ring-1 ring-emerald-500/25">
+                <Icon icon="solar:diagram-up-bold-duotone" className="text-sm text-emerald-300" />
+              </div>
+              <span className="text-xs font-black text-zinc-200">Progress Closing</span>
+            </div>
+            <span className={cx(
+              "rounded-full px-2.5 py-0.5 text-[10px] font-black capitalize",
+              row.status === "selesai"
+                ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/25"
+                : "bg-cyan-500/12 text-cyan-300 ring-1 ring-cyan-500/20",
+            )}>
+              {row.status.replace(/_/g, " ")}
+            </span>
+          </div>
+          <StageStepper
+            stages={STAGES_CLOSING}
+            status={row.status}
+            onChange={(s) => onStageChange(row.id, s)}
+          />
+          <p className="mt-3 text-[10px] text-zinc-600">Klik tahap untuk memperbarui progress.</p>
+        </div>
+      )}
+
+      {/* ── Terminal state (kalah / batal) ── */}
+      {showTerminal && <TerminalState status={row.status} />}
     </div>
   );
 }
@@ -823,62 +1369,183 @@ function TransaksiModal({
   onClose: () => void;
   onStageChange: (id: string, status: string) => void;
 }) {
-  const [animated, setAnimated] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const jenis = JENIS[row.jenis] ?? { label: row.jenis, cls: "bg-zinc-500/12 text-zinc-200 ring-zinc-500/20" };
 
   useEffect(() => {
-    requestAnimationFrame(() => requestAnimationFrame(() => setAnimated(true)));
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const raf = requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)));
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+    return () => { cancelAnimationFrame(raf); document.removeEventListener("keydown", onKey); };
+  }, []);
 
-  function handleClose() {
-    setAnimated(false);
-    setTimeout(onClose, 260);
+  function close() {
+    setVisible(false);
+    setTimeout(onClose, 350);
   }
 
+  const showDecision = isPending(row.status);
+  const showPipeline = isClosingPipeline(row.status);
+  const showTerminal = isTerminal(row.status);
+
+  const statusLabel = row.status.replace(/_/g, " ");
+  const statusStyle =
+    row.status === "selesai" ? "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30" :
+    row.status === "kalah"   ? "bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/25" :
+    row.status === "batal"   ? "bg-red-500/15 text-red-300 ring-1 ring-red-500/20" :
+    row.status === "closing" ? "bg-cyan-500/20 text-cyan-300 ring-1 ring-cyan-500/30" :
+    "bg-zinc-800/80 text-zinc-400 ring-1 ring-zinc-700/50";
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center px-0 sm:px-4">
-      {/* Backdrop */}
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+
+      {/* ── Backdrop ── */}
       <div
-        className="absolute inset-0 backdrop-blur-[8px]"
-        style={{
-          backgroundColor: "rgba(4,4,10,0.82)",
-          opacity: animated ? 1 : 0,
-          transition: "opacity 260ms ease-out",
-        }}
-        onClick={handleClose}
+        className="absolute inset-0 backdrop-blur-[12px] transition-opacity duration-300"
+        style={{ background: "rgba(0,0,5,0.85)", opacity: visible ? 1 : 0 }}
+        onClick={close}
       />
 
-      {/* Modal panel */}
+      {/* ── Sheet panel ── */}
       <div
-        className="relative z-10 w-full max-w-lg overflow-hidden rounded-t-[28px] sm:rounded-[28px] border border-zinc-800/80 bg-[#0c0c12] shadow-[0_32px_80px_rgba(0,0,0,0.80)]"
+        className={cx(
+          "relative z-10 w-full sm:max-w-[440px] flex flex-col",
+          "sm:rounded-[32px] rounded-t-[32px]",
+          "overflow-hidden",
+          "transition-[transform,opacity] duration-[380ms]",
+          visible ? "translate-y-0 opacity-100" : "translate-y-[60px] opacity-0",
+        )}
         style={{
-          transform: animated ? "translateY(0) scale(1)" : "translateY(40px) scale(0.97)",
-          opacity: animated ? 1 : 0,
-          transition: "transform 320ms cubic-bezier(0.32,0.72,0,1), opacity 260ms ease-out",
-          maxHeight: "92dvh",
-          display: "flex",
-          flexDirection: "column",
+          maxHeight: "94dvh",
+          background: "#0a0d12",
+          boxShadow: "0 0 0 1px rgba(255,255,255,0.07), 0 -4px 60px rgba(0,0,0,0.7), 0 32px 100px rgba(0,0,0,0.9)",
+          transitionTimingFunction: "cubic-bezier(0.22,1,0.36,1)",
         }}
       >
-        {/* Handle (mobile) + close button */}
-        <div className="relative flex shrink-0 items-center justify-center px-4 pt-3 pb-2 sm:pt-4">
-          <div className="h-1 w-10 rounded-full bg-zinc-700/80 sm:hidden" />
-          <button
-            type="button"
-            onClick={handleClose}
-            className="absolute right-4 top-3 sm:top-4 flex h-8 w-8 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/80 text-zinc-400 transition hover:border-zinc-700 hover:text-white"
-          >
-            <Icon icon="solar:close-linear" className="text-sm" />
-          </button>
+
+        {/* ══ HERO IMAGE ══ */}
+        <div className="relative h-[220px] w-full shrink-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={row.listingGambar}
+            alt={row.listingJudul}
+            className="absolute inset-0 h-full w-full object-cover"
+            style={{ display: "block" }}
+          />
+          {/* Multi-layer gradient */}
+          <div className="pointer-events-none absolute inset-0"
+            style={{ background: "linear-gradient(to top, #0a0d12 0%, rgba(10,13,18,0.6) 35%, rgba(10,13,18,0.25) 65%, rgba(10,13,18,0.55) 100%)" }}
+          />
+
+          {/* Drag handle — mobile */}
+          <div className="absolute inset-x-0 top-3 flex justify-center sm:hidden">
+            <div className="h-1 w-12 rounded-full bg-white/20" />
+          </div>
+
+          {/* Top row: badge + close */}
+          <div className="absolute inset-x-3 top-3 flex items-center justify-between" style={{ top: 14 }}>
+            <span className={cx("inline-flex items-center rounded-xl px-3 py-1.5 text-[10px] font-black backdrop-blur-md ring-1", jenis.cls)}>
+              {jenis.label}
+            </span>
+            <button
+              type="button"
+              onClick={close}
+              className="flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 active:scale-90 hover:bg-black/60"
+              style={{ background: "rgba(0,0,0,0.50)", backdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.15)" }}
+            >
+              {/* SVG X langsung — tidak bergantung iconify loading */}
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M12 4L4 12M4 4L12 12" stroke="white" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Bottom: property info overlay */}
+          <div className="absolute inset-x-0 bottom-0 px-4 pb-4 pt-12">
+            {/* Status pill */}
+            <div className="mb-2">
+              <span className={cx("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-black capitalize", statusStyle)}>
+                <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
+                {statusLabel}
+              </span>
+            </div>
+            <h2 className="text-[17px] font-black leading-tight text-white line-clamp-2" style={{ textShadow: "0 2px 12px rgba(0,0,0,0.8)" }}>
+              {row.listingJudul}
+            </h2>
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <Icon icon="solar:map-point-bold-duotone" className="shrink-0 text-xs text-emerald-400" />
+                <span className="truncate text-[11px] text-zinc-300">{row.listingAlamat || row.listingKota}</span>
+              </div>
+              <span className="shrink-0 font-mono text-[10px] font-black text-cyan-300/70">{row.kode}</span>
+            </div>
+          </div>
         </div>
 
-        <div className="mx-4 h-px shrink-0 bg-zinc-800/60" />
+        {/* ══ INFO STRIP ══ */}
+        <div
+          className="flex shrink-0 items-center gap-3 px-4 py-3"
+          style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.025)" }}
+        >
+          {/* Agent */}
+          <div className="relative shrink-0">
+            <AgentAvatar foto={row.agentFoto} nama={row.agentNama} size="sm" />
+            <div className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-[1.5px]" style={{ boxShadow: "0 0 6px rgba(52,211,153,0.6)", borderColor: "#0a0d12" }} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] font-black text-white">{row.agentNama}</p>
+            {row.agentKantor && <p className="truncate text-[10px] text-zinc-600">{row.agentKantor}</p>}
+          </div>
+          {/* Price */}
+          <div className="shrink-0 text-right">
+            <p className="text-[17px] font-black text-white leading-none">{fmtShort(row.nilaiTransaksi)}</p>
+            <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-zinc-600">
+              {row.tipeKomisi === "PERSENTASE" ? "Maks. Bidding" : "Harga Deal"}
+            </p>
+          </div>
+        </div>
 
-        {/* Scrollable content */}
-        <div className="overflow-y-auto px-4 pb-8 pt-4">
-          <DetailPanel row={row} onStageChange={onStageChange} />
+        {/* ══ SCROLLABLE BODY ══ */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3" style={{ scrollbarWidth: "none" }}>
+
+          {/* Proses steps — pending */}
+          {showDecision && (
+            <ProsesSteps
+              row={row}
+              onUpdate={(status) => status !== undefined ? onStageChange(row.id, status) : setRefreshTick((t) => t + 1)}
+            />
+          )}
+
+          {/* Closing pipeline */}
+          {showPipeline && (
+            <div className="overflow-hidden rounded-2xl" style={{ border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}>
+              <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                <div className="flex items-center gap-2">
+                  <div className="grid h-7 w-7 place-items-center rounded-xl bg-emerald-500/15 ring-1 ring-emerald-500/25">
+                    <Icon icon="solar:route-bold-duotone" className="text-sm text-emerald-300" />
+                  </div>
+                  <span className="text-[12px] font-black text-white">Progress Closing</span>
+                </div>
+                <span className="rounded-full bg-cyan-500/15 px-2.5 py-0.5 text-[10px] font-black capitalize text-cyan-300 ring-1 ring-cyan-500/25">
+                  {row.status.replace(/_/g, " ")}
+                </span>
+              </div>
+              <div className="p-4">
+                <StageStepper
+                  stages={STAGES_CLOSING}
+                  status={row.status}
+                  onChange={(s) => onStageChange(row.id, s)}
+                />
+                <p className="mt-3 text-[10px] text-zinc-700">Klik tahap untuk memperbarui status.</p>
+              </div>
+            </div>
+          )}
+
+          {/* Terminal */}
+          {showTerminal && <TerminalState status={row.status} />}
+
+          {/* Safe area bottom */}
+          <div className="h-2" />
         </div>
       </div>
     </div>
@@ -906,6 +1573,7 @@ export default function ProgressTransaksiView({ highlightKode }: { highlightKode
   const [rows, setRows]         = useState<TransaksiRow[]>([]);
   const [stats, setStats]       = useState<Stats>({ total: 0, totalNilai: 0, inProgress: 0, selesai: 0 });
   const [loading, setLoading]   = useState(true);
+  const [refreshTick, setRefreshTick] = useState(0);
   const [selected, setSelected] = useState<TransaksiRow | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [jenisFilter, setJenisFilter] = useState<JenisKey>("ALL");
@@ -945,7 +1613,7 @@ export default function ProgressTransaksiView({ highlightKode }: { highlightKode
     };
     const t = setTimeout(run, search ? 350 : 0);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [search, jenisFilter, stageFilter]);
+  }, [search, jenisFilter, stageFilter, refreshTick]);
 
   useEffect(() => {
     if (!highlightKode || loading || rows.length === 0) return;
@@ -980,7 +1648,7 @@ export default function ProgressTransaksiView({ highlightKode }: { highlightKode
     setModalOpen(true);
   }
 
-  const stagePills = getStagePills(jenisFilter);
+  const stagePills = getStagePills();
 
   return (
     <div className="space-y-4">

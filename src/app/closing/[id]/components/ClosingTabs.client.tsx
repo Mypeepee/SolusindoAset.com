@@ -4,34 +4,61 @@ import { useState, useRef, useEffect, type ReactNode } from "react";
 import { Icon } from "@iconify/react";
 import type { Listing, Agent, TeamLeader } from "../page";
 import TabTransaksi, { type SkemaPenjualan } from "./tabs/TabTransaksi.client";
-import TabAgent from "./tabs/TabAgent";
+import TabAgent, { type AgentSelection } from "./tabs/TabAgent";
 import TabPembagian from "./tabs/TabPembagian.client";
+import TabKlien, { type KlienData } from "./tabs/TabKlien";
 
 /* ─────────────────────────────────────────────────────────────
    Step definitions
 ───────────────────────────────────────────────────────────── */
-type WizardStep = 1 | 2 | 3;
+type WizardStep = 1 | 2 | 3 | 4;
 
-const STEPS = [
+const STEPS_SEMUA = [
   {
     num: 1 as const,
+    icon: "solar:users-group-rounded-bold-duotone",
+    title: "Pilih Klien",
+    sub: "Identitas & data KTP klien",
+  },
+  {
+    num: 2 as const,
     icon: "solar:user-rounded-bold-duotone",
     title: "Pilih Agent",
     sub: "Agent closing & Team Leader",
   },
   {
-    num: 2 as const,
-    icon: "solar:calculator-minimalistic-bold-duotone",
+    num: 3 as const,
+    icon: "solar:document-add-bold-duotone",
     title: "Data Transaksi",
     sub: "Harga, skema & kalkulasi fee",
   },
   {
-    num: 3 as const,
+    num: 4 as const,
     icon: "solar:pie-chart-2-bold-duotone",
     title: "Pembagian Fee",
     sub: "Split komisi & simpan",
   },
 ] as const;
+
+// Status yang menampilkan step 4 (Pembagian Fee)
+const STATUS_DENGAN_PEMBAGIAN = new Set([
+  "closing",
+  "pengurusan_kuitansi",
+  "kuitansi_selesai",
+  "pengurusan_risalah_lelang",
+  "risalah_lelang_selesai",
+  "pengurusan_balik_nama",
+  "balik_nama_selesai",
+  "mediasi",
+  "mediasi_gagal",
+  "permohonan_eksekusi",
+  "aanmaning",
+  "penetapan",
+  "rakor",
+  "pelaksanaan_eksekusi",
+  "serah_terima_kunci",
+  "selesai",
+]);
 
 /* ─────────────────────────────────────────────────────────────
    Premium Stepper
@@ -40,27 +67,33 @@ function PremiumStepper({
   current,
   maxUnlocked,
   onGo,
+  steps,
 }: {
   current: WizardStep;
   maxUnlocked: WizardStep;
   onGo: (n: WizardStep) => void;
+  steps: readonly (typeof STEPS_SEMUA)[number][];
 }) {
+  const totalSteps = steps.length;
+  const currentIdx = steps.findIndex((s) => s.num === current);
+  const progressPct = totalSteps <= 1 ? 0 : Math.round((currentIdx / (totalSteps - 1)) * 100);
+
   return (
     <div className="px-6 py-7 sm:px-10">
       {/* ── step nodes + connector ── */}
       <div className="relative flex items-start justify-between">
-        {/* connector track — inside flex so z-index works correctly */}
+        {/* connector track — from center of first icon to center of last icon only */}
         <div
-          className="pointer-events-none absolute inset-x-0 top-[22px] mx-[2.75rem] hidden h-[2px] overflow-hidden rounded-full bg-white/[0.07] sm:block"
-          style={{ zIndex: 0 }}
+          className="pointer-events-none absolute top-[22px] hidden h-[2px] overflow-hidden rounded-full bg-white/[0.07] sm:block"
+          style={{ zIndex: 0, left: "22px", right: "22px" }}
         >
           <div
             className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-700 ease-in-out"
-            style={{ width: current === 1 ? "0%" : current === 2 ? "50%" : "100%" }}
+            style={{ width: `${progressPct}%` }}
           />
         </div>
 
-        {STEPS.map((s) => {
+        {steps.map((s) => {
           const done = s.num < current;
           const active = s.num === current;
           const reachable = s.num <= maxUnlocked;
@@ -152,6 +185,7 @@ export default function ClosingTabs({
   agent,
   leader,
   skemaPenjualan,
+  statusTransaksi,
   onAgentChange,
   onLeaderChange,
 }: {
@@ -159,12 +193,24 @@ export default function ClosingTabs({
   agent: Agent | null;
   leader: TeamLeader | null;
   skemaPenjualan: SkemaPenjualan;
+  statusTransaksi: string | null;
   onAgentChange?: (name: string) => void;
   onLeaderChange?: (name: string) => void;
 }) {
+  const tampilPembagian = STATUS_DENGAN_PEMBAGIAN.has(statusTransaksi ?? "");
+  const STEPS = tampilPembagian ? STEPS_SEMUA : STEPS_SEMUA.slice(0, 3) as unknown as typeof STEPS_SEMUA;
+
   const [step, setStep] = useState<WizardStep>(1);
   const [maxUnlocked, setMaxUnlocked] = useState<WizardStep>(1);
   const contentRef = useRef<HTMLDivElement>(null);
+  const [klienData, setKlienData] = useState<KlienData>({
+    id_klien: null,
+    nama_klien: "",
+    nik_klien: "",
+    alamat_klien: "",
+  });
+  const [ktpFile, setKtpFile] = useState<File | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState<AgentSelection | null>(null);
 
   function goTo(n: WizardStep) {
     setStep(n);
@@ -184,7 +230,7 @@ export default function ClosingTabs({
       >
         {/* top accent line */}
         <div className="h-px w-full bg-gradient-to-r from-transparent via-emerald-500/30 to-transparent" />
-        <PremiumStepper current={step} maxUnlocked={maxUnlocked} onGo={goTo} />
+        <PremiumStepper current={step} maxUnlocked={maxUnlocked} onGo={goTo} steps={STEPS} />
       </div>
 
       {/* ── Step content card ── */}
@@ -195,31 +241,46 @@ export default function ClosingTabs({
       >
         <div className="p-5 sm:p-6">
           {step === 1 && (
-            <TabAgent
-              agent={agent}
-              leader={leader}
+            <TabKlien
+              initialData={klienData}
+              onDataChange={setKlienData}
+              onKtpFile={setKtpFile}
               onNext={() => goTo(2)}
-              onAgentChange={onAgentChange}
-              onLeaderChange={onLeaderChange}
             />
           )}
 
           {step === 2 && (
-            <TabTransaksi
-              listing={listing}
-              skemaPenjualan={skemaPenjualan}
+            <TabAgent
+              agent={agent}
+              leader={leader}
               onBack={() => goTo(1)}
-              onNextToPembagian={() => goTo(3)}
+              onNext={() => goTo(3)}
+              onAgentChange={onAgentChange}
+              onLeaderChange={onLeaderChange}
+              onAgentSelect={setSelectedAgent}
             />
           )}
 
           {step === 3 && (
+            <TabTransaksi
+              listing={listing}
+              skemaPenjualan={skemaPenjualan}
+              agent={selectedAgent}
+              klienData={klienData}
+              ktpFile={ktpFile}
+              onBack={() => goTo(2)}
+              onNextToPembagian={() => goTo(4)}
+            />
+          )}
+
+          {step === 4 && (
             <TabPembagian
               listing={listing}
               agent={agent}
               skemaPenjualan={skemaPenjualan}
               teamLeaderName={(leader as any)?.nama ?? ""}
-              onBack={() => goTo(2)}
+              klienData={klienData}
+              onBack={() => goTo(3)}
             />
           )}
         </div>

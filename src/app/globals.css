@@ -360,6 +360,11 @@ section {
   }
 }
 
+@keyframes progressBar {
+  0%   { left: -50%; }
+  100% { left: 150%; }
+}
+
 /* Spinner */
 .spinner {
   border: 3px solid rgba(255, 255, 255, 0.1);

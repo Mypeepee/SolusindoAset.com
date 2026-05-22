@@ -25,7 +25,7 @@ async function generateIdTransaksi(
   const startOfMonth = new Date(tahun, now.getMonth(), 1);
   const endOfMonth   = new Date(tahun, now.getMonth() + 1, 0, 23, 59, 59, 999);
 
-  const count = await tx.transaksi.count({
+  const count = await tx.mou.count({
     where: { dibuat_pada: { gte: startOfMonth, lte: endOfMonth } },
   });
 
@@ -45,30 +45,34 @@ export async function POST(
     const body = await req.json();
 
     const {
-      skema,                  // "PERSENTASE" | "SELISIH"
-      agentId: agentIdRaw,    // string — agent yang closing (bisa "COBROKE")
-      deal,                   // number — harga deal (hanya untuk SELISIH)
-      bidding,                // number — harga bidding
-      limit,                  // number — nilai_limit_lelang
-      komisiPct,              // number — % komisi (hanya untuk PERSENTASE)
-      balikNama,              // number
-      eksekusi,               // number
-      cobroke,                // number
-      royaltyFee,             // number
-      komisiAgent,            // number — thc_agent
-      pendapatanBersihKantor, // number
-      jenis_transaksi,        // string — jenis transaksi listing
-      rows,                   // Array<{ code, label, nominal, agentId }>
-      agentLuarNama,          // string? — nama agent luar (hanya jika agentId === 'COBROKE')
-      agentLuarKantor,        // string? — kantor agent luar
-      agentLuarTelepon,       // string? — telepon agent luar
+      skema,
+      agentId: agentIdRaw,
+      deal,
+      bidding,
+      limit,
+      komisiPct,
+      balikNama,
+      eksekusi,
+      cobroke,
+      komisiAgent,
+      pendapatanBersihKantor,
+      jenis_transaksi,
+      rows,
+      agentLuarNama,
+      agentLuarKantor,
+      agentLuarTelepon,
+      id_klien,
+      nama_lengkap_klien,
+      nik_klien,
+      alamat_klien,
+      termasuk_balik_nama,
+      termasuk_biaya_eksekusi,
+      maksimum_bidding,
+      gambar_ktp_klien,
     } = body;
 
-    // Jika agent luar (COBROKE), simpan id_agent = agent yang login (yang merekam transaksi)
     const isAgentLuar = agentIdRaw === "COBROKE";
-    const agentId = isAgentLuar
-      ? (sessionAgentId ?? agentIdRaw)
-      : agentIdRaw;
+    const agentId = isAgentLuar ? (sessionAgentId ?? agentIdRaw) : agentIdRaw;
 
     if (!agentId) {
       return NextResponse.json({ ok: false, error: "agentId wajib diisi" }, { status: 400 });
@@ -76,134 +80,146 @@ export async function POST(
 
     const isPersen = skema === "PERSENTASE";
 
-    /*
-     * PERSENTASE: harga_deal = bidding (tidak ada "deal" terpisah),
-     *             selisih = null
-     * SELISIH:    harga_deal = deal (harga jual actual),
-     *             selisih = deal - bidding
-     */
-    const harga_deal = toBigInt(isPersen ? bidding : deal);
-    const harga_bidding = toDecimal(bidding);
-    const harga_limit = toDecimal(limit > 0 ? limit : null);
-    const selisih = isPersen ? null : toBigInt(deal - bidding);
-
-    const pembanding = isPersen ? bidding : deal;
-    const kenaikan_dari_limit =
-      limit > 0 && pembanding > 0
-        ? toDecimal((pembanding - limit) / limit)
-        : null;
-
-    const persentase_komisi = isPersen ? toDecimal(komisiPct / 100) : null;
-    const biaya_baliknama = toBigInt(balikNama);
-    const biaya_pengosongan = toBigInt(eksekusi);
-
-    // Filter rows yang bisa disimpan ke DetailTransaksi:
-    // - agentId harus ada dan bukan synthetic (bukan COPIC:: prefix)
-    // - nominal > 0
-    const isSyntheticId = (id: string) => id.startsWith("COPIC::");
-    const validRows = (rows as any[]).filter(
-      (r) => r.agentId && !isSyntheticId(String(r.agentId)) && r.nominal > 0
-    );
-
     const result = await prisma.$transaction(async (tx) => {
-      // Cek apakah sudah ada transaksi untuk listing + agent ini
-      const existing = await tx.transaksi.findFirst({
+      // Cek apakah MOU sudah ada untuk listing + agent ini
+      const existing = await tx.mou.findFirst({
         where: { id_listing, id_agent: agentId },
         orderBy: { dibuat_pada: "desc" },
       });
 
-      const transaksiData = {
+      const mouData = {
         id_listing,
         id_agent: agentId,
         jenis_transaksi: jenis_transaksi as any,
         tipe_komisi: isPersen ? "PERSENTASE" : "SELISIH",
-        harga_deal,
-        harga_limit,
-        harga_bidding,
-        selisih,
-        kenaikan_dari_limit,
-        persentase_komisi,
-        biaya_baliknama,
-        biaya_pengosongan,
-        royalty_fee: toBigInt(royaltyFee),
-        cobroke_fee: toBigInt(cobroke),
-        tanggal_transaksi: new Date(),
-        pendapatan_bersih_kantor: toBigInt(pendapatanBersihKantor),
-        thc_agent: toBigInt(komisiAgent),
-        status_transaksi: "CLOSING",
-        ...(isAgentLuar && {
-          agent_luar_nama: agentLuarNama ?? null,
-          agent_luar_kantor: agentLuarKantor ?? null,
-          agent_luar_telepon: agentLuarTelepon ?? null,
-        }),
+        gambar_ktp_klien: gambar_ktp_klien ?? null,
+        id_klien: id_klien ?? null,
+        nama_lengkap_klien: nama_lengkap_klien ?? null,
+        nik_klien: nik_klien ?? null,
+        alamat_klien: alamat_klien ?? null,
+        harga_deal: isPersen ? null : toBigInt(deal),
+        harga_limit: toDecimal(limit > 0 ? limit : null),
+        persentase_komisi: isPersen ? toDecimal(komisiPct / 100) : null,
+        biaya_baliknama: toBigInt(balikNama),
+        biaya_pengosongan: toBigInt(eksekusi),
+        termasuk_baliknama: termasuk_balik_nama === true,
+        termasuk_pengosongan: termasuk_biaya_eksekusi === true,
+        maksimum_bidding: isPersen && maksimum_bidding > 0 ? toDecimal(maksimum_bidding) : null,
+        agent_luar_nama: isAgentLuar ? (agentLuarNama ?? null) : null,
+        agent_luar_kantor: isAgentLuar ? (agentLuarKantor ?? null) : null,
+        agent_luar_telepon: isAgentLuar ? (agentLuarTelepon ?? null) : null,
       };
 
-      let transaksi;
+      let mou;
 
       if (existing) {
-        // Update yang sudah ada
-        transaksi = await tx.transaksi.update({
+        // Update MOU — preserve status
+        mou = await tx.mou.update({
           where: { id: existing.id },
-          data: transaksiData,
-        });
-        // Hapus detail lama
-        await tx.detailTransaksi.deleteMany({
-          where: { id_transaksi: existing.id },
+          data: { ...mouData, diperbarui_pada: new Date() },
         });
       } else {
-        // Buat baru
-        transaksi = await tx.transaksi.create({
+        // Buat MOU baru
+        mou = await tx.mou.create({
           data: {
-            ...transaksiData,
+            ...mouData,
             id_transaksi: await generateIdTransaksi(tx),
+            status: "proses" as any,
           },
         });
       }
 
-      // Simpan DetailTransaksi
-      if (validRows.length > 0) {
-        await tx.detailTransaksi.createMany({
-          data: validRows.map((r: any) => ({
-            id_transaksi: transaksi.id,
-            id_agent: String(r.agentId),
-            role: String(r.code ?? r.label ?? "CUSTOM"),
-            pendapatan: toBigInt(r.nominal),
-          })),
-          skipDuplicates: true,
-        });
-      }
-
-      // ── Tandai semua property serupa sebagai TERJUAL ──
-      // Ambil identitas listing saat ini (nomor_legalitas, luas_tanah, kota)
+      // Ambil data listing + agent untuk acara dan marking TERJUAL
       const currentListing = await tx.listing.findUnique({
         where: { id_property: id_listing },
-        select: { nomor_legalitas: true, luas_tanah: true, kota: true },
+        select: {
+          nomor_legalitas: true,
+          kota: true,
+          tanggal_lelang: true,
+          jenis_transaksi: true,
+          alamat_lengkap: true,
+        },
       });
 
-      // Tandai property ini sendiri + semua riwayat lelang terkait sebagai TERJUAL
+      const agentInfo = await tx.agent.findUnique({
+        where: { id_agent: agentId },
+        select: { pengguna: { select: { nama_lengkap: true } } },
+      });
+      const namaAgent = agentInfo?.pengguna?.nama_lengkap ?? agentId;
+
+      const LOKASI_KANTOR =
+        "Solitaire Property\nJusticia Law Firm\nKantor Pemasaran dan Layanan Hukum\nSantorini Town Square\nJl. Ronggolawe No.2A, DR. Soetomo\nKec. Tegalsari, Surabaya, Jawa Timur 60160";
+
+      // Set tanggal_transaksi dari tanggal_lelang listing
+      if (currentListing?.tanggal_lelang) {
+        const tgl = currentListing.tanggal_lelang;
+        const tglMulai = new Date(tgl);
+        tglMulai.setHours(9, 0, 0, 0);
+        const tglSelesai = new Date(tgl);
+        tglSelesai.setHours(17, 0, 0, 0);
+
+        await tx.mou.update({
+          where: { id: mou.id },
+          data: { tanggal_transaksi: tgl },
+        });
+
+        // Upsert acara kalender — cek berdasarkan id_property + tipe CLOSING di tanggal sama
+        const existingAcara = await tx.acara.findFirst({
+          where: {
+            id_property: id_listing,
+            tipe_acara: "CLOSING",
+            tanggal_mulai: { gte: new Date(tgl.toISOString().slice(0, 10)), lt: new Date(new Date(tgl).setDate(new Date(tgl).getDate() + 1)) },
+          },
+          select: { id_acara: true },
+        });
+
+        const kota = currentListing.kota ?? "Surabaya";
+        const jenis = currentListing.jenis_transaksi ?? "LELANG";
+        const alamat = currentListing.alamat_lengkap ?? kota;
+        const judul = `Closing Aset ${kota}`;
+        const deskripsi = `Transaksi ${jenis} oleh ${namaAgent}, aset ${alamat}`;
+
+        if (existingAcara) {
+          await tx.acara.update({
+            where: { id_acara: existingAcara.id_acara },
+            data: { judul_acara: judul, deskripsi, tanggal_mulai: tglMulai, tanggal_selesai: tglSelesai, tanggal_diupdate: new Date() },
+          });
+        } else {
+          await tx.acara.create({
+            data: {
+              id_agent: agentId,
+              id_property: id_listing,
+              judul_acara: judul,
+              deskripsi,
+              tipe_acara: "CLOSING",
+              tanggal_mulai: tglMulai,
+              tanggal_selesai: tglSelesai,
+              lokasi: LOKASI_KANTOR,
+              status_acara: "SCHEDULED",
+              reminder_sent: false,
+            },
+          });
+        }
+      }
+
       if (currentListing?.nomor_legalitas) {
-        // Hanya cari riwayat terkait jika nomor_legalitas ada — hindari match terlalu luas
         await tx.listing.updateMany({
           where: {
             OR: [
               { id_property: id_listing },
-              {
-                nomor_legalitas: currentListing.nomor_legalitas,
-                kota: currentListing.kota,
-              },
+              { nomor_legalitas: currentListing.nomor_legalitas, kota: currentListing.kota },
             ],
           },
           data: { status_tayang: "TERJUAL" },
         });
       } else {
-        // Nomor legalitas kosong — tandai property ini saja
         await tx.listing.update({
           where: { id_property: id_listing },
           data: { status_tayang: "TERJUAL" },
         });
       }
 
-      return transaksi;
+      return mou;
     });
 
     return NextResponse.json({

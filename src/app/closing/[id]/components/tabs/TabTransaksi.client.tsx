@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import type { Listing } from "../../page";
 import Money from "../ui/Money";
 import { Icon } from "@iconify/react";
@@ -14,6 +15,7 @@ type PersistedState = {
   step: 1 | 2 | 3;
   deal: number;
   bidding: number;
+  limitInput: number;
   komisiStr: string;
 
   balikNamaMode: "AUTO" | "MANUAL";
@@ -27,7 +29,6 @@ type PersistedState = {
 
   selisihKotor: number;
   selisihSebelumRoyalty: number;
-  royaltyFee: number;
   selisihFinal: number;
 };
 
@@ -36,6 +37,11 @@ type Props = {
   skemaPenjualan: SkemaPenjualan;
   onNextToPembagian?: () => void;
   onBack?: () => void;
+  agent: { id_agent: string; isLuar?: boolean; luarNama?: string; luarKantor?: string; luarTelepon?: string } | null;
+  klienData: { id_klien: string | null; nama_klien: string; nik_klien: string; alamat_klien: string };
+  ktpFile?: File | null;
+  statusTransaksi?: string | null;
+  onSaveSuccess?: (transaksiId: string) => void;
 };
 
 /* =========================================
@@ -126,8 +132,8 @@ function ShellCard({
     >
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute inset-0 opacity-[0.18] [background-image:linear-gradient(to_right,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.06)_1px,transparent_1px)] [background-size:32px_32px]" />
-        
-        
+
+
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/10 to-black/45" />
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-300/30 to-transparent" />
       </div>
@@ -144,7 +150,7 @@ function Stepper({ step }: { step: 1 | 2 | 3 }) {
     { k: 3, t: "Review", d: "Fee kantor & ringkasan" },
   ] as const;
 
-  const pct = step === 1 ? "w-1/3" : step === 2 ? "w-2/3" : "w-full";
+  const pct = step === 1 ? "w-1/3" : step === 2 ? "w-2/3" : "w-[95%]";
 
   return (
     <div className="mb-6">
@@ -378,7 +384,13 @@ export default function TabTransaksi({
   skemaPenjualan,
   onNextToPembagian,
   onBack,
+  agent,
+  klienData,
+  ktpFile,
+  statusTransaksi,
+  onSaveSuccess,
 }: Props) {
+  const router = useRouter();
   const isLelang = listing.jenis_transaksi === "LELANG";
   const isSelisih = isLelang && skemaPenjualan === "SELISIH";
   const isPersen = isLelang && skemaPenjualan === "PERSENTASE";
@@ -387,12 +399,14 @@ export default function TabTransaksi({
   const key = storageKey(listing);
 
   const [hydrated, setHydrated] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
   const [deal, setDeal] = useState(0);
   const [bidding, setBidding] = useState(0);
-  const [komisiStr, setKomisiStr] = useState("2,5");
+  const [limitInput, setLimitInput] = useState(limit);
+  const [komisiStr, setKomisiStr] = useState("5");
 
   const [balikNamaMode, setBalikNamaMode] = useState<"AUTO" | "MANUAL">("AUTO");
   const [balikNama, setBalikNama] = useState(0);
@@ -415,7 +429,8 @@ export default function TabTransaksi({
         setStep(1);
         setDeal(n(parsed.deal));
         setBidding(n(parsed.bidding));
-        setKomisiStr(typeof parsed.komisiStr === "string" ? parsed.komisiStr : "2,5");
+        setLimitInput(n(parsed.limitInput ?? limit));
+        setKomisiStr(typeof parsed.komisiStr === "string" ? parsed.komisiStr : "5");
 
         setBalikNamaMode(parsed.balikNamaMode === "MANUAL" ? "MANUAL" : "AUTO");
         setBalikNama(n(parsed.balikNama));
@@ -451,15 +466,21 @@ export default function TabTransaksi({
     return (includeBalikNama ? nonNeg(balikNama) : 0) + (includeEksekusi ? nonNeg(eksekusi) : 0);
   }, [isSelisih, includeBalikNama, includeEksekusi, balikNama, eksekusi]);
 
+  const effectiveLimit = isPersen ? limitInput : limit;
   const warnDealBelowLimit = isSelisih && limit > 0 && deal > 0 && deal < limit;
-  const warnBidBelowLimit = isLelang && limit > 0 && bidding > 0 && bidding < limit;
+  const warnBidBelowLimit = isLelang && effectiveLimit > 0 && bidding > 0 && bidding < effectiveLimit;
+  const minKomisiPct = 5;
+  const warnKomisiTerlalu = isPersen && komisiPct > 0 && komisiPct < minKomisiPct;
+
+  // For SELISIH: use limit as proxy for bidding in calculations
+  const biddingForCalc = isSelisih ? effectiveLimit : bidding;
 
   const step1Valid = useMemo(() => {
     if (!isLelang) return true;
-    if (isSelisih) return deal > 0 && bidding > 0 && !warnDealBelowLimit && !warnBidBelowLimit;
-    if (isPersen) return bidding > 0 && !warnBidBelowLimit && komisiPct >= 0;
+    if (isSelisih) return deal > 0;
+    if (isPersen) return bidding > 0 && !warnBidBelowLimit && komisiPct >= minKomisiPct;
     return true;
-  }, [isLelang, isSelisih, isPersen, deal, bidding, warnDealBelowLimit, warnBidBelowLimit, komisiPct]);
+  }, [isLelang, isSelisih, isPersen, deal, bidding, warnBidBelowLimit, komisiPct]);
 
   // untuk isPersen: pendapatanKotor = bidding × komisi%
   const pendapatanKotor = useMemo(() => {
@@ -469,10 +490,10 @@ export default function TabTransaksi({
 
   const selisihKotor = useMemo(() => {
     if (!isLelang) return 0;
-    if (isSelisih) return nonNeg(deal - bidding);
+    if (isSelisih) return nonNeg(deal - biddingForCalc);
     if (isPersen) return pendapatanKotor;
     return 0;
-  }, [isLelang, isSelisih, isPersen, deal, bidding, pendapatanKotor]);
+  }, [isLelang, isSelisih, isPersen, deal, biddingForCalc, pendapatanKotor]);
 
   const selisihSebelumRoyalty = useMemo(() => {
     if (!isLelang) return 0;
@@ -480,19 +501,16 @@ export default function TabTransaksi({
     return selisihKotor;
   }, [isLelang, isSelisih, selisihKotor, biayaIncluded]);
 
-  const royaltyFee = useMemo(() => {
-    return Math.round(nonNeg(selisihSebelumRoyalty) * 0.003);
-  }, [selisihSebelumRoyalty]);
+  // No royalty
+  const royaltyFee = 0;
 
-  // cobroke hanya mengurangi komisi agent, bukan selisih
-  const selisihFinal = useMemo(() => {
-    return nonNeg(selisihSebelumRoyalty - royaltyFee);
-  }, [selisihSebelumRoyalty, royaltyFee]);
+  // selisihFinal = selisihSebelumRoyalty (no royalty deduction)
+  const selisihFinal = selisihSebelumRoyalty;
 
-  // komisi agent base (sebelum cobroke)
+  // komisi agent base (sebelum cobroke) — 60/40 split
   const komisiAgentBase = useMemo(() => {
-    if (isPersen) return Math.round(nonNeg(pendapatanKotor) * 0.4);
-    return Math.round(nonNeg(selisihFinal) * 0.4);
+    if (isPersen) return Math.round(nonNeg(pendapatanKotor) * 0.6);
+    return Math.round(nonNeg(selisihFinal) * 0.6);
   }, [isPersen, pendapatanKotor, selisihFinal]);
 
   // komisi agent net = base - cobroke (tidak bisa negatif)
@@ -500,19 +518,18 @@ export default function TabTransaksi({
     return nonNeg(komisiAgentBase - nonNeg(cobroke));
   }, [komisiAgentBase, cobroke]);
 
-  // SELISIH: selisihFinal - komisiAgent - royaltyFee
-  // PERSENTASE: pendapatanKotor - royaltyFee - komisiAgent
+  // PERSENTASE: 40% of total komisi; SELISIH: remaining after 60% to agent
   const pendapatanBersihKantor = useMemo(() => {
-    if (isPersen) return nonNeg(pendapatanKotor - royaltyFee - komisiAgent);
-    return nonNeg(selisihFinal - komisiAgent - royaltyFee);
-  }, [isPersen, pendapatanKotor, royaltyFee, komisiAgent, selisihFinal]);
+    if (isPersen) return nonNeg(pendapatanKotor * 0.4);
+    return nonNeg(selisihFinal - komisiAgent);
+  }, [isPersen, pendapatanKotor, komisiAgent, selisihFinal]);
 
   const kenaikanDariLimit = useMemo(() => {
-    if (!isLelang || limit <= 0) return 0;
-    const pembanding = isSelisih ? deal : bidding;
+    if (!isLelang || effectiveLimit <= 0) return 0;
+    const pembanding = isSelisih ? deal : biddingForCalc;
     if (pembanding <= 0) return 0;
-    return (pembanding - limit) / limit;
-  }, [isLelang, isSelisih, deal, bidding, limit]);
+    return (pembanding - effectiveLimit) / effectiveLimit;
+  }, [isLelang, isSelisih, deal, biddingForCalc, effectiveLimit]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -521,6 +538,7 @@ export default function TabTransaksi({
       step,
       deal,
       bidding,
+      limitInput,
       komisiStr,
       balikNamaMode,
       balikNama,
@@ -530,7 +548,6 @@ export default function TabTransaksi({
       cobroke,
       selisihKotor,
       selisihSebelumRoyalty,
-      royaltyFee,
       selisihFinal,
     };
 
@@ -554,6 +571,7 @@ export default function TabTransaksi({
     step,
     deal,
     bidding,
+    limitInput,
     komisiStr,
     balikNamaMode,
     balikNama,
@@ -563,9 +581,80 @@ export default function TabTransaksi({
     cobroke,
     selisihKotor,
     selisihSebelumRoyalty,
-    royaltyFee,
     selisihFinal,
   ]);
+
+  async function handleSave() {
+    if (!agent) return;
+    setSaving(true);
+    try {
+      const isPersen = skemaPenjualan === "PERSENTASE";
+      const isSelisihLocal = skemaPenjualan === "SELISIH";
+
+      // Upload KTP ke Google Drive jika ada file
+      let gambar_ktp_klien: string | null = null;
+      if (ktpFile) {
+        const fd = new FormData();
+        fd.append("file", ktpFile);
+        fd.append("nama_klien", klienData.nama_klien || "klien");
+        const ktpRes = await fetch("/api/closing/upload-ktp", { method: "POST", body: fd });
+        const ktpJson = await ktpRes.json();
+        if (!ktpRes.ok) throw new Error(ktpJson?.error ?? "Gagal upload KTP");
+        gambar_ktp_klien = ktpJson.fileId ?? null;
+      }
+
+      const body = {
+        skema: skemaPenjualan,
+        agentId: agent.id_agent,
+        // PERSENTASE: harga_deal & harga_bidding di-null, maksimum_bidding = batas bidding
+        deal: isSelisihLocal ? deal : 0,
+        bidding: isSelisihLocal ? effectiveLimit : 0,
+        limit: effectiveLimit,
+        komisiPct: komisiPct,
+        balikNama: balikNama,
+        eksekusi: eksekusi,
+        cobroke: cobroke,
+        royaltyFee: 0,
+        komisiAgent,
+        pendapatanBersihKantor: isPersen
+          ? nonNeg(pendapatanKotor - komisiAgent)
+          : nonNeg(deal - effectiveLimit - (includeBalikNama ? balikNama : 0) - (includeEksekusi ? eksekusi : 0)),
+        jenis_transaksi: (listing as any).jenis_transaksi,
+        rows: [],
+        agentLuarNama: agent.isLuar ? agent.luarNama : undefined,
+        agentLuarKantor: agent.isLuar ? agent.luarKantor : undefined,
+        agentLuarTelepon: agent.isLuar ? agent.luarTelepon : undefined,
+        id_klien: klienData.id_klien,
+        nama_lengkap_klien: klienData.nama_klien,
+        nik_klien: klienData.nik_klien,
+        alamat_klien: klienData.alamat_klien,
+        // toggle hanya berlaku untuk SELISIH
+        termasuk_balik_nama: isSelisihLocal ? includeBalikNama : false,
+        termasuk_biaya_eksekusi: isSelisihLocal ? includeEksekusi : false,
+        // hanya PERSENTASE yang isi maksimum_bidding (= batas bidding maksimum)
+        maksimum_bidding: isSelisihLocal ? null : bidding,
+        gambar_ktp_klien,
+      };
+
+      const listingId = String((listing as any).id_property);
+      const res = await fetch(`/api/closing/listing/${encodeURIComponent(listingId)}/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error ?? "Gagal simpan");
+
+      const transaksiId = json.id;
+      onSaveSuccess?.(transaksiId);
+      router.push(`/dashboard/transaksi?tab=progress&open=${transaksiId}`);
+    } catch (err: any) {
+      console.error(err);
+      alert(err?.message ?? "Gagal menyimpan transaksi");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   const cardRef = useRef<HTMLDivElement | null>(null);
 
@@ -596,12 +685,6 @@ export default function TabTransaksi({
         color: "text-rose-300",
         show: isSelisih && includeEksekusi && eksekusi > 0,
       },
-      {
-        label: "Royalty Fee",
-        value: royaltyFee,
-        color: "text-sky-300",
-        show: royaltyFee > 0,
-      },
     ];
 
     return (
@@ -613,7 +696,7 @@ export default function TabTransaksi({
               Breakdown Selisih Kantor
             </div>
             <div className="text-[11px] text-zinc-600">
-              {isSelisih ? "Deal − Bidding" : `Bidding × ${komisiPct}%`}
+              {isSelisih ? "Deal − Limit" : `Bidding × ${komisiPct}%`}
             </div>
           </div>
 
@@ -640,8 +723,8 @@ export default function TabTransaksi({
 
             <div className="mt-2 text-[11px] text-zinc-600">
               {isSelisih
-                ? `Selisih = (Deal − Bidding)${includeBalikNama ? " − Balik Nama" : ""}${includeEksekusi ? " − Eksekusi" : ""} − Royalty`
-                : `Selisih = (Bidding × ${komisiPct}%) − Royalty`}
+                ? `Selisih = (Deal − Limit)${includeBalikNama ? " − Balik Nama" : ""}${includeEksekusi ? " − Eksekusi" : ""}`
+                : `Selisih = Bidding × ${komisiPct}%`}
             </div>
           </div>
         </div>
@@ -701,33 +784,32 @@ export default function TabTransaksi({
                     </Warning>
                   ) : null}
                 </div>
-              ) : (
-                <div>
-                  <Label>Harga Bidding</Label>
-                  <RpInput value={bidding} onChange={setBidding} inputRef={refFirst} />
-                  <Hint>Minimal harus ≥ limit lelang.</Hint>
-                  {warnBidBelowLimit ? (
-                    <Warning>
-                      Harga Bidding lebih kecil dari Limit Lelang. Naikkan minimal ke{" "}
-                      <span className="font-semibold text-amber-100">
-                        <Money value={limit} />
-                      </span>
-                      .
-                    </Warning>
-                  ) : null}
-                </div>
-              )}
+              ) : null}
 
               {isSelisih ? (
                 <div>
-                  <Label>Harga Bidding</Label>
+                  <Label>Nilai Limit Lelang</Label>
+                  <RpInput value={effectiveLimit} onChange={() => {}} disabled={true} />
+                </div>
+              ) : null}
+
+              {isPersen ? (
+                <div>
+                  <Label>Nilai Limit Lelang</Label>
+                  <RpInput value={limitInput} onChange={() => {}} disabled={true} />
+                </div>
+              ) : null}
+
+              {isPersen ? (
+                <div>
+                  <Label>Batas Bidding Maksimum</Label>
                   <RpInput value={bidding} onChange={setBidding} />
-                  <Hint>Minimal harus ≥ limit lelang.</Hint>
+                  <Hint>Batas maksimal penawaran yang diizinkan klien.</Hint>
                   {warnBidBelowLimit ? (
                     <Warning>
-                      Harga Bidding lebih kecil dari Limit Lelang. Naikkan minimal ke{" "}
+                      Batas Bidding lebih kecil dari Limit Lelang. Naikkan minimal ke{" "}
                       <span className="font-semibold text-amber-100">
-                        <Money value={limit} />
+                        <Money value={effectiveLimit} />
                       </span>
                       .
                     </Warning>
@@ -739,10 +821,11 @@ export default function TabTransaksi({
                 <div>
                   <Label>Komisi (%)</Label>
                   <PercentInput value={komisiStr} onChange={setKomisiStr} />
-                  <Hint>
-                    Disimpan untuk data transaksi (contoh: 2,5). Komisi agent real-time
-                    mengikuti 40% selisih final.
-                  </Hint>
+                  {warnKomisiTerlalu ? (
+                    <Warning>
+                      Persentase komisi terlalu kecil. Minimal {minKomisiPct}% (saat ini {komisiPct}%).
+                    </Warning>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -882,28 +965,14 @@ export default function TabTransaksi({
               <div>
                 <div className="text-white font-semibold text-lg">Review & Fee</div>
                 <div className="mt-1 text-[12px] text-zinc-500">
-                  Royalty otomatis (0,3%). Cobroke diinput.
+                  Cobroke diinput jika ada.
                 </div>
               </div>
 
-              <div className="grid gap-5 sm:grid-cols-2">
-                <div className="rounded-3xl border border-white/10 bg-black/25 p-4">
-                  <div className="text-[11px] uppercase tracking-[0.14em] text-zinc-400">
-                    Royalty Fee
-                  </div>
-                  <div className="mt-2 text-xl font-semibold text-sky-200">
-                    <Money value={royaltyFee} />
-                  </div>
-                  <div className="mt-1 text-[11px] text-zinc-500">
-                    selisih bersih × 3% × 10%
-                  </div>
-                </div>
-
-                <div>
-                  <Label>Cobroke Fee</Label>
-                  <RpInput value={cobroke} onChange={setCobroke} inputRef={refFirst} />
-                  <Hint>Mengurangi komisi agent, bukan pendapatan kantor.</Hint>
-                </div>
+              <div>
+                <Label>Cobroke Fee</Label>
+                <RpInput value={cobroke} onChange={setCobroke} inputRef={refFirst} />
+                <Hint>Mengurangi komisi agent, bukan pendapatan kantor.</Hint>
               </div>
 
               <Breakdown />
@@ -920,13 +989,21 @@ export default function TabTransaksi({
 
                 <button
                   type="button"
-                  onClick={() => {
-                    onNextToPembagian?.();
-                  }}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-500/12 px-5 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-500/16 transition"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-500/12 px-5 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/16 transition disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  Detail Pembagian
-                  <Icon icon="solar:arrow-right-linear" className="text-lg" />
+                  {saving ? (
+                    <>
+                      <Icon icon="solar:spinner-linear" className="text-lg animate-spin" />
+                      Menyimpan...
+                    </>
+                  ) : (
+                    <>
+                      Simpan Perubahan
+                      <Icon icon="solar:diskette-bold-duotone" className="text-lg" />
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -941,9 +1018,6 @@ export default function TabTransaksi({
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-white font-semibold text-lg">Ringkasan</div>
-                  <div className="mt-1 text-[12px] text-zinc-500">
-                    Bagus di mobile juga — ringkasan tetap kebaca.
-                  </div>
                 </div>
 
                 <div className="grid place-items-center h-11 w-11 rounded-2xl border border-white/10 bg-white/5 text-emerald-100">
@@ -952,20 +1026,18 @@ export default function TabTransaksi({
               </div>
 
               <div className="mt-5 grid gap-3">
-                {/* Selisih Final (SELISIH) / Pendapatan Kotor Kantor (PERSENTASE) */}
+                {/* First card */}
                 <div className="rounded-3xl border border-white/10 bg-black/25 p-4">
                   <div className="text-[11px] uppercase tracking-[0.14em] text-zinc-400">
-                    {isPersen ? "Pendapatan Kotor Kantor" : "Selisih Final"}
+                    {isPersen ? "Perk. Total Komisi" : "Perkiraan Selisih"}
                   </div>
                   <div className="mt-2 text-2xl font-semibold text-white">
-                    <Money value={isPersen ? nonNeg(pendapatanKotor - royaltyFee) : selisihFinal} />
+                    <Money value={isPersen ? pendapatanKotor : selisihFinal} />
                   </div>
                   <div className="mt-2 text-[12px] text-zinc-500">
                     {isPersen
-                      ? `(Bidding × ${komisiPct}%) − Royalty Fee`
-                      : isSelisih
-                      ? "Dipengaruhi include biaya (balik nama/eksekusi)."
-                      : "Tidak dipengaruhi toggle biaya."}
+                      ? `Bidding × ${komisiPct}%`
+                      : "Deal − Limit − Biaya"}
                   </div>
                 </div>
 
@@ -981,31 +1053,35 @@ export default function TabTransaksi({
                   </div>
                 </div>
 
+                {/* Third card - Komisi Agent */}
                 <div className="rounded-3xl border border-white/10 bg-black/25 p-4">
                   <div className="text-[11px] uppercase tracking-[0.14em] text-zinc-400">
-                    Komisi Agent
+                    {isPersen ? "Perk. Komisi Agent" : "Perkiraan Komisi Agent"}
                   </div>
                   <div className="mt-2 text-xl font-semibold text-white">
-                    <Money value={komisiAgent} />
+                    <Money value={isPersen ? Math.round(nonNeg(pendapatanKotor * 0.6) - nonNeg(cobroke)) : komisiAgent} />
                   </div>
                   <div className="mt-1 text-[12px] text-zinc-500">
                     {isPersen
-                      ? `40% × (Bidding × ${komisiPct}%)`
-                      : "40% × Selisih Final"}
+                      ? `60% × (Bidding × ${komisiPct}%)`
+                      : "60% × Perkiraan Selisih"}
                   </div>
                 </div>
 
+                {/* Fourth card - emerald */}
                 <div className="rounded-3xl border border-emerald-400/15 bg-gradient-to-br from-emerald-500/10 via-white/5 to-transparent p-4">
                   <div className="text-[11px] uppercase tracking-[0.14em] text-zinc-300/80">
-                    Pendapatan Bersih Kantor
+                    {isPersen ? "Perk. Pendapatan Bersih Kantor" : "Harga Bersih Objek Lelang"}
                   </div>
                   <div className="mt-2 text-2xl font-semibold text-emerald-100">
-                    <Money value={pendapatanBersihKantor} />
+                    <Money value={isPersen
+                      ? nonNeg(pendapatanKotor - komisiAgent)
+                      : nonNeg(deal - effectiveLimit - (includeBalikNama ? balikNama : 0) - (includeEksekusi ? eksekusi : 0))} />
                   </div>
                   <div className="mt-1 text-[12px] text-zinc-400">
                     {isPersen
-                      ? "Pend. Kotor − Royalty − Komisi Agent"
-                      : "Selisih Final − Komisi − Royalty Fee"}
+                      ? "Total Komisi − Komisi Agent"
+                      : "Deal − Limit" + (includeBalikNama ? " − Balik Nama" : "") + (includeEksekusi ? " − Eksekusi" : "")}
                   </div>
                 </div>
               </div>

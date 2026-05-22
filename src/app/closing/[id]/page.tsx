@@ -66,6 +66,7 @@ export default function ClosingPage() {
       listing={payload.listing}
       agent={payload.agent}
       leader={payload.leader}
+      statusTransaksi={payload.mou?.status ?? null}
     />
   );
 }
