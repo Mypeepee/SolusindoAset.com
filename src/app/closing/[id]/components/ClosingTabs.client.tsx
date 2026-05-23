@@ -186,6 +186,8 @@ export default function ClosingTabs({
   leader,
   skemaPenjualan,
   statusTransaksi,
+  mouPrefill,
+  isClosingMode = false,
   onAgentChange,
   onLeaderChange,
 }: {
@@ -194,6 +196,8 @@ export default function ClosingTabs({
   leader: TeamLeader | null;
   skemaPenjualan: SkemaPenjualan;
   statusTransaksi: string | null;
+  mouPrefill?: any;
+  isClosingMode?: boolean;
   onAgentChange?: (name: string) => void;
   onLeaderChange?: (name: string) => void;
 }) {
@@ -204,13 +208,24 @@ export default function ClosingTabs({
   const [maxUnlocked, setMaxUnlocked] = useState<WizardStep>(1);
   const contentRef = useRef<HTMLDivElement>(null);
   const [klienData, setKlienData] = useState<KlienData>({
-    id_klien: null,
-    nama_klien: "",
-    nik_klien: "",
-    alamat_klien: "",
+    id_klien: mouPrefill?.idKlien ?? null,
+    nama_klien: mouPrefill?.namaKlien ?? "",
+    nik_klien: mouPrefill?.nikKlien ?? "",
+    alamat_klien: mouPrefill?.alamatKlien ?? "",
   });
   const [ktpFile, setKtpFile] = useState<File | null>(null);
-  const [selectedAgent, setSelectedAgent] = useState<AgentSelection | null>(null);
+  const initAgentId = mouPrefill?.idAgent ?? (agent as any)?.id_agent ?? null;
+  const [selectedAgent, setSelectedAgent] = useState<AgentSelection | null>(
+    initAgentId
+      ? {
+          id_agent: initAgentId,
+          isLuar: !!(mouPrefill?.agentLuarNama),
+          luarNama: mouPrefill?.agentLuarNama ?? undefined,
+          luarKantor: mouPrefill?.agentLuarKantor ?? undefined,
+          luarTelepon: mouPrefill?.agentLuarTelepon ?? undefined,
+        }
+      : null
+  );
 
   function goTo(n: WizardStep) {
     setStep(n);
@@ -246,6 +261,7 @@ export default function ClosingTabs({
               onDataChange={setKlienData}
               onKtpFile={setKtpFile}
               onNext={() => goTo(2)}
+              readOnly={isClosingMode}
             />
           )}
 
@@ -253,11 +269,13 @@ export default function ClosingTabs({
             <TabAgent
               agent={agent}
               leader={leader}
+              initialSelectedId={mouPrefill?.idAgent ?? undefined}
               onBack={() => goTo(1)}
               onNext={() => goTo(3)}
               onAgentChange={onAgentChange}
               onLeaderChange={onLeaderChange}
               onAgentSelect={setSelectedAgent}
+              readOnly={isClosingMode}
             />
           )}
 
@@ -268,6 +286,8 @@ export default function ClosingTabs({
               agent={selectedAgent}
               klienData={klienData}
               ktpFile={ktpFile}
+              prefill={mouPrefill}
+              isClosingMode={isClosingMode}
               onBack={() => goTo(2)}
               onNextToPembagian={() => goTo(4)}
             />
@@ -277,6 +297,7 @@ export default function ClosingTabs({
             <TabPembagian
               listing={listing}
               agent={agent}
+              mouAgentId={mouPrefill?.idAgent ?? undefined}
               skemaPenjualan={skemaPenjualan}
               teamLeaderName={(leader as any)?.nama ?? ""}
               klienData={klienData}

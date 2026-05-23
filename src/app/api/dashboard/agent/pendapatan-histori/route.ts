@@ -50,19 +50,22 @@ export async function GET() {
         pendapatan: true,
         transaksi: {
           select: {
-            id: true,
             id_transaksi: true,
             status_transaksi: true,
-            jenis_transaksi: true,
             tanggal_transaksi: true,
-            listing: {
+            mou: {
               select: {
-                judul: true,
-                gambar: true,
-                alamat_lengkap: true,
-                kelurahan: true,
-                kecamatan: true,
-                kota: true,
+                jenis_transaksi: true,
+                listing: {
+                  select: {
+                    judul: true,
+                    gambar: true,
+                    alamat_lengkap: true,
+                    kelurahan: true,
+                    kecamatan: true,
+                    kota: true,
+                  },
+                },
               },
             },
           },
@@ -71,7 +74,7 @@ export async function GET() {
     });
 
     const data = rows.map((d) => {
-      const l = d.transaksi.listing;
+      const l = d.transaksi.mou.listing;
       const alamat = [l.alamat_lengkap, l.kelurahan, l.kecamatan, l.kota]
         .filter(Boolean)
         .join(", ");
@@ -79,7 +82,7 @@ export async function GET() {
         id: d.id.toString(),
         role: d.role,
         pendapatan: Number(d.pendapatan),
-        kode: d.transaksi.id_transaksi ?? `TR-${d.transaksi.id}`,
+        kode: d.transaksi.id_transaksi,
         status: d.transaksi.status_transaksi,
         tanggal: d.transaksi.tanggal_transaksi.toISOString().slice(0, 10),
         alamat,

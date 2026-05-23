@@ -56,6 +56,7 @@ export async function POST(
       cobroke,
       komisiAgent,
       pendapatanBersihKantor,
+      hargaBidding,
       jenis_transaksi,
       rows,
       agentLuarNama,
@@ -219,13 +220,85 @@ export async function POST(
         });
       }
 
-      return mou;
+      // ── Transaksi ────────────────────────────────────────────
+      const idTransaksi = mou.id_transaksi;
+      if (idTransaksi) {
+        const isSelisihLocal = skema === "SELISIH";
+        const hargaBiddingNum = Number(hargaBidding) || 0;
+        const limitNum = Number(limit) || 0;
+
+        // selisih bersih (SELISIH: deal − bidding − biaya; PERSENTASE: pendapatan kotor)
+        const selisihVal = isSelisihLocal
+          ? Math.max(0, (Number(deal) || 0) - hargaBiddingNum
+              - (termasuk_balik_nama ? (Number(balikNama) || 0) : 0)
+              - (termasuk_biaya_eksekusi ? (Number(eksekusi) || 0) : 0))
+          : Math.round(((Number(bidding) || 0) * (Number(komisiPct) || 0)) / 100);
+
+        const pembanding = isSelisihLocal
+          ? (hargaBiddingNum > 0 ? hargaBiddingNum : (Number(deal) || 0))
+          : (Number(bidding) || 0);
+        const kenaikan = limitNum > 0 && pembanding > 0
+          ? (pembanding - limitNum) / limitNum
+          : 0;
+
+        const tanggalTrx = currentListing?.tanggal_lelang ?? new Date();
+
+        const trxData = {
+          harga_bidding: hargaBiddingNum > 0 ? toDecimal(hargaBiddingNum) : null,
+          selisih: toBigInt(selisihVal),
+          kenaikan_dari_limit: toDecimal(kenaikan),
+          biaya_baliknama: toBigInt(Number(balikNama) || 0),
+          biaya_pengosongan: toBigInt(Number(eksekusi) || 0),
+          cobroke_fee: toBigInt(Number(cobroke) || 0),
+          pendapatan_bersih_kantor: toBigInt(Number(pendapatanBersihKantor) || 0),
+          tanggal_transaksi: tanggalTrx,
+          diperbarui_pada: new Date(),
+        };
+
+        const existingTrx = await tx.transaksi.findUnique({
+          where: { id_transaksi: idTransaksi },
+          select: { id_transaksi: true },
+        });
+
+        if (existingTrx) {
+          await tx.transaksi.update({
+            where: { id_transaksi: idTransaksi },
+            data: trxData,
+          });
+        } else {
+          await tx.transaksi.create({
+            data: { id_transaksi: idTransaksi, ...trxData, status_transaksi: "closing" as any },
+          });
+        }
+
+        // ── Detail Transaksi ──────────────────────────────────
+        if (Array.isArray(rows) && rows.length > 0) {
+          await tx.detailTransaksi.deleteMany({ where: { id_transaksi: idTransaksi } });
+
+          const validRows = rows.filter(
+            (r: any) => r.agentId && r.agentId !== "COBROKE" && Number(r.nominal) > 0
+          );
+          if (validRows.length > 0) {
+            await tx.detailTransaksi.createMany({
+              data: validRows.map((r: any) => ({
+                id_transaksi: idTransaksi,
+                id_agent: String(r.agentId),
+                role: String(r.code ?? r.label ?? "agent"),
+                pendapatan: toBigInt(Number(r.nominal)),
+              })),
+              skipDuplicates: true,
+            });
+          }
+        }
+      }
+
+      return { mou, idTransaksi: mou.id_transaksi };
     });
 
     return NextResponse.json({
       ok: true,
-      id: result.id.toString(),
-      kode: result.id_transaksi,
+      id: result.idTransaksi ?? result.mou.id.toString(),
+      kode: result.idTransaksi ?? result.mou.id_transaksi,
     });
   } catch (e: any) {
     console.error("[closing/save]", e);

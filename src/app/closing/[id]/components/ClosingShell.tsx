@@ -83,12 +83,16 @@ export default function ClosingShell({
   agent,
   leader,
   statusTransaksi,
+  mouPrefill,
 }: {
   listing: Listing;
   agent: Agent | null;
   leader: TeamLeader | null;
   statusTransaksi: string | null;
+  mouPrefill?: any;
 }) {
+  const isClosingMode = mouPrefill?.status === "closing";
+
   const city = safe(listing.kota) || "-";
   const jenis = transaksiLabel(listing.jenis_transaksi);
 
@@ -157,13 +161,18 @@ export default function ClosingShell({
     [isLelang]
   );
 
-  const [skema, setSkema] = useState<Skema>(skemaOptions[0]);
+  const [skema, setSkema] = useState<Skema>(() => {
+    const tipe = mouPrefill?.tipeKomisi?.toUpperCase();
+    if (isLelang && tipe === "SELISIH") return "SELISIH";
+    return "PERSENTASE";
+  });
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
+    if (isClosingMode) return;
     setSkema(skemaOptions[0]);
     setOpen(false);
-  }, [skemaOptions]);
+  }, [skemaOptions, isClosingMode]);
 
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const [pos, setPos] = useState<{ top: number; left: number; width: number }>({
@@ -361,7 +370,7 @@ export default function ClosingShell({
                         ref={btnRef}
                         type="button"
                         onClick={() => {
-                          if (skemaOptions.length === 1) return;
+                          if (skemaOptions.length === 1 || isClosingMode) return;
                           setOpen((v) => !v);
                         }}
                         className={[
@@ -369,7 +378,7 @@ export default function ClosingShell({
                           "border-emerald-400/25 bg-gradient-to-r from-emerald-500/12 via-white/5 to-cyan-500/12 text-white",
                           " transition hover:border-emerald-300/45",
                           "shadow-[0_12px_40px_rgba(0,0,0,0.45)]",
-                          skemaOptions.length === 1
+                          skemaOptions.length === 1 || isClosingMode
                             ? "cursor-default"
                             : "cursor-pointer",
                         ].join(" ")}
@@ -538,6 +547,8 @@ export default function ClosingShell({
             leader={leader}
             skemaPenjualan={skema}
             statusTransaksi={statusTransaksi}
+            mouPrefill={mouPrefill}
+            isClosingMode={isClosingMode}
             onAgentChange={(name) => setAgentName(name || "-")}
             onLeaderChange={(name) => setLeaderName(name || "-")}
           />

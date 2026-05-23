@@ -50,7 +50,7 @@ export async function GET() {
 
       // Total transaksi all-time
       prisma.transaksi.count({
-        where: { id_agent: agentId },
+        where: { mou: { id_agent: agentId } },
       }),
 
       // Total listing aktif
@@ -84,7 +84,7 @@ export async function GET() {
       // Jumlah transaksi bulan ini — tanggal_transaksi = tanggal closing aktual
       prisma.transaksi.count({
         where: {
-          id_agent: agentId,
+          mou: { id_agent: agentId },
           tanggal_transaksi: { gte: awalBulanIni },
         },
       }),
@@ -106,7 +106,7 @@ export async function GET() {
       // Jumlah transaksi bulan lalu
       prisma.transaksi.count({
         where: {
-          id_agent: agentId,
+          mou: { id_agent: agentId },
           tanggal_transaksi: {
             gte: awalBulanLalu,
             lt:  awalBulanIni,

@@ -184,11 +184,6 @@ export async function POST(req: Request) {
     const uang_jaminan     = fmtRp(uang_jaminan_num);
     const terbilang_uang_jaminan = terbilang(uang_jaminan_num);
 
-    // uang_tanda_jaminan: dari body override atau pakai uang_jaminan listing
-    const utj_num = toNum(body["uang_tanda_jaminan"]?.replace(/\D/g, "")) || uang_jaminan_num;
-    const uang_tanda_jaminan = fmtRp(utj_num);
-    const terbilang_uang_tanda_jaminan = terbilang(utj_num);
-
     const biaya_baliknama_num = toNum(trx.biaya_baliknama);
 
     let templateFile: string;
@@ -223,7 +218,10 @@ export async function POST(req: Request) {
       const harga_deal_num        = toNum(trx.harga_deal);
       const biaya_pengosongan_num = toNum(trx.biaya_pengosongan);
       const harga_aset_num        = harga_deal_num - biaya_pengosongan_num - biaya_baliknama_num;
-      const pelunasan_num         = harga_deal_num - utj_num;
+      // titipan biaya = 10% dari harga deal
+      const titipan_biaya_num     = Math.round(harga_deal_num * 0.10);
+      // pelunasan = harga deal - titipan biaya - uang deposit jaminan lelang
+      const pelunasan_num         = harga_deal_num - titipan_biaya_num - uang_jaminan_num;
 
       data = {
         id_transaksi:                trx.id_transaksi ?? String(trx.id),
@@ -237,7 +235,8 @@ export async function POST(req: Request) {
         biaya_baliknama:             fmtRp(biaya_baliknama_num),
         terbilang_biaya_baliknama:   terbilang(biaya_baliknama_num),
         harga_aset:                  fmtRp(Math.max(0, harga_aset_num)),
-        uang_tanda_jaminan, terbilang_uang_tanda_jaminan,
+        titipan_biaya:               fmtRp(titipan_biaya_num),
+        terbilang_titipan_biaya:     terbilang(titipan_biaya_num),
         uang_jaminan, terbilang_uang_jaminan,
         pelunasan:                   fmtRp(Math.max(0, pelunasan_num)),
         terbilang_pelunasan:         terbilang(Math.max(0, pelunasan_num)),

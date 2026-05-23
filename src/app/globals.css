@@ -2,6 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── DocButton loading spinner keyframes ── */
+@keyframes sp-rotate {
+  to { transform: rotate(360deg); }
+}
+@keyframes sp-dash {
+  0%   { stroke-dasharray: 1 150; stroke-dashoffset: 0; }
+  50%  { stroke-dasharray: 90 150; stroke-dashoffset: -35; }
+  100% { stroke-dasharray: 90 150; stroke-dashoffset: -124; }
+}
+@keyframes sp-bar {
+  0%   { transform: translateX(-100%); }
+  60%  { transform: translateX(0%); }
+  100% { transform: translateX(200%); }
+}
+@keyframes sp-shimmer {
+  0%   { transform: translateX(-100%) skewX(-18deg); }
+  100% { transform: translateX(220%) skewX(-18deg); }
+}
+
 html {
   scroll-behavior: smooth;
 }

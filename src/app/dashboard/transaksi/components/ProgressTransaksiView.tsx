@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { Icon } from "@iconify/react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -356,6 +357,7 @@ function ProsesSteps({
   row: TransaksiRow;
   onUpdate: (status?: string) => void;
 }) {
+  const router = useRouter();
   const [loadingDecision, setLoadingDecision] = useState<string | null>(null);
   const [markingDoc,      setMarkingDoc]      = useState<string | null>(null);
   const [mouStep,         setMouStep]         = useState<string | null>(null);
@@ -466,10 +468,15 @@ function ProsesSteps({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: row.id, status }),
       });
-      if (!res.ok) throw new Error();
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error ?? `Gagal update status (${res.status})`);
       onUpdate(status);
-    } catch (e) {
-      console.error(e);
+      if (status === "closing") {
+        router.push(`/closing/${row.listingId}`);
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Terjadi kesalahan. Coba lagi.";
+      setMouError(msg);
     } finally {
       setLoadingDecision(null);
     }
@@ -585,14 +592,26 @@ function ProsesSteps({
                 <div className="relative grid h-11 w-11 place-items-center rounded-[14px] bg-gradient-to-br from-emerald-500/40 to-emerald-700/20 ring-1 ring-emerald-400/40">
                   {loadingDecision === "closing"
                     ? <Icon icon="solar:spinner-linear" className="animate-spin text-xl text-emerald-200" />
-                    : <Icon icon="solar:handshake-bold-duotone" className="text-xl text-emerald-200" />}
+                    : <Icon icon="solar:cup-star-bold-duotone" className="text-xl text-emerald-200" />}
                 </div>
               </div>
               <div className="relative min-w-0 flex-1 text-left">
                 <p className="text-[15px] font-black text-white">Closing — Menang 🏆</p>
-                <p className="mt-0.5 text-[11px] text-zinc-400">Konfirmasi deal berhasil, lanjut proses balik nama</p>
+                <p className="mt-0.5 text-[11px] text-zinc-400">
+                  {loadingDecision === "closing"
+                    ? "Menyimpan & membuka halaman closing…"
+                    : "Konfirmasi deal · Lanjut 4 langkah pembagian fee"}
+                </p>
               </div>
-              <Icon icon="solar:arrow-right-bold" className="relative shrink-0 text-sm text-emerald-400" />
+              <div className="relative flex shrink-0 flex-col items-center gap-0.5">
+                <Icon
+                  icon={loadingDecision === "closing" ? "solar:spinner-linear" : "solar:arrow-right-up-bold"}
+                  className={loadingDecision === "closing" ? "animate-spin text-base text-emerald-300" : "text-base text-emerald-400 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"}
+                />
+                {loadingDecision !== "closing" && (
+                  <span className="text-[9px] font-bold uppercase tracking-wide text-emerald-600">4 step</span>
+                )}
+              </div>
             </button>
 
             {/* Kalah + Batal — secondary */}
@@ -681,76 +700,142 @@ function DocButton({
 
   // ── Loading — premium state ──────────────────────────────────────────────────
   if (loading) {
-    // Jika re-generate (sudah done sebelumnya), gunakan tema emerald agar tidak ada flash ungu
     const isRegen = done;
     const ld = isRegen
       ? {
-          bg:     "rgba(5,150,105,0.22)",
-          border: "rgba(52,211,153,0.45)",
-          glow:   "rgba(52,211,153,0.30)",
-          iconBg: "linear-gradient(135deg, rgba(52,211,153,0.45) 0%, rgba(16,185,129,0.20) 100%)",
-          bar:    "rgba(110,231,183,0.85)",
-          dot:    "bg-emerald-300",
-          text:   "text-emerald-200",
+          bg:      "rgba(5,150,105,0.18)",
+          border:  "rgba(52,211,153,0.40)",
+          glow:    "rgba(52,211,153,0.25)",
+          iconBg:  "linear-gradient(135deg, rgba(52,211,153,0.40) 0%, rgba(16,185,129,0.15) 100%)",
+          bar:     "#6ee7b7",
+          dot:     "bg-emerald-300",
+          text:    "text-emerald-200",
+          ring:    "rgba(52,211,153,0.18)",
+          label:   "text-emerald-400",
+        }
+      : color === "violet"
+      ? {
+          bg:      "rgba(109,40,217,0.22)",
+          border:  "rgba(139,92,246,0.45)",
+          glow:    "rgba(139,92,246,0.25)",
+          iconBg:  "linear-gradient(135deg, rgba(139,92,246,0.45) 0%, rgba(109,40,217,0.20) 100%)",
+          bar:     "#c4b5fd",
+          dot:     "bg-violet-300",
+          text:    "text-violet-200",
+          ring:    "rgba(139,92,246,0.18)",
+          label:   "text-violet-400",
         }
       : {
-          bg:     palette.loadingBg,
-          border: palette.loadingBorder,
-          glow:   palette.glow,
-          iconBg: `linear-gradient(135deg, ${palette.iconFrom} 0%, ${palette.iconTo} 100%)`,
-          bar:    palette.barColor,
-          dot:    palette.dotColor,
-          text:   palette.text,
+          bg:      "rgba(8,145,178,0.22)",
+          border:  "rgba(34,211,238,0.45)",
+          glow:    "rgba(34,211,238,0.25)",
+          iconBg:  "linear-gradient(135deg, rgba(34,211,238,0.45) 0%, rgba(8,145,178,0.20) 100%)",
+          bar:     "#67e8f9",
+          dot:     "bg-cyan-300",
+          text:    "text-cyan-200",
+          ring:    "rgba(34,211,238,0.18)",
+          label:   "text-cyan-400",
         };
 
     return (
       <div
-        className="relative overflow-hidden rounded-2xl px-4 py-4 select-none"
+        className="relative overflow-hidden rounded-2xl select-none"
         style={{
-          background: `linear-gradient(135deg, ${ld.bg} 0%, rgba(0,0,0,0.40) 100%)`,
+          background: `linear-gradient(145deg, ${ld.bg} 0%, rgba(0,0,0,0.55) 100%)`,
           border: `1px solid ${ld.border}`,
-          boxShadow: `0 0 28px ${ld.glow}, inset 0 1px 0 rgba(255,255,255,0.04)`,
+          boxShadow: `0 0 32px ${ld.glow}, 0 2px 8px rgba(0,0,0,0.40), inset 0 1px 0 rgba(255,255,255,0.05)`,
         }}
       >
-        {/* Sweep shimmer */}
-        <span className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-18deg] animate-[shimmer_1.8s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/[0.07] to-transparent" />
+        {/* Sweep shimmer — uses globals.css @keyframes sp-shimmer */}
+        <span
+          className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.06] to-transparent"
+          style={{ animation: "sp-shimmer 2.2s ease-in-out infinite" }}
+        />
 
-        {/* Bottom progress bar */}
-        <div className="absolute bottom-0 inset-x-0 h-[2px] overflow-hidden rounded-b-2xl">
+        {/* Animated border glow — top edge */}
+        <div
+          className="absolute top-0 inset-x-[15%] h-px"
+          style={{ background: `linear-gradient(90deg, transparent, ${ld.bar}, transparent)` }}
+        />
+
+        {/* Bottom indeterminate progress bar */}
+        <div className="absolute bottom-0 inset-x-0 h-[2.5px] overflow-hidden rounded-b-2xl" style={{ background: ld.ring }}>
           <div
-            className="absolute inset-y-0 w-1/2 animate-[progressBar_1.6s_ease-in-out_infinite]"
-            style={{ background: `linear-gradient(90deg, transparent, ${ld.bar}, transparent)` }}
+            className="absolute inset-y-0 w-[45%] rounded-full"
+            style={{
+              background: `linear-gradient(90deg, transparent, ${ld.bar}, transparent)`,
+              animation: "sp-bar 1.7s cubic-bezier(0.4,0,0.2,1) infinite",
+            }}
           />
         </div>
 
-        <div className="flex items-center gap-4">
-          {/* Spinning orb */}
+        <div className="flex items-center gap-3 px-4 py-3.5">
+          {/* Left: logo box with pulsing glow */}
           <div className="relative shrink-0">
-            <div className="absolute inset-0 rounded-[14px] blur-xl animate-pulse" style={{ background: ld.glow }} />
             <div
-              className="relative grid h-11 w-11 place-items-center rounded-[14px] ring-1"
-              style={{ background: ld.iconBg, borderColor: ld.border, boxShadow: `0 0 18px ${ld.glow}` }}
+              className="absolute -inset-1 rounded-[16px] blur-lg animate-pulse"
+              style={{ background: ld.glow, opacity: 0.7 }}
+            />
+            <div
+              className="relative grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-[14px] ring-1"
+              style={{ background: ld.iconBg, borderColor: ld.border, boxShadow: `0 0 14px ${ld.glow}` }}
             >
-              <Icon icon="solar:spinner-bold-duotone" className={cx("animate-spin text-xl", ld.text)} />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/images/logo/logopremier.svg"
+                alt="logo"
+                className="h-7 w-7 object-contain"
+                style={{ filter: "brightness(0) invert(1)", opacity: 0.85 }}
+              />
             </div>
           </div>
 
-          {/* Step text */}
+          {/* Center: step text + dots */}
           <div className="relative min-w-0 flex-1">
-            <p className="text-[14px] font-black text-white">{loadingStep ?? "Memproses…"}</p>
-            <div className="mt-1.5 flex items-center gap-1.5">
-              <span className={cx("h-1.5 w-1.5 rounded-full animate-[bounce_1s_ease-in-out_0ms_infinite]",   ld.dot, "opacity-90")} />
-              <span className={cx("h-1.5 w-1.5 rounded-full animate-[bounce_1s_ease-in-out_180ms_infinite]", ld.dot, "opacity-60")} />
-              <span className={cx("h-1.5 w-1.5 rounded-full animate-[bounce_1s_ease-in-out_360ms_infinite]", ld.dot, "opacity-30")} />
+            <p className="truncate text-[13.5px] font-black tracking-tight text-white leading-tight">
+              {loadingStep ?? "Memproses…"}
+            </p>
+            <div className="mt-[5px] flex items-center gap-1">
+              {[0, 200, 400].map((delay) => (
+                <span
+                  key={delay}
+                  className={cx("h-[5px] w-[5px] rounded-full", ld.dot)}
+                  style={{ animation: `bounce 1.1s ease-in-out ${delay}ms infinite` }}
+                />
+              ))}
+              <span className={cx("ml-1.5 text-[10px] font-semibold tracking-wide opacity-50", ld.label)}>
+                mohon tunggu
+              </span>
             </div>
           </div>
 
-          {/* Circular progress ring */}
+          {/* Right: proper indeterminate Material-style spinner */}
           <div className="relative shrink-0">
-            <svg className="h-7 w-7 -rotate-90 animate-[spin_3s_linear_infinite]" viewBox="0 0 28 28">
-              <circle cx="14" cy="14" r="11" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="2" />
-              <circle cx="14" cy="14" r="11" fill="none" strokeWidth="2"
-                stroke={ld.bar} strokeDasharray="22 47" strokeLinecap="round" />
+            <div
+              className="absolute inset-0 rounded-full blur-md animate-pulse"
+              style={{ background: ld.glow, opacity: 0.5 }}
+            />
+            <svg
+              className="relative h-9 w-9"
+              viewBox="0 0 36 36"
+              style={{ animation: "sp-rotate 1.4s linear infinite" }}
+            >
+              {/* Track */}
+              <circle
+                cx="18" cy="18" r="14"
+                fill="none"
+                stroke="rgba(255,255,255,0.07)"
+                strokeWidth="2.5"
+              />
+              {/* Indeterminate arc — stroke-dasharray animated via sp-dash */}
+              <circle
+                cx="18" cy="18" r="14"
+                fill="none"
+                strokeWidth="2.5"
+                stroke={ld.bar}
+                strokeLinecap="round"
+                style={{ animation: "sp-dash 1.4s ease-in-out infinite", transformOrigin: "center" }}
+              />
             </svg>
           </div>
         </div>
@@ -1079,7 +1164,7 @@ function DetailPanel({
 }) {
   const jenis = JENIS[row.jenis] ?? { label: row.jenis, cls: "bg-zinc-500/12 text-zinc-200 ring-zinc-500/20" };
 
-  const showDecision   = isPending(row.status);
+  const showDecision   = isPending(row.status) || row.status === "closing";
   const showPipeline   = isClosingPipeline(row.status);
   const showTerminal   = isTerminal(row.status);
 
@@ -1384,7 +1469,7 @@ function TransaksiModal({
     setTimeout(onClose, 350);
   }
 
-  const showDecision = isPending(row.status);
+  const showDecision = isPending(row.status) || row.status === "closing";
   const showPipeline = isClosingPipeline(row.status);
   const showTerminal = isTerminal(row.status);
 

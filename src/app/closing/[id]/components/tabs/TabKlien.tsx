@@ -184,15 +184,20 @@ function ScanBadge({ status, conf }: { status: ScanStatus; conf: number }) {
 // ── Field input ───────────────────────────────────────────────────────────────
 
 function FieldInput({
-  label, value, onChange, placeholder, icon, hint,
+  label, value, onChange, placeholder, icon, hint, disabled,
 }: {
   label: string; value: string; onChange: (v: string) => void;
-  placeholder?: string; icon?: ReactNode; hint?: string;
+  placeholder?: string; icon?: ReactNode; hint?: string; disabled?: boolean;
 }) {
   return (
     <div className="space-y-1.5">
       <label className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">{label}</label>
-      <div className="flex items-start overflow-hidden rounded-xl bg-white/[0.04] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07)] focus-within:shadow-[inset_0_0_0_1px_rgba(16,185,129,0.40)] transition-shadow duration-200">
+      <div className={cx(
+        "flex items-start overflow-hidden rounded-xl transition-shadow duration-200",
+        disabled
+          ? "bg-white/[0.03] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)] opacity-70"
+          : "bg-white/[0.04] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07)] focus-within:shadow-[inset_0_0_0_1px_rgba(16,185,129,0.40)]"
+      )}>
         {icon && (
           <div className="flex h-10 w-9 shrink-0 items-center justify-center border-r border-white/[0.06] text-zinc-500">
             {icon}
@@ -201,9 +206,13 @@ function FieldInput({
         <input
           type="text"
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          readOnly={disabled}
+          onChange={(e) => !disabled && onChange(e.target.value)}
           placeholder={placeholder}
-          className="h-10 w-full bg-transparent px-3 text-sm text-white outline-none placeholder:text-zinc-600"
+          className={cx(
+            "h-10 w-full bg-transparent px-3 text-sm text-white outline-none placeholder:text-zinc-600",
+            disabled && "cursor-default select-text"
+          )}
         />
       </div>
       {hint && <p className="text-[10px] text-zinc-600">{hint}</p>}
@@ -212,15 +221,20 @@ function FieldInput({
 }
 
 function FieldTextarea({
-  label, value, onChange, placeholder, icon,
+  label, value, onChange, placeholder, icon, disabled,
 }: {
   label: string; value: string; onChange: (v: string) => void;
-  placeholder?: string; icon?: ReactNode;
+  placeholder?: string; icon?: ReactNode; disabled?: boolean;
 }) {
   return (
     <div className="space-y-1.5">
       <label className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">{label}</label>
-      <div className="flex items-start overflow-hidden rounded-xl bg-white/[0.04] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07)] focus-within:shadow-[inset_0_0_0_1px_rgba(16,185,129,0.40)] transition-shadow duration-200">
+      <div className={cx(
+        "flex items-start overflow-hidden rounded-xl transition-shadow duration-200",
+        disabled
+          ? "bg-white/[0.03] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)] opacity-70"
+          : "bg-white/[0.04] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07)] focus-within:shadow-[inset_0_0_0_1px_rgba(16,185,129,0.40)]"
+      )}>
         {icon && (
           <div className="flex h-10 w-9 shrink-0 items-center justify-center border-r border-white/[0.06] text-zinc-500">
             <div className="mt-2.5">{icon}</div>
@@ -229,9 +243,13 @@ function FieldTextarea({
         <textarea
           rows={3}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          readOnly={disabled}
+          onChange={(e) => !disabled && onChange(e.target.value)}
           placeholder={placeholder}
-          className="w-full resize-none bg-transparent px-3 py-2.5 text-sm text-white outline-none placeholder:text-zinc-600"
+          className={cx(
+            "w-full resize-none bg-transparent px-3 py-2.5 text-sm text-white outline-none placeholder:text-zinc-600",
+            disabled && "cursor-default select-text"
+          )}
         />
       </div>
     </div>
@@ -621,11 +639,13 @@ export default function TabKlien({
   onNext,
   onDataChange,
   onKtpFile,
+  readOnly = false,
 }: {
   initialData?: KlienData;
   onNext?: () => void;
   onDataChange?: (data: KlienData) => void;
   onKtpFile?: (file: File | null) => void;
+  readOnly?: boolean;
 }) {
   const [users, setUsers] = useState<UserOption[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
@@ -732,7 +752,24 @@ export default function TabKlien({
 
   const ktpScanned = ktpStatus === "valid" || ktpStatus === "review";
   const nikValid = /^\d+$/.test(nik.trim()) && nik.trim().length > 0;
-  const canProceed = ktpScanned && nama.trim().length > 0 && nikValid;
+  // Jika data sudah ada dari prefill MOU, tidak perlu scan KTP dulu
+  const hasPrefill = !!(initialData?.nama_klien && initialData?.nik_klien);
+  const canProceed = readOnly
+    ? nama.trim().length > 0 && nikValid
+    : (ktpScanned || hasPrefill) && nama.trim().length > 0 && nikValid;
+
+  // Emit prefill data ke parent on mount
+  useEffect(() => {
+    if (hasPrefill && (nama || nik || alamat)) {
+      onDataChangeRef.current?.({
+        id_klien: null,
+        nama_klien: nama,
+        nik_klien: nik,
+        alamat_klien: alamat,
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="space-y-5">
@@ -749,28 +786,37 @@ export default function TabKlien({
               <Shield size={15} className="text-emerald-400/70" />
               <span className="text-[12px] font-semibold text-white/80">Data Identitas Klien</span>
             </div>
-            <div className="flex items-center gap-2">
-              {ktpStatus !== "idle" && <ScanBadge status={ktpStatus} conf={ktpConf} />}
-              {(nama || nik || alamat) && (
-                <button
-                  type="button"
-                  onClick={handleReset}
-                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[10px] font-semibold text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-300 transition"
-                >
-                  <X size={11} />
-                  Reset
-                </button>
-              )}
+            {!readOnly && (
+              <div className="flex items-center gap-2">
+                {ktpStatus !== "idle" && <ScanBadge status={ktpStatus} conf={ktpConf} />}
+                {(nama || nik || alamat) && (
+                  <button
+                    type="button"
+                    onClick={handleReset}
+                    className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[10px] font-semibold text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-300 transition"
+                  >
+                    <X size={11} />
+                    Reset
+                  </button>
+                )}
+              </div>
+            )}
+            {readOnly && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-zinc-800/70 px-2.5 py-0.5 text-[10px] font-semibold text-zinc-400 ring-1 ring-white/[0.06]">
+                <Shield size={9} />
+                Data terkunci
+              </span>
+            )}
+          </div>
+
+          {/* KTP dropzone — hanya tampil jika bukan readOnly */}
+          {!readOnly && (
+            <div className="mt-3">
+              <KtpDropzone filename={ktpFilename} loading={ktpLoading} status={ktpStatus} onFile={handleKtpFile} />
             </div>
-          </div>
+          )}
 
-          {/* KTP dropzone compact — di dalam header card */}
-          <div className="mt-3">
-            <KtpDropzone filename={ktpFilename} loading={ktpLoading} status={ktpStatus} onFile={handleKtpFile} />
-          </div>
-
-          {/* Warning KTP */}
-          {ktpWarns.length > 0 && (
+          {!readOnly && ktpWarns.length > 0 && (
             <div className="mt-2 space-y-1">
               {ktpWarns.map((w, i) => (
                 <div key={i} className="flex items-start gap-2 rounded-xl bg-amber-500/[0.07] px-3 py-2 text-[11px] text-amber-300 ring-1 ring-amber-500/20">
@@ -780,7 +826,7 @@ export default function TabKlien({
               ))}
             </div>
           )}
-          {errorMsg && !ktpWarns.length && (
+          {!readOnly && errorMsg && !ktpWarns.length && (
             <div className="mt-2 flex items-start gap-2 rounded-xl bg-red-500/[0.07] px-3 py-2 text-[11px] text-red-300 ring-1 ring-red-500/20">
               <TriangleAlert size={12} className="mt-0.5 shrink-0" />
               <span>{errorMsg}</span>
@@ -788,22 +834,25 @@ export default function TabKlien({
           )}
         </div>
 
-        {/* Form fields — hanya tampil setelah KTP berhasil di-scan */}
-        {ktpScanned ? (
+        {/* Form fields */}
+        {(ktpScanned || hasPrefill || readOnly) ? (
           <div className="space-y-4 p-5">
             <FieldInput
               label="Nama Lengkap Klien"
               value={nama}
-              onChange={(v) => { setNama(v); emit({ nama_klien: v }); }}
-              placeholder="Diisi otomatis dari KTP"
+              onChange={(v) => { if (!readOnly) { setNama(v); emit({ nama_klien: v }); } }}
+              placeholder="Nama klien"
               icon={<User2 size={14} />}
+              disabled={readOnly}
             />
-            {/* NIK — angka saja */}
+            {/* NIK */}
             <div className="space-y-1.5">
               <label className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">NIK (16 Digit)</label>
               <div className={cx(
                 "flex items-start overflow-hidden rounded-xl transition-shadow duration-200",
-                nik && !nikValid
+                readOnly
+                  ? "bg-white/[0.03] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)] opacity-70"
+                  : nik && !nikValid
                   ? "bg-red-500/[0.06] shadow-[inset_0_0_0_1px_rgba(239,68,68,0.35)]"
                   : "bg-white/[0.04] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07)] focus-within:shadow-[inset_0_0_0_1px_rgba(16,185,129,0.40)]"
               )}>
@@ -816,16 +865,21 @@ export default function TabKlien({
                   pattern="[0-9]*"
                   value={nik}
                   maxLength={16}
+                  readOnly={readOnly}
                   onChange={(e) => {
+                    if (readOnly) return;
                     const v = e.target.value.replace(/\D/g, "");
                     setNik(v);
                     emit({ nik_klien: v });
                   }}
                   placeholder="16 digit sesuai KTP"
-                  className="h-10 w-full bg-transparent px-3 text-sm text-white outline-none placeholder:text-zinc-600"
+                  className={cx(
+                    "h-10 w-full bg-transparent px-3 text-sm text-white outline-none placeholder:text-zinc-600",
+                    readOnly && "cursor-default select-text"
+                  )}
                 />
               </div>
-              {nik && !nikValid && (
+              {!readOnly && nik && !nikValid && (
                 <p className="text-[10px] text-red-400 flex items-center gap-1">
                   <TriangleAlert size={10} className="shrink-0" />
                   NIK hanya boleh berisi angka
@@ -835,13 +889,14 @@ export default function TabKlien({
             <FieldTextarea
               label="Alamat Lengkap"
               value={alamat}
-              onChange={(v) => { setAlamat(v); emit({ alamat_klien: v }); }}
-              placeholder="Diisi otomatis dari KTP"
+              onChange={(v) => { if (!readOnly) { setAlamat(v); emit({ alamat_klien: v }); } }}
+              placeholder="Alamat klien"
               icon={<MapPin size={14} />}
+              disabled={readOnly}
             />
           </div>
         ) : (
-          !ktpLoading && ktpStatus === "idle" && (
+          !readOnly && !ktpLoading && ktpStatus === "idle" && (
             <div className="px-5 pb-5 pt-2">
               <p className="text-[11px] text-zinc-600 text-center">
                 Upload foto KTP di atas untuk mengisi data klien secara otomatis

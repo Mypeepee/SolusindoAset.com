@@ -634,19 +634,23 @@ export type AgentSelection = {
 
 export default function TabAgent({
   agent,
+  initialSelectedId,
   onNext,
   onBack,
   onAgentChange,
   onLeaderChange,
   onAgentSelect,
+  readOnly = false,
 }: {
   agent: Agent | null;
+  initialSelectedId?: string;
   leader?: unknown;
   onNext?: () => void;
   onBack?: () => void;
   onAgentChange?: (name: string) => void;
   onLeaderChange?: (name: string) => void;
   onAgentSelect?: (selection: AgentSelection | null) => void;
+  readOnly?: boolean;
 }) {
   const [data, setData] = useState<AgentRelationsResponse>({
     agents: [],
@@ -668,7 +672,10 @@ export default function TabAgent({
 
   const isCobroke = selectedAgentId === COBROKE_AGENT_ID;
 
-  const initialAgentId = useMemo(() => agent?.id_agent ?? "", [agent]);
+  const initialAgentId = useMemo(
+    () => initialSelectedId || agent?.id_agent || "",
+    [initialSelectedId, agent?.id_agent]
+  );
   const storageKey = useMemo(
     () => (initialAgentId ? `tab-agent-selection:${initialAgentId}` : ""),
     [initialAgentId]
@@ -814,7 +821,8 @@ export default function TabAgent({
       try {
         setLoading(true);
 
-        const persisted = readPersistedSelection();
+        // In readOnly (closing) mode, always use the MOU's agent — skip localStorage
+        const persisted = readOnly ? null : readPersistedSelection();
         const agentIdToLoad = persisted?.selectedAgentId || initialAgentId;
         const leaderIdToKeep = persisted?.selectedLeaderId || "";
 
@@ -968,6 +976,14 @@ export default function TabAgent({
           </span>
         </div>
 
+        {/* Lock notice when readOnly */}
+        {readOnly && (
+          <div className="mb-4 flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5">
+            <ShieldCheck size={13} className="shrink-0 text-zinc-500" />
+            <p className="text-[11px] text-zinc-500">Data agent terkunci — tidak dapat diubah setelah closing dikonfirmasi.</p>
+          </div>
+        )}
+
         {/* two-column selectors */}
         <div className="grid gap-4 sm:grid-cols-2">
 
@@ -982,7 +998,8 @@ export default function TabAgent({
               placeholder="Cari & pilih agent..."
               searchPlaceholder="Nama, ID, kantor..."
               showExternalOption
-              onSelect={(item) => handleChangeAgent(item.id_agent)}
+              disabled={readOnly}
+              onSelect={(item) => !readOnly && handleChangeAgent(item.id_agent)}
             />
           </div>
 
@@ -1004,12 +1021,12 @@ export default function TabAgent({
               options={data.teamLeaderOptions}
               placeholder={isCobroke ? "Pilih team leader (opsional)..." : selectedAgentId ? "Pilih team leader..." : "Pilih agent dulu"}
               searchPlaceholder="Cari team leader..."
-              disabled={!selectedAgentId}
+              disabled={readOnly || !selectedAgentId}
               accent
               onSelect={(item) => {
+                if (readOnly) return;
                 setSelectedLeaderId(item.id_agent);
                 persistSelection(selectedAgentId, item.id_agent);
-                // Untuk agent luar, cukup simpan di localStorage — jangan PATCH ke DB
                 if (!isCobroke) {
                   saveLeader(selectedAgentId, item.id_agent);
                 }
@@ -1040,12 +1057,14 @@ export default function TabAgent({
                   <input
                     type="text"
                     value={agentLuarNama}
+                    readOnly={readOnly}
                     onChange={(e) => {
+                      if (readOnly) return;
                       setAgentLuarNama(e.target.value);
                       persistSelection(selectedAgentId, selectedLeaderId, e.target.value, agentLuarKantor, agentLuarTelepon);
                     }}
                     placeholder="Nama lengkap"
-                    className="h-full w-full bg-transparent px-3 text-sm text-white outline-none placeholder:text-zinc-600"
+                    className={`h-full w-full bg-transparent px-3 text-sm text-white outline-none placeholder:text-zinc-600${readOnly ? " cursor-default" : ""}`}
                   />
                 </div>
               </div>
@@ -1062,12 +1081,14 @@ export default function TabAgent({
                   <input
                     type="text"
                     value={agentLuarKantor}
+                    readOnly={readOnly}
                     onChange={(e) => {
+                      if (readOnly) return;
                       setAgentLuarKantor(e.target.value);
                       persistSelection(selectedAgentId, selectedLeaderId, agentLuarNama, e.target.value, agentLuarTelepon);
                     }}
                     placeholder="Nama kantor / developer"
-                    className="h-full w-full bg-transparent px-3 text-sm text-white outline-none placeholder:text-zinc-600"
+                    className={`h-full w-full bg-transparent px-3 text-sm text-white outline-none placeholder:text-zinc-600${readOnly ? " cursor-default" : ""}`}
                   />
                 </div>
               </div>
@@ -1085,13 +1106,15 @@ export default function TabAgent({
                     type="tel"
                     inputMode="numeric"
                     value={agentLuarTelepon}
+                    readOnly={readOnly}
                     onChange={(e) => {
+                      if (readOnly) return;
                       const val = formatPhoneId(e.target.value);
                       setAgentLuarTelepon(val);
                       persistSelection(selectedAgentId, selectedLeaderId, agentLuarNama, agentLuarKantor, val);
                     }}
                     placeholder="812-3456-7890"
-                    className="h-full w-full bg-transparent px-3 text-sm text-white outline-none placeholder:text-zinc-600"
+                    className={`h-full w-full bg-transparent px-3 text-sm text-white outline-none placeholder:text-zinc-600${readOnly ? " cursor-default" : ""}`}
                   />
                 </div>
               </div>

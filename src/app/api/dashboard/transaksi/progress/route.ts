@@ -285,6 +285,13 @@ export async function PATCH(req: Request) {
   const agentId = (session.user as { agentId?: string }).agentId;
   if (!agentId) return NextResponse.json({ error: "Bukan agent" }, { status: 403 });
 
+  // Check owner to bypass agent filter (same logic as GET)
+  const agentRow = await prisma.agent.findUnique({
+    where: { id_agent: agentId },
+    select: { jabatan: true },
+  });
+  const isOwner = agentRow?.jabatan === "OWNER";
+
   try {
     const body = await req.json();
     const { id, status } = body as { id?: string; status?: string };
@@ -300,36 +307,51 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Status tidak valid" }, { status: 400 });
     }
 
+    const mouWhere = isOwner
+      ? { id: BigInt(id) }
+      : { id: BigInt(id), id_agent: agentId };
+
     const mou = await prisma.mou.findFirst({
-      where: { id: BigInt(id), id_agent: agentId },
-      select: { id: true, id_transaksi: true, transaksi: { select: { id_transaksi: true } } },
+      where: mouWhere,
+      select: { id: true, id_transaksi: true },
     });
     if (!mou) return NextResponse.json({ error: "Tidak ditemukan" }, { status: 404 });
 
     if (isMouStatus) {
-      await prisma.mou.update({
-        where: { id: mou.id },
-        data: { status: status.toLowerCase(), diperbarui_pada: new Date() },
-      });
+      await prisma.$executeRaw`
+        UPDATE mou
+        SET status = ${status.toLowerCase()}::status_mou_enum,
+            diperbarui_pada = NOW()
+        WHERE id = ${mou.id}
+      `;
 
-      if (status.toLowerCase() === "closing" && !mou.transaksi && mou.id_transaksi) {
-        await prisma.transaksi.create({
-          data: {
-            id_transaksi: mou.id_transaksi,
-            tanggal_transaksi: new Date(),
-            status_transaksi: "closing" as any,
-          },
-        });
+      // Pastikan record transaksi ada jika status closing
+      if (status.toLowerCase() === "closing" && mou.id_transaksi) {
+        await prisma.$executeRaw`
+          INSERT INTO transaksi (id_transaksi, tanggal_transaksi, status_transaksi)
+          VALUES (
+            ${mou.id_transaksi},
+            NOW()::date,
+            'closing'::status_transaksi_enum
+          )
+          ON CONFLICT (id_transaksi) DO UPDATE
+            SET status_transaksi = 'closing'::status_transaksi_enum,
+                diperbarui_pada  = NOW()
+        `;
       }
-    } else if (isTrxStatus && mou.transaksi?.id_transaksi) {
-      await prisma.transaksi.update({
-        where: { id_transaksi: mou.transaksi.id_transaksi },
-        data: { status_transaksi: status.toLowerCase() as any, diperbarui_pada: new Date() },
-      });
+    } else if (isTrxStatus && mou.id_transaksi) {
+      await prisma.$executeRaw`
+        UPDATE transaksi
+        SET status_transaksi = ${status.toLowerCase()}::status_transaksi_enum,
+            diperbarui_pada  = NOW()
+        WHERE id_transaksi = ${mou.id_transaksi}
+      `;
     }
 
     return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: "Gagal update status" }, { status: 500 });
+  } catch (e: unknown) {
+    console.error("[progress PATCH]", e);
+    const msg = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: "Gagal update status", detail: msg }, { status: 500 });
   }
 }

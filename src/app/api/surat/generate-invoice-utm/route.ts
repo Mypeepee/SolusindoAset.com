@@ -38,8 +38,9 @@ function formatTanggal(d: Date): string {
 }
 
 function composeNomor(idTrx: string, d: Date): string {
-  const seq = String(Number(idTrx) || 1).padStart(3, "0");
-  return `${seq}/INV/SP-SBY/${BULAN_ID[d.getMonth()]}/${d.getFullYear()}`;
+  const digits = idTrx.match(/\d+/)?.[0] ?? "1";
+  const seq = digits.padStart(3, "0");
+  return `${seq}/MOU/SPT-SBY/${BULAN_ID[d.getMonth()]}/${d.getFullYear()}`;
 }
 
 function findSoffice(): string {
@@ -190,9 +191,9 @@ export async function POST(req: Request) {
         });
       }
 
-      // Simpan invoice — hanya sekali (idempoten: press kedua tidak buat duplikat)
-      const alreadySaved = await prisma.invoice.findFirst({
-        where:  { id_transaksi: idTrxStr, keterangan: "Uang Tanda Minat" },
+      // Simpan invoice — hanya sekali (idempoten: cek by id_invoice karena itu unique key)
+      const alreadySaved = await prisma.invoice.findUnique({
+        where:  { id_invoice: nomor_invoice },
         select: { id_invoice: true },
       }).catch(() => null);
 

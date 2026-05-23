@@ -73,6 +73,8 @@ type PersistedState = {
   selisihSebelumRoyalty: number;
   royaltyFee: number;
   selisihFinal: number;
+
+  hargaBidding?: number;
 };
 
 type SplitRow = {
@@ -104,6 +106,7 @@ type SavePayload = {
 type Props = {
   listing: Listing;
   agent: Agent | null;
+  mouAgentId?: string;
   skemaPenjualan: SkemaPenjualan;
   agents?: AgentOption[];
   teamLeaderName?: string;
@@ -861,6 +864,7 @@ const LOCKED_AGENT_CODES = new Set(["THC", "FEE_TL"]);
 export default function TabPembagian({
   listing,
   agent,
+  mouAgentId,
   skemaPenjualan,
   agents = [],
   teamLeaderName = "",
@@ -875,7 +879,11 @@ export default function TabPembagian({
   const transaksiKey = useMemo(() => storageKeyTransaksi(listing), [listing]);
   const pembagianKey = useMemo(() => storageKeyPembagian(listing), [listing]);
   const listingId = useMemo(() => getListingId(listing), [listing]);
-  const closingAgentRefId = useMemo(() => getAgentId(agent), [agent]);
+  // prefer MOU's agent over listing's agent — MOU agent is who actually did the closing
+  const closingAgentRefId = useMemo(
+    () => mouAgentId || getAgentId(agent),
+    [mouAgentId, agent]
+  );
 
   const [loadedTransaksi, setLoadedTransaksi] = useState(false);
   const [loadedPembagian, setLoadedPembagian] = useState(false);
@@ -1583,6 +1591,7 @@ export default function TabPembagian({
       ? `+62${rawTelepon.replace(/-/g, "").replace(/^0+/, "")}`
       : null;
 
+    const isSelisihSave = skemaPenjualan === "SELISIH";
     const apiBody = {
       skema: skemaPenjualan,
       agentId: closingAgentId,
@@ -1596,6 +1605,9 @@ export default function TabPembagian({
       royaltyFee,
       komisiAgent,
       pendapatanBersihKantor,
+      hargaBidding: n(persisted?.hargaBidding) || undefined,
+      termasuk_balik_nama: isSelisihSave ? (persisted?.includeBalikNama ?? false) : false,
+      termasuk_biaya_eksekusi: isSelisihSave ? (persisted?.includeEksekusi ?? false) : false,
       jenis_transaksi: listing.jenis_transaksi,
       rows: rowsCalculated.map((row) => ({
         code: row.code,
@@ -1904,14 +1916,16 @@ export default function TabPembagian({
               subtitle="Ringkasan transaksi"
               className="xl:px-3.5 xl:py-3.5"
             >
+              {skemaPenjualan === "SELISIH" && (
+                <SnapshotRow
+                  label="Harga Deal"
+                  value={<Money value={deal} />}
+                  tone="blue"
+                />
+              )}
               <SnapshotRow
-                label="Harga Deal"
-                value={<Money value={deal} />}
-                tone="blue"
-              />
-              <SnapshotRow
-                label="Harga Bidding"
-                value={<Money value={bidding} />}
+                label="Harga Bidding Aktual"
+                value={<Money value={n(persisted?.hargaBidding) || bidding} />}
                 tone="violet"
               />
               <SnapshotRow
@@ -1930,24 +1944,19 @@ export default function TabPembagian({
                 tone="cyan"
               />
               <SnapshotRow
-                label="Selisih Kotor"
-                value={<Money value={selisihKotor} />}
+                label="Total Komisi"
+                value={<Money value={selisihFinal} />}
                 tone="emerald"
               />
               <SnapshotRow
-                label="Sblm Royalty"
-                value={<Money value={selisihSebelumRoyalty} />}
+                label="Komisi Agent"
+                value={<Money value={Math.max(0, Math.round(selisihFinal * 0.6) - cobroke)} />}
                 tone="indigo"
-              />
-              <SnapshotRow
-                label="Royalty Fee"
-                value={<Money value={royaltyFee} />}
-                tone="fuchsia"
               />
               <div className="h-px bg-zinc-900" />
               <SnapshotRow
-                label="Selisih Final"
-                value={<Money value={selisihFinal} />}
+                label="Pendapatan Kantor"
+                value={<Money value={Math.round(selisihFinal * 0.4) + cobroke} />}
                 strong
                 tone="final"
               />
@@ -1983,6 +1992,7 @@ export default function TabPembagian({
         skemaPenjualan={skemaPenjualan}
         selisihFinal={selisihFinal}
         bidding={bidding}
+        hargaBidding={n(persisted?.hargaBidding)}
         agentName={getAgentById(closingAgentId)?.name ?? getAgentName(agent)}
         rows={rowsCalculated}
         getAgentById={getAgentById}
@@ -2562,6 +2572,7 @@ function ConfirmSimpanModal({
   skemaPenjualan,
   selisihFinal,
   bidding,
+  hargaBidding,
   agentName,
   rows,
   getAgentById,
@@ -2574,6 +2585,7 @@ function ConfirmSimpanModal({
   skemaPenjualan: SkemaPenjualan;
   selisihFinal: number;
   bidding: number;
+  hargaBidding: number;
   agentName: string;
   rows: CalculatedRow[];
   getAgentById: (id: string) => { name: string; office: string } | undefined;
@@ -2690,8 +2702,8 @@ function ConfirmSimpanModal({
           {/* stats 3-col */}
           <div className="grid grid-cols-3 gap-2">
             {[
-              { label: "Selisih Final", value: fmtRp(selisihFinal), color: "text-emerald-400" },
-              { label: "Harga Bidding", value: fmtRp(bidding), color: "text-white" },
+              { label: skemaPenjualan === "PERSENTASE" ? "Total Komisi" : "Selisih Final", value: fmtRp(selisihFinal), color: "text-emerald-400" },
+              { label: "Harga Bidding Aktual", value: fmtRp(hargaBidding || bidding), color: "text-white" },
               { label: "Agent", value: agentName || "-", color: "text-cyan-400" },
             ].map((s) => (
               <div
