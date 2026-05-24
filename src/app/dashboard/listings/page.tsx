@@ -5,6 +5,21 @@ import { fetchListingHeaderStats } from "./lib/property-stats";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
+function isValidImageUrl(s: string): boolean {
+  return s.startsWith("http://") || s.startsWith("https://") || s.startsWith("/");
+}
+function normalizeListingImages(raw: string | null | undefined): string[] {
+  if (!raw || raw.trim() === "") return [];
+  return raw.split(",").map((s) => s.trim()).filter((s) => s.length > 0)
+    .map((s) => (isValidImageUrl(s) ? s : `https://drive.google.com/thumbnail?id=${s}`));
+}
+function normalizeAgentPhoto(fileId: string | null | undefined): string {
+  if (!fileId || fileId.trim() === "") return "/images/default-profile.png";
+  const t = fileId.trim();
+  if (t.startsWith("http://") || t.startsWith("https://") || t.startsWith("/")) return t;
+  return `https://drive.google.com/thumbnail?id=${t}&sz=w64`;
+}
+
 export default async function DashboardListingsPage() {
   const session = await getServerSession(authOptions);
   const agentId = (session?.user as any)?.agentId as string | undefined;
@@ -41,32 +56,54 @@ export default async function DashboardListingsPage() {
   // Stats header (gunakan baseWhere yang sama di property-stats)
   const headerStats = await fetchListingHeaderStats(userRole, agentId);
 
-  // Data untuk tabel
+  // Data untuk kartu
   const properties = await prisma.listing.findMany({
     where: whereClause,
     orderBy: { tanggal_diupdate: "desc" },
-    take: 50,
+    include: {
+      agent: {
+        select: {
+          nama_kantor: true,
+          foto_profil_url: true,
+          pengguna: { select: { nama_lengkap: true } },
+        },
+      },
+    },
   });
 
   const listings = properties.map((p) => {
     const idStr = String(p.id_property);
-    const slugId = `${p.slug}-${idStr}`; // ✅ bentuk slugId = slug + "-" + id_property
+    const slugId = `${p.slug}-${idStr}`;
+    const fotoList = normalizeListingImages(p.gambar);
 
     return {
-      id: idStr,                    // ID Listing
-      slug: slugId,                 // slugId untuk route detail
+      id: idStr,
+      slug: slugId,
+      rawSlug: p.slug,
       title: p.judul,
-      status: p.status_tayang ?? "",   // TERSEDIA (karena sudah difilter)
+      status: p.status_tayang ?? "",
       category: p.kategori,
-      transactionType: p.jenis_transaksi, // "LELANG" | "PRIMARY" | ...
+      transactionType: p.jenis_transaksi,
       city: p.kota,
       area: (p as any).area_lokasi ?? "",
       address: p.alamat_lengkap ?? "",
+      provinsi: p.provinsi ?? "",
+      kecamatan: p.kecamatan ?? "",
+      kelurahan: p.kelurahan ?? "",
       price: formatRupiah(Number(p.harga)),
-      thumbnailUrl: p.gambar
-        ? p.gambar.split(",")[0].trim()
-        : undefined,
+      thumbnailUrl: fotoList[0] || undefined,
       views: p.dilihat ?? 0,
+      priceRaw: p.nilai_limit_lelang ? Number(p.nilai_limit_lelang) : Number(p.harga),
+      pricePromo: p.harga_promo != null ? Number(p.harga_promo) : null,
+      photos: fotoList,
+      luasTanah: Number(p.luas_tanah ?? 0),
+      luasBangunan: Number(p.luas_bangunan ?? 0),
+      kamarTidur: p.kamar_tidur ?? 0,
+      kamarMandi: p.kamar_mandi ?? 0,
+      tanggalLelang: p.tanggal_lelang ? p.tanggal_lelang.toISOString() : null,
+      agentName: p.agent?.pengguna?.nama_lengkap || "Agent Kosku",
+      agentPhoto: normalizeAgentPhoto(p.agent?.foto_profil_url),
+      agentOffice: p.agent?.nama_kantor || "Kosku",
     };
   });
 

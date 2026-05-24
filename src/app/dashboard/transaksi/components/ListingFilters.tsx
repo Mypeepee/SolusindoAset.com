@@ -94,8 +94,9 @@ export default function ListingFilters(props: {
   onChange: (next: ListingFilterState) => void;
   total: number;
   loading?: boolean;
+  hideVendor?: boolean;
 }) {
-  const { value, onChange, total, loading } = props;
+  const { value, onChange, total, loading, hideVendor } = props;
 
   const set = (patch: Partial<ListingFilterState>) => onChange({ ...value, ...patch });
 
@@ -520,7 +521,7 @@ export default function ListingFilters(props: {
       <div className="p-4">
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-12 lg:items-center">
           {/* Search ID/Alamat */}
-          <div className="lg:col-span-3">
+          <div className={hideVendor ? "lg:col-span-5" : "lg:col-span-3"}>
             <div className={cx(inputWrap, "relative p-1.5")}>
               <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-zinc-300">
                 <Icon icon="solar:magnifer-linear" className="text-lg" />
@@ -535,19 +536,21 @@ export default function ListingFilters(props: {
           </div>
 
           {/* Search Vendor */}
-          <div className="lg:col-span-2">
-            <div className={cx(inputWrap, "relative p-1.5")}>
-              <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-zinc-300">
-                <Icon icon="solar:buildings-2-linear" className="text-lg" />
+          {!hideVendor && (
+            <div className="lg:col-span-2">
+              <div className={cx(inputWrap, "relative p-1.5")}>
+                <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-zinc-300">
+                  <Icon icon="solar:buildings-2-linear" className="text-lg" />
+                </div>
+                <input
+                  className="w-full rounded-xl bg-transparent pl-10 pr-3 py-3 text-sm text-zinc-50 placeholder:text-zinc-500 outline-none"
+                  placeholder="Vendor…"
+                  value={value.vendor}
+                  onChange={(e) => set({ vendor: e.target.value })}
+                />
               </div>
-              <input
-                className="w-full rounded-xl bg-transparent pl-10 pr-3 py-3 text-sm text-zinc-50 placeholder:text-zinc-500 outline-none"
-                placeholder="Vendor…"
-                value={value.vendor}
-                onChange={(e) => set({ vendor: e.target.value })}
-              />
             </div>
-          </div>
+          )}
 
           {/* TIPE ASET */}
           <div className="lg:col-span-3">

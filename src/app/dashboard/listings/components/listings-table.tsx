@@ -14,6 +14,7 @@ export type ListingStatus =
 export type Listing = {
   id: string;                  // id_property
   slug: string;                // slugId (slug-id_property)
+  rawSlug: string;             // raw slug (tanpa id suffix)
   title: string;
   status: ListingStatus | string;
   category: string;
@@ -21,9 +22,24 @@ export type Listing = {
   city: string;
   area: string;
   address: string;
+  provinsi: string;
+  kecamatan: string;
+  kelurahan: string;
   price: string;
   thumbnailUrl?: string;
   views: number;
+  // Extra fields for card display
+  priceRaw: number;
+  pricePromo: number | null;
+  photos: string[];
+  luasTanah: number;
+  luasBangunan: number;
+  kamarTidur: number;
+  kamarMandi: number;
+  tanggalLelang: string | null;
+  agentName: string;
+  agentPhoto: string;
+  agentOffice: string;
 };
 
 const PAGE_SIZE = 10;

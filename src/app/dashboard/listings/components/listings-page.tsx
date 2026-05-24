@@ -3,20 +3,23 @@
 
 import type { ListingHeaderStats } from "../lib/property-stats";
 import { MetricCard } from "./metric-card";
-import ListingsTable, { Listing } from "./listings-table";
+import ListingCardGrid from "./ListingCardGrid";
+import type { Listing } from "./listings-table";
 
 type ListingsPageProps = {
   headerStats: ListingHeaderStats & {
     totalPriority?: number;
   };
   listings: Listing[];
-  currentAgentId: string; // id agent dari session
+  currentAgentId: string;
+  userRole?: string;
 };
 
 export default function ListingsPage({
   headerStats,
   listings,
   currentAgentId,
+  userRole,
 }: ListingsPageProps) {
   const { total, totalHotDeal, totalViewed, totalPriority } = headerStats;
 
@@ -68,9 +71,9 @@ export default function ListingsPage({
         />
       </div>
 
-      {/* TABEL LISTING */}
+      {/* CARD GRID */}
       <div className="mx-auto max-w-6xl">
-        <ListingsTable
+        <ListingCardGrid
           listings={listings}
           currentAgentId={currentAgentId}
         />
