@@ -13,6 +13,8 @@ interface Property {
   kategori: string;
   jenis_transaksi: string;
   harga: number;
+  harga_promo?: number | null;
+  nilai_limit_lelang?: number | null;
 
   kota: string;
   kecamatan: string | null;
@@ -45,6 +47,15 @@ const formatCurrency = (value: number) =>
     currency: "IDR",
     maximumFractionDigits: 0,
   }).format(value);
+
+// LELANG → nilai_limit_lelang. Selainnya → harga_promo bila > 0, else harga.
+const getDisplayPrice = (p: Pick<Property, "jenis_transaksi" | "harga" | "harga_promo" | "nilai_limit_lelang">): number => {
+  if (p.jenis_transaksi === "LELANG") {
+    return p.nilai_limit_lelang ?? p.harga ?? 0;
+  }
+  if (p.harga_promo && p.harga_promo > 0) return p.harga_promo;
+  return p.harga ?? 0;
+};
 
 const formatDateShort = (date?: string | null) => {
   if (!date) return "-";
@@ -117,10 +128,14 @@ const calculateSimilarityScore = (
   }
 
   // Range harga ±30%
-  const priceDiff = Math.abs(current.harga - candidate.harga) / current.harga;
-  if (priceDiff <= 0.3) {
-    score += 10;
-    reasons.push("Harga serupa");
+  const currentPrice = getDisplayPrice(current);
+  const candidatePrice = getDisplayPrice(candidate);
+  if (currentPrice > 0) {
+    const priceDiff = Math.abs(currentPrice - candidatePrice) / currentPrice;
+    if (priceDiff <= 0.3) {
+      score += 10;
+      reasons.push("Harga serupa");
+    }
   }
 
   // Hot deal sangat diprioritaskan
@@ -387,7 +402,7 @@ const PropertyCard = ({
         <div className="p-5 flex flex-col flex-grow">
           <div className="mb-2">
             <h3 className="text-white text-xl font-extrabold tracking-tight">
-              {formatCurrency(item.harga)}
+              {formatCurrency(getDisplayPrice(item))}
             </h3>
           </div>
 

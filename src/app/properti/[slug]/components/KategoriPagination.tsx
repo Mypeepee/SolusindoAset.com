@@ -3,6 +3,7 @@
 import React from "react";
 import { Icon } from "@iconify/react";
 import type { PaginationData } from "../types";
+import { getPaginationPages } from "@/lib/pagination";
 
 interface KategoriPaginationProps {
   pagination: PaginationData;
@@ -16,21 +17,7 @@ export default function KategoriPagination({
   const { currentPage, totalPages } = pagination;
   if (totalPages <= 1) return null;
 
-  const pages: (number | "...")[] = [];
-  if (totalPages <= 7) {
-    for (let i = 1; i <= totalPages; i++) pages.push(i);
-  } else {
-    pages.push(1);
-    if (currentPage > 3) pages.push("...");
-    for (
-      let i = Math.max(2, currentPage - 1);
-      i <= Math.min(totalPages - 1, currentPage + 1);
-      i++
-    )
-      pages.push(i);
-    if (currentPage < totalPages - 2) pages.push("...");
-    pages.push(totalPages);
-  }
+  const pages = getPaginationPages(currentPage, totalPages);
 
   return (
     <div className="mt-16 flex justify-center">

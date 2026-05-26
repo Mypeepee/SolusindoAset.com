@@ -25,20 +25,12 @@ export default function AgentSidebar({ data, currentAgentId }: AgentSidebarProps
     area: data.owner?.area || "Indonesia",
   };
 
-  const formatMobilePrice = (price: number): string => {
-    if (price >= 1000000000) {
-      const milyar = price / 1000000000;
-      return `Rp ${milyar.toFixed(1)} M`;
-    } else if (price >= 1000000) {
-      const juta = price / 1000000;
-      return `Rp ${Math.round(juta)} Jt`;
-    }
-    return new Intl.NumberFormat("id-ID", {
+  const formatMobilePrice = (price: number): string =>
+    new Intl.NumberFormat("id-ID", {
       style: "currency",
       currency: "IDR",
       maximumFractionDigits: 0,
     }).format(price);
-  };
 
   const handleContact = (type: "wa" | "call" | "schedule") => {
     const phone = agentData.phone.replace(/^0/, "62").replace(/\D/g, "");
@@ -77,7 +69,7 @@ export default function AgentSidebar({ data, currentAgentId }: AgentSidebarProps
   return (
     <>
       {/* DESKTOP */}
-      <div className="hidden lg:flex flex-col w-[380px] sticky top-28 h-fit bg-[#111111] rounded-3xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] overflow-hidden">
+      <div className="hidden lg:flex flex-col w-[380px] shrink-0 sticky top-[max(6rem,_calc(50vh-320px))] h-fit bg-[#111111] rounded-3xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] overflow-hidden">
         {/* HEADER HARGA */}
         <div className="p-6 pb-2 shrink-0 z-10 bg-[#111111]">
           <div className="flex justify-between items-start">

@@ -1,16 +1,34 @@
 // app/dashboard/listings/page.tsx
 import prisma from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import ListingsPage from "./components/listings-page";
 import { fetchListingHeaderStats } from "./lib/property-stats";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+
+const PAGE_SIZE = 12;
+
+const VALID_JENIS = ["PRIMARY", "SECONDARY", "LELANG", "SEWA"] as const;
+const VALID_KATEGORI = [
+  "RUMAH",
+  "APARTEMEN",
+  "RUKO",
+  "TANAH",
+  "GUDANG",
+  "HOTEL_DAN_VILLA",
+  "TOKO",
+  "PABRIK",
+] as const;
 
 function isValidImageUrl(s: string): boolean {
   return s.startsWith("http://") || s.startsWith("https://") || s.startsWith("/");
 }
 function normalizeListingImages(raw: string | null | undefined): string[] {
   if (!raw || raw.trim() === "") return [];
-  return raw.split(",").map((s) => s.trim()).filter((s) => s.length > 0)
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
     .map((s) => (isValidImageUrl(s) ? s : `https://drive.google.com/thumbnail?id=${s}`));
 }
 function normalizeAgentPhoto(fileId: string | null | undefined): string {
@@ -20,12 +38,27 @@ function normalizeAgentPhoto(fileId: string | null | undefined): string {
   return `https://drive.google.com/thumbnail?id=${t}&sz=w64`;
 }
 
-export default async function DashboardListingsPage() {
+type RawSearch = string | string[] | undefined;
+const str = (v: RawSearch): string => (Array.isArray(v) ? v[0] : v ?? "").trim();
+
+type Props = {
+  searchParams: {
+    page?: string;
+    q?: string;
+    jenis?: string;
+    kategori?: string;
+    provinsi?: string;
+    kota?: string;
+    kecamatan?: string;
+    kelurahan?: string;
+  };
+};
+
+export default async function DashboardListingsPage({ searchParams }: Props) {
   const session = await getServerSession(authOptions);
   const agentId = (session?.user as any)?.agentId as string | undefined;
   const userRole = (session?.user as any)?.role as string | undefined;
 
-  // Jika belum login atau role tidak ada
   if (!session || !userRole) {
     return (
       <div className="p-6 text-sm text-slate-200">
@@ -34,7 +67,6 @@ export default async function DashboardListingsPage() {
     );
   }
 
-  // Jika role AGENT tapi tidak punya agentId
   if (userRole === "AGENT" && !agentId) {
     return (
       <div className="p-6 text-sm text-slate-200">
@@ -43,33 +75,63 @@ export default async function DashboardListingsPage() {
     );
   }
 
-  // Filter berdasarkan role + status_tayang TERSEDIA
-  const baseWhere = {
-    status_tayang: "TERSEDIA" as const,
+  // ── Parse search params ──
+  const page = Math.max(1, Number(str(searchParams.page)) || 1);
+  const q = str(searchParams.q);
+  const jenisRaw = str(searchParams.jenis).toUpperCase();
+  const kategoriRaw = str(searchParams.kategori).toUpperCase();
+  const provinsi = str(searchParams.provinsi);
+  const kota = str(searchParams.kota);
+  const kecamatan = str(searchParams.kecamatan);
+  const kelurahan = str(searchParams.kelurahan);
+
+  const jenis =
+    (VALID_JENIS as readonly string[]).includes(jenisRaw) ? (jenisRaw as Prisma.jenis_transaksi_enum) : undefined;
+  const kategori =
+    (VALID_KATEGORI as readonly string[]).includes(kategoriRaw) ? (kategoriRaw as Prisma.kategori_properti_enum) : undefined;
+
+  // ── Build Prisma where ──
+  const where: Prisma.ListingWhereInput = {
+    status_tayang: "TERSEDIA",
+    ...(userRole !== "OWNER" && { id_agent: agentId }),
+    ...(jenis && { jenis_transaksi: jenis }),
+    ...(kategori && { kategori }),
+    ...(provinsi && { provinsi: { contains: provinsi, mode: "insensitive" } }),
+    ...(kota && { kota: { contains: kota, mode: "insensitive" } }),
+    ...(kecamatan && { kecamatan: { contains: kecamatan, mode: "insensitive" } }),
+    ...(kelurahan && { kelurahan: { contains: kelurahan, mode: "insensitive" } }),
+    ...(q && {
+      OR: [
+        { judul: { contains: q, mode: "insensitive" } },
+        { alamat_lengkap: { contains: q, mode: "insensitive" } },
+        // id_property contains — convert to string for partial match
+        ...(/^\d+$/.test(q)
+          ? [{ id_property: { equals: BigInt(q) } } as Prisma.ListingWhereInput]
+          : []),
+      ],
+    }),
   };
 
-  const whereClause =
-    userRole === "OWNER"
-      ? baseWhere                         // OWNER: semua listing TERSEDIA
-      : { ...baseWhere, id_agent: agentId }; // AGENT: listing TERSEDIA miliknya
-
-  // Stats header (gunakan baseWhere yang sama di property-stats)
-  const headerStats = await fetchListingHeaderStats(userRole, agentId);
-
-  // Data untuk kartu
-  const properties = await prisma.listing.findMany({
-    where: whereClause,
-    orderBy: { tanggal_diupdate: "desc" },
-    include: {
-      agent: {
-        select: {
-          nama_kantor: true,
-          foto_profil_url: true,
-          pengguna: { select: { nama_lengkap: true } },
+  // ── Parallel: header stats + count + data ──
+  const [headerStats, totalItems, properties] = await Promise.all([
+    fetchListingHeaderStats(userRole, agentId),
+    prisma.listing.count({ where }),
+    prisma.listing.findMany({
+      where,
+      orderBy: { tanggal_diupdate: "desc" },
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+      include: {
+        agent: {
+          select: {
+            nama_kantor: true,
+            foto_profil_url: true,
+            pengguna: { select: { nama_lengkap: true } },
+          },
         },
       },
-    },
-  });
+    }),
+  ]);
 
   const listings = properties.map((p) => {
     const idStr = String(p.id_property);
@@ -113,6 +175,23 @@ export default async function DashboardListingsPage() {
       listings={listings}
       currentAgentId={agentId}
       userRole={userRole}
+      currentPage={page}
+      totalItems={totalItems}
+      pageSize={PAGE_SIZE}
+      initialFilters={{
+        q,
+        vendor: "",
+        jenis: (jenisRaw && (VALID_JENIS as readonly string[]).includes(jenisRaw)
+          ? jenisRaw
+          : "ALL") as any,
+        kategori: (kategoriRaw && (VALID_KATEGORI as readonly string[]).includes(kategoriRaw)
+          ? kategoriRaw
+          : "ALL") as any,
+        provinsi,
+        kota,
+        kecamatan,
+        kelurahan,
+      }}
     />
   );
 }

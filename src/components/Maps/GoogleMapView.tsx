@@ -20,6 +20,8 @@ interface GoogleMapViewProps {
   lng?: number | null;
 }
 
+const libraries: ('places')[] = ['places'];
+
 const mapContainerStyle = { width: "100%", height: "100%" };
 
 // ====== FOURSQUARE POI ======
@@ -75,6 +77,7 @@ function getIconStyle(categoryName: string) {
 export default function GoogleMapView({ address, lat, lng }: GoogleMapViewProps) {
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
+    libraries,
   });
 
   const mapRef = useRef<google.maps.Map | null>(null);

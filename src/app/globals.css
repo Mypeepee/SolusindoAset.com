@@ -110,6 +110,29 @@ section {
   animation: pulse-glow 2s ease-in-out infinite;
 }
 
+/* ── Listings card grid: indeterminate progress + page enter ── */
+@keyframes lcg-progress-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+.lcg-progress {
+  animation: lcg-progress-slide 1.1s ease-in-out infinite;
+}
+
+@keyframes lcg-page-enter-kf {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.lcg-page-enter {
+  animation: lcg-page-enter-kf 0.35s ease-out both;
+}
+
 /* Shimmer Animation */
 @keyframes shimmer {
   0% {

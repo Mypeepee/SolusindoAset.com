@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import KategoriHero from "./components/KategoriHero";
 import KategoriFilterBar from "./components/KategoriFilterBar";
 import KategoriGrid from "./components/KategoriGrid";
 import type { KategoriPageProps } from "./types";
+import { smoothScrollToElement } from "@/lib/pagination";
 
 export default function KategoriPageClient({
   slug,
@@ -20,6 +21,7 @@ export default function KategoriPageClient({
   const pathname = usePathname();
   const sp       = useSearchParams();
   const gridRef  = useRef<HTMLDivElement>(null);
+  const prevPageRef = useRef<number>(pagination.currentPage);
 
   const navigate = (updates: Record<string, string | undefined>) => {
     const params = new URLSearchParams(sp.toString());
@@ -28,8 +30,17 @@ export default function KategoriPageClient({
       else params.set(k, v);
     });
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
-    gridRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
+
+  // Smooth-scroll to the first card row whenever the page/tipe/sort changes
+  // (i.e. once the new data has rendered).
+  useEffect(() => {
+    if (prevPageRef.current === pagination.currentPage) return;
+    prevPageRef.current = pagination.currentPage;
+    requestAnimationFrame(() => {
+      if (gridRef.current) smoothScrollToElement(gridRef.current);
+    });
+  }, [pagination.currentPage]);
 
   return (
     <main className="bg-[#0F0F0F] min-h-screen pb-24">

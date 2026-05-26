@@ -1,14 +1,17 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import Image from "next/image";
 import { Icon } from "@iconify/react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Apartment } from "./types";
 import { apartmentsData } from "./data";
 import { formatRupiah, getFacilityIcon, getTypeColor } from "./utils";
+import { getPaginationPages, smoothScrollToElement } from "@/lib/pagination";
+
+const PAGE_SIZE = 12;
 
 const ApartmentCard = ({ item }: { item: Apartment }) => {
   return (
@@ -90,21 +93,55 @@ const ApartmentCard = ({ item }: { item: Apartment }) => {
 
 export default function ProductList() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const [isLoading, setIsLoading] = useState(true);
+  const gridRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setTimeout(() => setIsLoading(false), 1000);
   }, []);
 
   const lokasiQuery = searchParams.get("lokasi") || "";
+  const currentPage = Math.max(1, Number(searchParams.get("page")) || 1);
 
-  const filteredData = lokasiQuery
-    ? apartmentsData.filter(
-        (item) =>
-          item.name.toLowerCase().includes(lokasiQuery.toLowerCase()) ||
-          item.location.toLowerCase().includes(lokasiQuery.toLowerCase())
-      )
-    : apartmentsData;
+  const filteredData = useMemo(
+    () =>
+      lokasiQuery
+        ? apartmentsData.filter(
+            (item) =>
+              item.name.toLowerCase().includes(lokasiQuery.toLowerCase()) ||
+              item.location.toLowerCase().includes(lokasiQuery.toLowerCase())
+          )
+        : apartmentsData,
+    [lokasiQuery]
+  );
+
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginated = useMemo(
+    () =>
+      filteredData.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [filteredData, safePage]
+  );
+
+  const prevPageRef = useRef<number>(safePage);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage === safePage) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("page", newPage.toString());
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
+  // Smooth-scroll to the first card row once the new page has rendered.
+  useEffect(() => {
+    if (prevPageRef.current === safePage) return;
+    prevPageRef.current = safePage;
+    requestAnimationFrame(() => {
+      if (gridRef.current) smoothScrollToElement(gridRef.current);
+    });
+  }, [safePage]);
 
   return (
     <div className="w-full lg:w-3/4">
@@ -130,40 +167,78 @@ export default function ProductList() {
           </h2>
        </div>
 
-       {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-             {[1,2,3,4,5,6].map(i => (
-                <div key={i} className="h-[400px] bg-[#1A1A1A] rounded-2xl animate-pulse border border-white/5">
-                   <div className="h-56 bg-white/5 rounded-t-2xl"></div>
-                   <div className="p-5 space-y-3">
-                      <div className="h-6 bg-white/10 rounded w-3/4"></div>
-                      <div className="h-4 bg-white/5 rounded w-1/2"></div>
-                      <div className="h-10 bg-white/5 rounded-xl mt-4"></div>
-                   </div>
-                </div>
-             ))}
-          </div>
-       ) : filteredData.length === 0 ? (
-          <div className="text-center py-20">
-             <Icon icon="solar:magnifer-bold-duotone" className="text-5xl text-gray-600 mx-auto mb-4" />
-             <p className="text-white font-bold text-lg">Tidak ditemukan unit untuk &quot;{lokasiQuery}&quot;</p>
-             <p className="text-gray-500 text-sm mt-2">Coba kata kunci lain atau hapus filter lokasi</p>
-          </div>
-       ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-             <AnimatePresence>
-                {filteredData.map((item) => (
-                   <ApartmentCard key={item.id} item={item} />
-                ))}
-             </AnimatePresence>
-          </div>
-       )}
-
-       <div className="mt-16 text-center">
-          <button className="px-8 py-3 rounded-full border border-white/20 text-white font-bold hover:bg-white hover:text-darkmode transition-all duration-300 transform hover:-translate-y-1">
-             Muat Lebih Banyak
-          </button>
+       <div ref={gridRef}>
+         {isLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+               {[1,2,3,4,5,6].map(i => (
+                  <div key={i} className="h-[400px] bg-[#1A1A1A] rounded-2xl animate-pulse border border-white/5">
+                     <div className="h-56 bg-white/5 rounded-t-2xl"></div>
+                     <div className="p-5 space-y-3">
+                        <div className="h-6 bg-white/10 rounded w-3/4"></div>
+                        <div className="h-4 bg-white/5 rounded w-1/2"></div>
+                        <div className="h-10 bg-white/5 rounded-xl mt-4"></div>
+                     </div>
+                  </div>
+               ))}
+            </div>
+         ) : filteredData.length === 0 ? (
+            <div className="text-center py-20">
+               <Icon icon="solar:magnifer-bold-duotone" className="text-5xl text-gray-600 mx-auto mb-4" />
+               <p className="text-white font-bold text-lg">Tidak ditemukan unit untuk &quot;{lokasiQuery}&quot;</p>
+               <p className="text-gray-500 text-sm mt-2">Coba kata kunci lain atau hapus filter lokasi</p>
+            </div>
+         ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+               <AnimatePresence mode="wait">
+                  {paginated.map((item) => (
+                     <ApartmentCard key={item.id} item={item} />
+                  ))}
+               </AnimatePresence>
+            </div>
+         )}
        </div>
+
+       {!isLoading && totalPages > 1 && (
+         <div className="mt-16 flex justify-center">
+           <nav className="flex items-center gap-2 bg-[#1A1A1A] p-2 rounded-full border border-white/10 shadow-2xl">
+             <button
+               onClick={() => handlePageChange(Math.max(1, safePage - 1))}
+               disabled={safePage === 1}
+               className="w-10 h-10 rounded-full flex items-center justify-center text-white hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+             >
+               <Icon icon="solar:alt-arrow-left-linear" className="text-xl" />
+             </button>
+
+             {getPaginationPages(safePage, totalPages).map((p, i) =>
+               p === "..." ? (
+                 <span key={`e${i}`} className="text-gray-600 px-1">
+                   ...
+                 </span>
+               ) : (
+                 <button
+                   key={p}
+                   onClick={() => handlePageChange(p as number)}
+                   className={`w-10 h-10 rounded-full font-bold text-sm transition-all duration-300 ${
+                     p === safePage
+                       ? "bg-primary text-black shadow-[0_0_15px_rgba(74,222,128,0.4)] scale-110"
+                       : "text-gray-400 hover:text-white hover:bg-white/5"
+                   }`}
+                 >
+                   {p}
+                 </button>
+               )
+             )}
+
+             <button
+               onClick={() => handlePageChange(Math.min(totalPages, safePage + 1))}
+               disabled={safePage === totalPages}
+               className="w-10 h-10 rounded-full flex items-center justify-center text-white hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+             >
+               <Icon icon="solar:alt-arrow-right-linear" className="text-xl" />
+             </button>
+           </nav>
+         </div>
+       )}
     </div>
   );
 }

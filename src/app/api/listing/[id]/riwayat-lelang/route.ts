@@ -31,7 +31,7 @@ export async function GET(
       return NextResponse.json({ riwayat: [] });
     }
 
-    const serializeItem = (r: typeof current) => {
+    const serializeItem = (r: NonNullable<typeof current>) => {
       const gambarArr = r.gambar?.trim()
         ? r.gambar.split(",").map((s) => s.trim()).filter(Boolean)
         : [];
@@ -52,30 +52,25 @@ export async function GET(
       };
     };
 
-    // Jika kelurahan atau legalitas kosong, tidak bisa cari riwayat terkait
-    // Tampilkan minimal property ini sendiri
-    if (!current.kelurahan || !current.legalitas) {
+    // Aset unik dideteksi via kota + legalitas + nomor_legalitas (case-insensitive).
+    // Kelurahan tidak dipakai karena sering tidak konsisten antar listing.
+    const canMatch =
+      !!current.kota &&
+      !!current.legalitas &&
+      !!current.nomor_legalitas?.trim();
+
+    if (!canMatch) {
       return NextResponse.json({ riwayat: [serializeItem(current)] });
     }
 
-    // Jika nomor_legalitas ada → match ketiganya (paling spesifik)
-    // Jika nomor_legalitas kosong → match kelurahan + legalitas saja
-    const whereClause =
-      current.nomor_legalitas?.trim()
-        ? {
-            kelurahan: current.kelurahan,
-            legalitas: current.legalitas,
-            nomor_legalitas: current.nomor_legalitas,
-            jenis_transaksi: "LELANG" as const,
-          }
-        : {
-            kelurahan: current.kelurahan,
-            legalitas: current.legalitas,
-            jenis_transaksi: "LELANG" as const,
-          };
-
-    const riwayat = await prisma.listing.findMany({
-      where: whereClause,
+    const others = await prisma.listing.findMany({
+      where: {
+        id_property: { not: id },
+        jenis_transaksi: "LELANG",
+        kota: { equals: current.kota!, mode: "insensitive" },
+        legalitas: current.legalitas!,
+        nomor_legalitas: { equals: current.nomor_legalitas!, mode: "insensitive" },
+      },
       select: {
         id_property: true,
         judul: true,
@@ -91,10 +86,17 @@ export async function GET(
         nomor_legalitas: true,
         slug: true,
       },
-      orderBy: { tanggal_lelang: "asc" },
     });
 
-    return NextResponse.json({ riwayat: riwayat.map(serializeItem) });
+    const merged = [current, ...others]
+      .map(serializeItem)
+      .sort((a, b) => {
+        const da = a.tanggal_lelang ? new Date(a.tanggal_lelang).getTime() : 0;
+        const db = b.tanggal_lelang ? new Date(b.tanggal_lelang).getTime() : 0;
+        return da - db;
+      });
+
+    return NextResponse.json({ riwayat: merged });
   } catch (error) {
     console.error("❌ Error fetching riwayat lelang:", error);
     return NextResponse.json({ riwayat: [] }, { status: 500 });

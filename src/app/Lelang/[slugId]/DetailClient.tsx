@@ -38,6 +38,7 @@ interface ProductData {
   hadap_bangunan?: string | null;
   kondisi_interior?: string | null;
   legalitas?: string | null;
+  nomor_legalitas?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   kategori: string;
@@ -155,6 +156,7 @@ export default function DetailClient({
     hadap_bangunan: product.hadap_bangunan ?? null,
     kondisi_interior: product.kondisi_interior ?? null,
     legalitas: product.legalitas ?? null,
+    nomor_legalitas: product.nomor_legalitas ?? null,
 
     deskripsi: product.deskripsi ?? null,
 
@@ -218,7 +220,7 @@ export default function DetailClient({
         },
 
     priceRates: {
-      monthly: harga,
+      monthly: nilaiLimitLelang ?? harga,
       daily: 0,
     },
   };
@@ -238,6 +240,16 @@ export default function DetailClient({
       ? p.foto_list
       : [p.gambar || "/images/hero/banner.jpg"];
 
+    const pHarga = convertToNumber(p.harga);
+    const pHargaPromo =
+      p.harga_promo !== undefined && p.harga_promo !== null
+        ? convertToNumber(p.harga_promo)
+        : null;
+    const pNilaiLimit =
+      p.nilai_limit_lelang !== undefined && p.nilai_limit_lelang !== null
+        ? convertToNumber(p.nilai_limit_lelang)
+        : null;
+
     return {
       ...p,
       slug: p.slug || "",
@@ -245,7 +257,10 @@ export default function DetailClient({
       foto_list: photoList,
       agent_name: p.agent?.pengguna?.nama_lengkap || "Agent Premier",
       agent_photo: p.agent_photo || "/images/user/user-01.png",
-      harga: convertToNumber(p.harga),
+      harga: pHarga,
+      harga_promo: pHargaPromo,
+      nilai_limit_lelang: pNilaiLimit,
+      jenis_transaksi: p.jenis_transaksi,
       dilihat: p.dilihat ?? 0,
       is_hot_deal: p.is_hot_deal ?? false,
     };
@@ -296,6 +311,7 @@ export default function DetailClient({
             selectedRoom={selectedRoom}
             setSelectedRoom={setSelectedRoom}
             currentAgentId={currentAgentId}
+            currentRole={currentRole}
           />
 
           {isAgent ? (

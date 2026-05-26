@@ -48,15 +48,29 @@ export async function GET(req: Request) {
         select: {
           status_transaksi: true,
           tanggal_transaksi: true,
+          harga_bidding: true,
         },
       },
     },
   });
 
+  const CLOSING_STATUSES = new Set([
+    "closing", "pengurusan_balik_nama", "balik_nama_selesai",
+    "pengurusan_risalah_lelang", "risalah_lelang_selesai",
+    "mediasi", "mediasi_gagal", "permohonan_eksekusi",
+    "aanmaning", "penetapan", "rakor",
+    "pelaksanaan_eksekusi", "serah_terima_kunci", "selesai",
+  ]);
+
   const data = rows.map((m) => {
     const isPersen = m.tipe_komisi.toUpperCase() === "PERSENTASE";
-    const price = isPersen ? toNum(m.maksimum_bidding) : toNum(m.harga_deal);
-    const status = m.transaksi?.status_transaksi ?? m.status;
+    const status = (m.transaksi?.status_transaksi as string | undefined) ?? m.status;
+    const isClosing = CLOSING_STATUSES.has(status);
+    // PERSENTASE + closing → harga_bidding (fallback ke maksimum_bidding).
+    const persenValue = isClosing
+      ? toNum(m.transaksi?.harga_bidding) || toNum(m.maksimum_bidding)
+      : toNum(m.maksimum_bidding);
+    const price = isPersen ? persenValue : toNum(m.harga_deal);
     const date = m.transaksi?.tanggal_transaksi?.toISOString().slice(0, 10)
       ?? m.dibuat_pada.toISOString().slice(0, 10);
 

@@ -974,7 +974,15 @@ function TransaksiCard({
   const jenis    = JENIS[row.jenis] ?? { label: row.jenis, cls: "bg-zinc-500/12 text-zinc-200 ring-zinc-500/20" };
 
   const isPersen     = row.tipeKomisi.toUpperCase() === "PERSENTASE";
-  const displayPrice = isPersen ? row.maksimumBidding : row.hargaDeal;
+  const isClosing    = isClosingPipeline(row.status);
+  // PERSENTASE + sudah closing → pakai harga_bidding (nilai final),
+  // fallback ke maksimum_bidding kalau bidding belum diisi.
+  // Sebelum closing → maksimum_bidding. SELISIH → harga_deal.
+  const displayPrice = isPersen
+    ? isClosing
+      ? row.hargaBidding || row.maksimumBidding
+      : row.maksimumBidding
+    : row.hargaDeal;
 
   const STATUS_LABEL_MAP: Record<string, string> = {
     proses: "Proses",
@@ -1473,6 +1481,20 @@ function TransaksiModal({
   const showPipeline = isClosingPipeline(row.status);
   const showTerminal = isTerminal(row.status);
 
+  // Price selection — same rule as TransaksiCard.
+  const isPersen = row.tipeKomisi.toUpperCase() === "PERSENTASE";
+  const useBiddingPrice = isPersen && showPipeline && row.hargaBidding > 0;
+  const modalDisplayPrice = isPersen
+    ? showPipeline
+      ? row.hargaBidding || row.maksimumBidding
+      : row.maksimumBidding
+    : row.hargaDeal;
+  const priceLabel = isPersen
+    ? useBiddingPrice
+      ? "Harga Bidding"
+      : "Maks. Bidding"
+    : "Harga Deal";
+
   const statusLabel = row.status.replace(/_/g, " ");
   const statusStyle =
     row.status === "selesai" ? "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30" :
@@ -1583,9 +1605,9 @@ function TransaksiModal({
           </div>
           {/* Price */}
           <div className="shrink-0 text-right">
-            <p className="text-[17px] font-black text-white leading-none">{fmtShort(row.nilaiTransaksi)}</p>
+            <p className="text-[17px] font-black text-white leading-none">{fmtShort(modalDisplayPrice)}</p>
             <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-zinc-600">
-              {row.tipeKomisi === "PERSENTASE" ? "Maks. Bidding" : "Harga Deal"}
+              {priceLabel}
             </p>
           </div>
         </div>

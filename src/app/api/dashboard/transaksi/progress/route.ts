@@ -203,21 +203,37 @@ export async function GET(req: Request) {
     }),
     prisma.mou.findMany({
       where: agentBaseWhere,
-      select: { tipe_komisi: true, harga_deal: true, maksimum_bidding: true },
+      select: {
+        tipe_komisi: true,
+        harga_deal: true,
+        maksimum_bidding: true,
+        transaksi: {
+          select: { status_transaksi: true, harga_bidding: true },
+        },
+      },
     }),
   ]);
 
   const totalNilai = allForStats.reduce((sum, m) => {
     const isPersen = m.tipe_komisi.toUpperCase() === "PERSENTASE";
-    return sum + (isPersen ? toNum(m.maksimum_bidding) : toNum(m.harga_deal));
+    const trxStatus = (m.transaksi?.status_transaksi as string | undefined) ?? "";
+    const isClosing = CLOSING_STATUS_SET.has(trxStatus);
+    const persenValue = isClosing
+      ? toNum(m.transaksi?.harga_bidding) || toNum(m.maksimum_bidding)
+      : toNum(m.maksimum_bidding);
+    return sum + (isPersen ? persenValue : toNum(m.harga_deal));
   }, 0);
 
   const data = rows.map((m: any) => {
     const isPersen = (m.tipe_komisi ?? "").toUpperCase() === "PERSENTASE";
-    const displayPrice = isPersen ? toNum(m.maksimum_bidding) : toNum(m.harga_deal);
+    const status = m.trx_status ?? m.status;
+    const isClosing = CLOSING_STATUS_SET.has(status);
+    const persenValue = isClosing
+      ? toNum(m.trx_bidding) || toNum(m.maksimum_bidding)
+      : toNum(m.maksimum_bidding);
+    const displayPrice = isPersen ? persenValue : toNum(m.harga_deal);
     const agentNama = m.luar_nama || m.agent_nama || "—";
     const agentKantor = m.luar_kantor || m.agent_kantor || "—";
-    const status = m.trx_status ?? m.status;
 
     return {
       id: m.id,

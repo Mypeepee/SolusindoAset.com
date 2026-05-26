@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 // Folder Drive khusus lampiran PDF lelang
-const LAMPIRAN_FOLDER_ID = "1veX0M-SBLhDo-9pjBHcQbZm9wC03zkP-";
+const LAMPIRAN_FOLDER_ID = "1yMtRi1DbiINlGSFzHzGj-MT8f7C-UANJ";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -772,57 +772,35 @@ async function runScrapeJob(
             //   3. Re-query link PDF di panel aktif, klik via ElementHandle real click
             //   4. Capture response PDF dari main tab + popup (kalau buka new tab)
             const lampiranUrls: string[] = [];
+            let tmpDir: string | null = null;
             try {
-              const pdfCaptures: Array<{ buffer: Buffer; name: string }> = [];
-              const seenUrls = new Set<string>();
+              const fsp = await import("fs/promises");
+              const pathMod = await import("path");
+              const os = await import("os");
 
-              const responseHandler = async (response: any) => {
+              // Buat tmp dir unik per listing — semua PDF download masuk sini
+              tmpDir = await fsp.mkdtemp(pathMod.join(os.tmpdir(), "lelang-pdf-"));
+
+              // Izinkan Chromium download PDF ke disk (bukan deny / response capture)
+              try {
+                const cdp = await detailTab.target().createCDPSession();
+                await cdp.send("Page.setDownloadBehavior", {
+                  behavior: "allow",
+                  downloadPath: tmpDir,
+                });
+              } catch {}
+
+              // Popup → set download behavior yang sama (kalau link buka new window)
+              const popupHandler = async (popup: any) => {
                 try {
-                  const url = response.url();
-                  if (seenUrls.has(url)) return;
-                  const ct = String(response.headers()["content-type"] ?? "").toLowerCase();
-                  const cd = String(response.headers()["content-disposition"] ?? "");
-                  const isPdf =
-                    ct.includes("pdf") ||
-                    /\.pdf(?:$|[?#])/i.test(url) ||
-                    /pdf/i.test(cd);
-                  if (!isPdf) return;
-                  seenUrls.add(url);
-                  const buf = await response.buffer();
-                  if (!buf || buf.length < 1024) return;
-                  if (buf.slice(0, 4).toString() !== "%PDF") return;
-                  const fnMatch = cd.match(/filename(?:\*=UTF-8'')?[="']?([^"';]+)/i);
-                  let name = fnMatch?.[1] ? decodeURIComponent(fnMatch[1]).trim() : "";
-                  if (!name) {
-                    try {
-                      const p = new URL(url).pathname;
-                      name = p.split("/").pop() ?? "";
-                    } catch {}
-                  }
-                  if (!name) name = `lampiran-${Date.now()}.pdf`;
-                  if (!/\.pdf$/i.test(name)) name += ".pdf";
-                  pdfCaptures.push({ buffer: buf, name });
-                  push({
-                    type: "log",
-                    msg: `      ⬇️ PDF captured: ${name} (${(buf.length / 1024).toFixed(0)} KB)`,
+                  const pcdp = await popup.target().createCDPSession();
+                  await pcdp.send("Page.setDownloadBehavior", {
+                    behavior: "allow",
+                    downloadPath: tmpDir!,
                   });
                 } catch {}
               };
-
-              // Listen di main tab + tiap popup baru (kalau link buka new window)
-              detailTab.on("response", responseHandler);
-              const popupHandler = (popup: any) => {
-                try {
-                  popup.on("response", responseHandler);
-                } catch {}
-              };
               detailTab.on("popup", popupHandler);
-
-              // Cegah Chromium ambil-over sebagai download
-              try {
-                const cdp = await detailTab.target().createCDPSession();
-                await cdp.send("Page.setDownloadBehavior", { behavior: "deny" });
-              } catch {}
 
               // ── DIAGNOSTIC: dump apa yang ada di DOM dulu ──
               const diag = await detailTab.evaluate(() => {
@@ -1127,27 +1105,62 @@ async function runScrapeJob(
                 }
               }
 
-              detailTab.off("response", responseHandler);
               detailTab.off("popup", popupHandler);
 
+              // ── Phase 3: Tunggu download selesai, baca dari disk ──
+              // Klik link tadi men-trigger Chromium download ke `tmpDir`. File
+              // sementara berakhiran `.crdownload` selama in-progress. Polling
+              // sampai tidak ada partial file lagi atau timeout 30s.
+              const isPartial = (n: string) =>
+                /\.(crdownload|tmp|part)$/i.test(n);
+              await new Promise((r) => setTimeout(r, 2000));
+              for (let attempt = 0; attempt < 15; attempt++) {
+                const files = await fsp.readdir(tmpDir);
+                if (files.length === 0) {
+                  // belum ada file sama sekali → coba tunggu lagi
+                  await new Promise((r) => setTimeout(r, 2000));
+                  continue;
+                }
+                if (!files.some(isPartial)) break;
+                await new Promise((r) => setTimeout(r, 2000));
+              }
+
+              const allFiles = await fsp.readdir(tmpDir);
+              const pdfFiles = allFiles.filter((f) => !isPartial(f));
               push({
                 type: "log",
-                msg: `    📊 Total PDF tertangkap: ${pdfCaptures.length}`,
+                msg: `    📊 Total PDF terdownload: ${pdfFiles.length}`,
               });
 
-              // ── Phase 3: Upload PDF ke Google Drive ──
-              if (pdfCaptures.length > 0) {
+              // ── Phase 4: Upload PDF ke Google Drive ──
+              if (pdfFiles.length > 0) {
                 try {
                   const drive = new GoogleDriveService();
                   const slugBase = slugify(data.judul ?? "lelang").substring(0, 60);
-                  for (let i = 0; i < pdfCaptures.length; i++) {
-                    const { buffer, name } = pdfCaptures[i];
-                    const ts = Date.now();
-                    const fileName = `${slugBase}_${ts}_${i + 1}_${name}`.substring(0, 200);
+                  for (let i = 0; i < pdfFiles.length; i++) {
+                    const filename = pdfFiles[i];
+                    const filePath = pathMod.join(tmpDir, filename);
                     try {
+                      const buffer = await fsp.readFile(filePath);
+                      if (buffer.length < 1024) {
+                        push({
+                          type: "log",
+                          msg: `      ⚠️ Skip ${filename}: terlalu kecil (${buffer.length}B)`,
+                        });
+                        continue;
+                      }
+                      if (buffer.slice(0, 4).toString() !== "%PDF") {
+                        push({
+                          type: "log",
+                          msg: `      ⚠️ Skip ${filename}: bukan PDF (magic header salah)`,
+                        });
+                        continue;
+                      }
+                      const ts = Date.now();
+                      const driveName = `${slugBase}_${ts}_${i + 1}_${filename}`.substring(0, 200);
                       const rawUrl = await drive.uploadFile(
                         buffer,
-                        fileName,
+                        driveName,
                         "application/pdf",
                         LAMPIRAN_FOLDER_ID
                       );
@@ -1158,6 +1171,10 @@ async function runScrapeJob(
                           ? `https://drive.google.com/file/d/${fileId}/view`
                           : rawUrl
                       );
+                      push({
+                        type: "log",
+                        msg: `      ⬆️ Uploaded: ${filename} (${(buffer.length / 1024).toFixed(0)} KB)`,
+                      });
                     } catch (uerr: any) {
                       push({
                         type: "log",
@@ -1167,7 +1184,7 @@ async function runScrapeJob(
                   }
                   push({
                     type: "log",
-                    msg: `    ✅ ${lampiranUrls.length}/${pdfCaptures.length} lampiran tersimpan di Drive`,
+                    msg: `    ✅ ${lampiranUrls.length}/${pdfFiles.length} lampiran tersimpan di Drive`,
                   });
                 } catch (derr: any) {
                   push({
@@ -1181,6 +1198,13 @@ async function runScrapeJob(
                 type: "log",
                 msg: `    ⚠️ Lampiran extraction: ${lerr.message?.substring(0, 80)}`,
               });
+            } finally {
+              if (tmpDir) {
+                try {
+                  const fsp = await import("fs/promises");
+                  await fsp.rm(tmpDir, { recursive: true, force: true });
+                } catch {}
+              }
             }
 
             // Guard final: jangan tulis ke DB kalau user sudah cancel

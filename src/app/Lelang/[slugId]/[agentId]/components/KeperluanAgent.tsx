@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { Icon } from "@iconify/react";
 import Link from "next/link";
 
@@ -11,14 +11,6 @@ interface KeperluanAgentProps {
 
 const formatMoney = (value: number): string => {
   if (!value || isNaN(value)) return "Rp 0";
-  if (value >= 1_000_000_000) {
-    const milyar = value / 1_000_000_000;
-    return `Rp ${milyar.toFixed(1)} M`;
-  }
-  if (value >= 1_000_000) {
-    const juta = value / 1_000_000;
-    return `Rp ${Math.round(juta)} Jt`;
-  }
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",
@@ -69,13 +61,54 @@ export default function KeperluanAgent({ data, currentAgentId }: KeperluanAgentP
   // ✅ Get property ID for edit
   const propertyId = data?.id_property || data?.id || "";
 
-  const handleDownloadImages = () => {
+  const [isDownloadingImages, setIsDownloadingImages] = useState(false);
+
+  const handleDownloadImages = async () => {
     const urls: string[] = data?.foto_list || [];
     if (!urls.length) {
       alert("Belum ada foto untuk diunduh.");
       return;
     }
-    window.open(urls[0], "_blank", "noopener,noreferrer");
+
+    setIsDownloadingImages(true);
+    try {
+      // Fetch all images via server proxy (handles CORS)
+      const files = await Promise.all(
+        urls.map(async (url, i) => {
+          const res = await fetch(`/api/download-images?url=${encodeURIComponent(url)}`);
+          if (!res.ok) throw new Error(`Gagal mengambil foto ${i + 1}`);
+          const blob = await res.blob();
+          const ext = blob.type.includes("png") ? "png" : blob.type.includes("webp") ? "webp" : "jpg";
+          return new File([blob], `foto_${String(i + 1).padStart(3, "0")}.${ext}`, { type: blob.type || "image/jpeg" });
+        })
+      );
+
+      // Mobile (iOS/Android): Web Share API → native share sheet → "Simpan Gambar" → masuk Galeri
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if (isMobile && typeof navigator.share === "function" && navigator.canShare?.({ files })) {
+        await navigator.share({ files, title: "Foto Properti" });
+        return;
+      }
+
+      // Desktop: download satu per satu
+      for (const file of files) {
+        const objectUrl = URL.createObjectURL(file);
+        const a = document.createElement("a");
+        a.href = objectUrl;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(objectUrl);
+        await new Promise((r) => setTimeout(r, 300));
+      }
+    } catch (err: any) {
+      if (err?.name !== "AbortError") {
+        alert("Gagal mengunduh gambar. Silakan coba lagi.");
+      }
+    } finally {
+      setIsDownloadingImages(false);
+    }
   };
 
   const handleDownloadVideos = () => {
@@ -107,13 +140,14 @@ export default function KeperluanAgent({ data, currentAgentId }: KeperluanAgentP
     <>
       {/* DESKTOP */}
       <div
-        className="hidden lg:flex flex-col w-[380px] sticky top-24 h-fit
+        className="hidden lg:flex flex-col w-[380px] shrink-0 sticky top-[6.5rem] h-fit
+        max-h-[calc(100vh-8rem)] overflow-hidden
         bg-slate-950/95 border border-white/10 rounded-3xl
-        shadow-[0_24px_80px_rgba(0,0,0,0.75)] overflow-hidden backdrop-blur"
+        shadow-[0_24px_80px_rgba(0,0,0,0.75)] backdrop-blur"
       >
         {/* HEADER: Estimasi Biaya */}
-        <div className="px-6 pt-5 pb-4 border-b border-white/10 bg-gradient-to-br from-emerald-500/20 via-emerald-500/5 to-transparent">
-          <div className="flex items-center justify-between mb-3">
+        <div className="px-6 pt-4 pb-3 border-b border-white/10 bg-gradient-to-br from-emerald-500/20 via-emerald-500/5 to-transparent">
+          <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               <span className="text-[11px] font-semibold text-emerald-100 tracking-[0.16em] uppercase">
@@ -140,7 +174,7 @@ export default function KeperluanAgent({ data, currentAgentId }: KeperluanAgentP
         </div>
 
         {/* RINCIAN ESTIMASI */}
-        <div className="px-6 py-4 space-y-3 bg-slate-950">
+        <div className="px-6 py-3 space-y-2.5 bg-slate-950">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold text-slate-200">
               Rincian Estimasi
@@ -151,7 +185,7 @@ export default function KeperluanAgent({ data, currentAgentId }: KeperluanAgentP
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col rounded-2xl bg-emerald-500/5 border border-emerald-400/30 px-3 py-2.5">
+            <div className="flex flex-col rounded-2xl bg-emerald-500/5 border border-emerald-400/30 px-3 py-2">
               <span className="text-[9px] uppercase tracking-[0.16em] text-emerald-200/80">
                 Biaya Dokumen
               </span>
@@ -159,11 +193,11 @@ export default function KeperluanAgent({ data, currentAgentId }: KeperluanAgentP
                 {formatMoney(biayaDokumen)}
               </span>
               <span className="mt-1 text-[9px] text-emerald-100/80 leading-snug">
-                {`≈ ${formatMoney(limit * 0.085)} + Rp 7 Jt`}
+                {`≈ ${formatMoney(limit * 0.085)} + Rp 7 jt`}
               </span>
             </div>
 
-            <div className="flex flex-col rounded-2xl bg-rose-500/5 border border-rose-400/40 px-3 py-2.5">
+            <div className="flex flex-col rounded-2xl bg-rose-500/5 border border-rose-400/40 px-3 py-2">
               <span className="text-[9px] uppercase tracking-[0.16em] text-rose-200/80">
                 Biaya Pengosongan
               </span>
@@ -178,15 +212,15 @@ export default function KeperluanAgent({ data, currentAgentId }: KeperluanAgentP
 
           <div className="mt-1 rounded-2xl bg-white/[0.02] border border-white/5 px-3 py-2">
             <p className="text-[9px] text-slate-400 leading-relaxed">
-              Dokumen: limit × 8,5% + Rp 7 Jt. Pengosongan: mengikuti range
+              Dokumen: limit × 8,5% + Rp 7.000.000. Pengosongan: mengikuti range
               harga limit (lihat detail di deskripsi atau dokumen lelang).
             </p>
           </div>
         </div>
 
         {/* TOMBOL AKSI */}
-        <div className="px-5 pb-4 pt-2 bg-slate-950/95 border-t border-white/5">
-          <div className="flex flex-col gap-2">
+        <div className="px-5 pb-3 pt-2 bg-slate-950/95 border-t border-white/5">
+          <div className="flex flex-col gap-1.5">
             {/* ✅ TOMBOL EDIT - HANYA UNTUK OWNER - UPDATED LINK */}
             {isOwner && propertyId && (
               <Link
@@ -243,35 +277,36 @@ export default function KeperluanAgent({ data, currentAgentId }: KeperluanAgentP
 
             <button
               onClick={handleDownloadImages}
-              className="w-full flex items-center justify-between px-4 py-2.5 rounded-2xl
+              disabled={isDownloadingImages}
+              className="w-full flex items-center justify-between px-4 py-2 rounded-2xl
                 bg-white/[0.03] border border-white/10 hover:border-sky-400/60
-                hover:bg-sky-500/5 transition-all active:scale-[0.99]"
+                hover:bg-sky-500/5 transition-all active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-sky-500/15 border border-sky-400/40 flex items-center justify-center">
-                  <Icon
-                    icon="solar:gallery-download-bold-duotone"
-                    className="text-sky-300 text-lg"
-                  />
+                  {isDownloadingImages ? (
+                    <Icon icon="solar:spinner-bold" className="text-sky-300 text-lg animate-spin" />
+                  ) : (
+                    <Icon icon="solar:gallery-download-bold-duotone" className="text-sky-300 text-lg" />
+                  )}
                 </div>
                 <div className="text-left">
                   <p className="text-[11px] font-semibold text-white">
-                    Download Gambar
+                    {isDownloadingImages ? "Menyiapkan..." : "Download Gambar"}
                   </p>
                   <p className="text-[10px] text-gray-400">
-                    Buka foto utama lalu simpan.
+                    {isDownloadingImages ? "Sedang mengunduh foto..." : `Unduh semua ${(data?.foto_list?.length ?? 0)} foto ke galeri`}
                   </p>
                 </div>
               </div>
-              <Icon
-                icon="solar:arrow-right-up-linear"
-                className="text-gray-500 text-sm"
-              />
+              {!isDownloadingImages && (
+                <Icon icon="solar:download-minimalistic-bold" className="text-gray-500 text-sm" />
+              )}
             </button>
 
             <button
               onClick={handleDownloadVideos}
-              className="w-full flex items-center justify-between px-4 py-2.5 rounded-2xl
+              className="w-full flex items-center justify-between px-4 py-2 rounded-2xl
                 bg-white/[0.03] border border-white/10 hover:border-purple-400/60
                 hover:bg-purple-500/5 transition-all active:scale-[0.99]"
             >
@@ -299,7 +334,7 @@ export default function KeperluanAgent({ data, currentAgentId }: KeperluanAgentP
 
             <button
               onClick={handleAskStock}
-              className="w-full flex items-center justify-between px-4 py-2.5 rounded-2xl
+              className="w-full flex items-center justify-between px-4 py-2 rounded-2xl
                 bg-emerald-500/14 border border-emerald-400/70 hover:bg-emerald-500/24
                 transition-all active:scale-[0.99]"
             >
@@ -395,13 +430,14 @@ export default function KeperluanAgent({ data, currentAgentId }: KeperluanAgentP
 
           <button
             onClick={handleDownloadImages}
-            className="flex-1 bg-sky-500/20 border border-sky-400/60 text-sky-50 font-semibold text-[11px] py-2.5 rounded-xl hover:bg-sky-500/30 transition-all active:scale-[0.97] flex justify-center items-center gap-1.5"
+            disabled={isDownloadingImages}
+            className="flex-1 bg-sky-500/20 border border-sky-400/60 text-sky-50 font-semibold text-[11px] py-2.5 rounded-xl hover:bg-sky-500/30 transition-all active:scale-[0.97] flex justify-center items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <Icon
-              icon="solar:gallery-download-bold-duotone"
-              className="text-base"
+              icon={isDownloadingImages ? "solar:spinner-bold" : "solar:gallery-download-bold-duotone"}
+              className={`text-base${isDownloadingImages ? " animate-spin" : ""}`}
             />
-            Gambar
+            {isDownloadingImages ? "..." : "Gambar"}
           </button>
 
           <button

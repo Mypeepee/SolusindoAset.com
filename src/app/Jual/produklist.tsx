@@ -1,5 +1,5 @@
 "use client";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Icon } from "@iconify/react";
@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import Sidebar from "./sidebar";
 import { useSwipe } from "@/hooks/useSwipe";
+import { getPaginationPages, smoothScrollToElement } from "@/lib/pagination";
 
 // --- TIPE DATA ---
 interface PropertyDB {
@@ -331,6 +332,7 @@ const ProductList = ({ initialData, pagination }: ProductListProps) => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const productListRef = useRef<HTMLDivElement>(null);
+  const prevPageRef = useRef<number>(pagination.currentPage);
 
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
@@ -338,17 +340,20 @@ const ProductList = ({ initialData, pagination }: ProductListProps) => {
   const BASE_URL = "/Jual";
 
   const handlePageChange = (newPage: number) => {
+    if (newPage === pagination.currentPage) return;
     const params = new URLSearchParams(searchParams.toString());
     params.set("page", newPage.toString());
     router.push(`${BASE_URL}?${params.toString()}`, { scroll: false });
-
-    if (productListRef.current) {
-      productListRef.current.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }
   };
+
+  // Smooth-scroll to the first card row once the new page has rendered.
+  useEffect(() => {
+    if (prevPageRef.current === pagination.currentPage) return;
+    prevPageRef.current = pagination.currentPage;
+    requestAnimationFrame(() => {
+      if (productListRef.current) smoothScrollToElement(productListRef.current);
+    });
+  }, [pagination.currentPage]);
 
   return (
     <>
@@ -479,44 +484,30 @@ const ProductList = ({ initialData, pagination }: ProductListProps) => {
                     />
                   </button>
 
-                  {Array.from({ length: pagination.totalPages }).map(
-                    (_, idx) => {
-                      const pageNum = idx + 1;
-                      const isActive =
-                        pagination.currentPage === pageNum;
-
-                      if (
-                        pagination.totalPages > 7 &&
-                        Math.abs(pagination.currentPage - pageNum) > 2 &&
-                        pageNum !== 1 &&
-                        pageNum !== pagination.totalPages
-                      ) {
-                        if (Math.abs(pagination.currentPage - pageNum) === 3)
-                          return (
-                            <span
-                              key={pageNum}
-                              className="text-gray-600 px-1"
-                            >
-                              ...
-                            </span>
-                          );
-                        return null;
-                      }
-
-                      return (
-                        <button
-                          key={pageNum}
-                          onClick={() => handlePageChange(pageNum)}
-                          className={`w-10 h-10 rounded-full font-bold text-sm transition-all duration-300 ${
-                            isActive
-                              ? "bg-primary text-black shadow-[0_0_15px_rgba(74,222,128,0.4)] scale-110"
-                              : "text-gray-400 hover:text-white hover:bg-white/5"
-                          }`}
-                        >
-                          {pageNum}
-                        </button>
-                      );
-                    }
+                  {getPaginationPages(
+                    pagination.currentPage,
+                    pagination.totalPages
+                  ).map((p, i) =>
+                    p === "..." ? (
+                      <span
+                        key={`e${i}`}
+                        className="text-gray-600 px-1"
+                      >
+                        ...
+                      </span>
+                    ) : (
+                      <button
+                        key={p}
+                        onClick={() => handlePageChange(p as number)}
+                        className={`w-10 h-10 rounded-full font-bold text-sm transition-all duration-300 ${
+                          p === pagination.currentPage
+                            ? "bg-primary text-black shadow-[0_0_15px_rgba(74,222,128,0.4)] scale-110"
+                            : "text-gray-400 hover:text-white hover:bg-white/5"
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    )
                   )}
 
                   <button

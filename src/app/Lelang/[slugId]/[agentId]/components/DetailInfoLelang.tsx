@@ -82,6 +82,7 @@ interface PropertyData {
   hadap_bangunan: string | null;
   kondisi_interior: string | null;
   legalitas: string | null;
+  nomor_legalitas?: string | null;
 
   deskripsi: string | null;
 
@@ -100,6 +101,8 @@ interface DetailInfoProps {
   data: PropertyData;
   selectedRoom: any;
   setSelectedRoom: (room: any) => void;
+  currentAgentId?: string | null;
+  currentRole?: string | null;
 }
 
 const formatRupiah = (val: number | null | undefined) => {
@@ -206,7 +209,11 @@ export default function DetailInfo({
   data,
   selectedRoom,
   setSelectedRoom,
+  currentAgentId: _currentAgentId,
+  currentRole,
 }: DetailInfoProps) {
+  const canSeeNomorLegalitas =
+    currentRole === "AGENT" || currentRole === "OWNER";
   const transactionBadge = getTransactionBadge(data?.jenis_transaksi || "JUAL");
 
   const handleShare = async () => {
@@ -373,6 +380,11 @@ export default function DetailInfo({
                 <p className="text-sm font-bold text-emerald-400">
                   {data?.legalitas || "-"}
                 </p>
+                {canSeeNomorLegalitas && data?.nomor_legalitas && (
+                  <p className="text-xs text-gray-300 font-semibold mt-0.5">
+                    No. {data.nomor_legalitas}
+                  </p>
+                )}
                 <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wide">
                   Legalitas
                 </span>
@@ -459,6 +471,11 @@ export default function DetailInfo({
             <span className="text-sm text-emerald-400 font-bold">
               {data?.legalitas || "-"}
             </span>
+            {canSeeNomorLegalitas && data?.nomor_legalitas && (
+              <span className="text-xs text-gray-300 font-semibold block mt-0.5">
+                No. {data.nomor_legalitas}
+              </span>
+            )}
           </div>
           <div className="py-2 px-3 bg-slate-900/30 rounded-lg">
             <span className="text-xs text-gray-400 block mb-1">

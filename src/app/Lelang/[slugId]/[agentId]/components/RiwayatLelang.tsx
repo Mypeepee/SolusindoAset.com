@@ -33,46 +33,41 @@ const formatDate = (val: string | null) => {
   if (!val) return null;
   const d = new Date(val);
   if (isNaN(d.getTime())) return null;
-  return d.toLocaleDateString("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return d.toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" });
 };
 
-const STATUS_STYLE: Record<string, { label: string; color: string; bg: string; border: string; icon: string }> = {
+const STATUS_CFG: Record<string, { label: string; dot: string; text: string; bg: string; border: string }> = {
   TERSEDIA: {
     label: "Tersedia",
-    color: "text-emerald-400",
+    dot: "bg-emerald-400",
+    text: "text-emerald-300",
     bg: "bg-emerald-500/10",
-    border: "border-emerald-500/25",
-    icon: "solar:clock-circle-bold-duotone",
+    border: "border-emerald-500/20",
   },
   TERJUAL: {
     label: "Terjual",
-    color: "text-blue-400",
+    dot: "bg-blue-400",
+    text: "text-blue-300",
     bg: "bg-blue-500/10",
-    border: "border-blue-500/25",
-    icon: "solar:check-circle-bold-duotone",
+    border: "border-blue-500/20",
   },
   TIDAK_AKTIF: {
     label: "Tidak Aktif",
-    color: "text-slate-400",
-    bg: "bg-slate-500/10",
-    border: "border-slate-500/25",
-    icon: "solar:close-circle-bold-duotone",
+    dot: "bg-slate-500",
+    text: "text-slate-400",
+    bg: "bg-slate-700/30",
+    border: "border-slate-600/20",
   },
 };
 
-function getStatus(s: string) {
-  return STATUS_STYLE[s] ?? {
+const getStatus = (s: string) =>
+  STATUS_CFG[s] ?? {
     label: s,
-    color: "text-slate-400",
-    bg: "bg-slate-500/10",
-    border: "border-slate-500/25",
-    icon: "solar:info-circle-bold-duotone",
+    dot: "bg-slate-500",
+    text: "text-slate-400",
+    bg: "bg-slate-700/30",
+    border: "border-slate-600/20",
   };
-}
 
 export default function RiwayatLelang({
   idProperty,
@@ -88,26 +83,24 @@ export default function RiwayatLelang({
     if (!idProperty) return;
     fetch(`/api/listing/${idProperty}/riwayat-lelang`)
       .then((r) => r.json())
-      .then((data) => {
-        console.log("[RiwayatLelang] hasil:", data.riwayat?.length, data.riwayat);
-        setRiwayat(data.riwayat ?? []);
-      })
-      .catch((err) => {
-        console.error("[RiwayatLelang] fetch error:", err);
-        setRiwayat([]);
-      })
+      .then((data) => setRiwayat(data.riwayat ?? []))
+      .catch(() => setRiwayat([]))
       .finally(() => setLoading(false));
   }, [idProperty]);
 
   if (loading) {
     return (
-      <div className="bg-gradient-to-br from-slate-800/40 to-slate-900/40 border border-slate-700/30 rounded-2xl p-6 animate-pulse">
-        <div className="h-5 w-48 bg-slate-700/50 rounded mb-4" />
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-slate-800/40 rounded-xl h-44" />
-          ))}
+      <div className="rounded-3xl border border-white/5 bg-slate-900/60 p-6 space-y-4 animate-pulse">
+        <div className="flex gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-white/5" />
+          <div className="flex-1 space-y-2 pt-1">
+            <div className="h-4 w-40 bg-white/5 rounded-lg" />
+            <div className="h-3 w-24 bg-white/5 rounded-lg" />
+          </div>
         </div>
+        {[1, 2].map((i) => (
+          <div key={i} className="h-36 rounded-2xl bg-white/5" />
+        ))}
       </div>
     );
   }
@@ -121,163 +114,229 @@ export default function RiwayatLelang({
     .join(", ");
 
   return (
-    <div className="relative">
-      <div className="absolute -inset-px rounded-2xl bg-gradient-to-br from-orange-500/5 via-transparent to-red-500/5 pointer-events-none" />
+    <div className="relative group/section">
+      {/* Ambient glow */}
+      <div className="absolute -inset-6 bg-orange-500/3 rounded-[3rem] blur-3xl pointer-events-none opacity-0 group-hover/section:opacity-100 transition-opacity duration-700" />
 
-      <div className="relative bg-gradient-to-br from-slate-900/80 via-slate-800/50 to-slate-900/80 border border-slate-700/40 rounded-2xl overflow-hidden">
-        {/* Header */}
-        <div className="relative px-5 pt-5 pb-4 border-b border-slate-700/30">
-          <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 to-transparent pointer-events-none" />
-          <div className="relative flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500/20 to-red-500/20 border border-orange-500/30 flex items-center justify-center flex-shrink-0 shadow-lg shadow-orange-500/10">
-                <Icon icon="solar:hammer-bold-duotone" className="text-orange-400 text-xl" />
-                <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center text-[10px] font-black text-white shadow-md">
-                  {riwayat.length}
-                </span>
+      <div className="relative space-y-5">
+        {/* ── HEADER ─────────────────────────────────────────── */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            {/* Icon block */}
+            <div className="relative flex-shrink-0">
+              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-orange-500/25 to-red-600/15 border border-orange-500/30 flex items-center justify-center shadow-lg shadow-orange-500/15">
+                <Icon icon="solar:diagram-down-bold-duotone" className="text-orange-400 text-xl" />
               </div>
-              <div>
-                <h3 className="text-sm font-black text-white">Riwayat Lelang Aset Ini</h3>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Aset ini tercatat dilelang{" "}
-                  <span className="text-orange-400 font-bold">{riwayat.length}x</span>
-                </p>
+              <div className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-gradient-to-br from-orange-500 to-red-500 rounded-full flex items-center justify-center text-[9px] font-black text-white shadow-md shadow-orange-500/50 ring-2 ring-[#0f0f0f]">
+                {riwayat.length}
               </div>
             </div>
 
-            {/* Identifier tags */}
-            <div className="flex flex-wrap items-center gap-2">
-              {legalitasLabel && (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs">
-                  <Icon icon="solar:shield-check-bold-duotone" className="text-emerald-400 text-sm" />
-                  <span className="text-emerald-400 font-bold">{legalitasLabel}</span>
-                  {nomorLegalitas && (
-                    <span className="text-emerald-300/70 font-semibold">No. {nomorLegalitas}</span>
-                  )}
-                </div>
-              )}
-              {lokasiLabel && (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-700/40 border border-slate-600/30 text-xs text-slate-300">
-                  <Icon icon="solar:map-point-bold-duotone" className="text-slate-400 text-sm" />
-                  <span className="truncate max-w-[160px]">{lokasiLabel}</span>
-                </div>
-              )}
+            <div>
+              <h3 className="text-base font-black text-white tracking-tight">
+                Riwayat Lelang Aset
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Tercatat dilelang{" "}
+                <span className="text-orange-400 font-bold">{riwayat.length}×</span> dengan aset identik
+              </p>
             </div>
+          </div>
+
+          {/* Meta chips */}
+          <div className="flex flex-wrap gap-2">
+            {legalitasLabel && (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/8 border border-emerald-500/20 backdrop-blur-sm">
+                <Icon icon="solar:shield-check-bold-duotone" className="text-emerald-400 text-sm flex-shrink-0" />
+                <span className="text-xs font-bold text-emerald-300">{legalitasLabel}</span>
+                {nomorLegalitas && (
+                  <span className="text-[10px] text-emerald-400/50 font-mono">
+                    {nomorLegalitas}
+                  </span>
+                )}
+              </div>
+            )}
+            {lokasiLabel && (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/4 border border-white/8 backdrop-blur-sm">
+                <Icon icon="solar:map-point-bold-duotone" className="text-slate-400 text-sm flex-shrink-0" />
+                <span className="text-xs text-slate-300 truncate max-w-[150px]">{lokasiLabel}</span>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Cards grid */}
-        <div className="p-5">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        {/* ── TIMELINE ───────────────────────────────────────── */}
+        <div className="relative">
+          {/* Connecting line */}
+          {riwayat.length > 1 && (
+            <div
+              className="absolute left-[22px] top-10 bottom-10 w-px pointer-events-none"
+              style={{
+                background:
+                  "linear-gradient(to bottom, rgba(249,115,22,0.5), rgba(249,115,22,0.15), transparent)",
+              }}
+            />
+          )}
+
+          <div className="space-y-4">
             {riwayat.map((item, idx) => {
               const isCurrent = item.id_property === currentIdProperty;
               const statusCfg = getStatus(item.status_tayang);
               const tanggal = formatDate(item.tanggal_lelang);
-              const urutan = idx + 1;
+              const harga = item.nilai_limit_lelang ?? item.harga;
 
               return (
                 <Link
                   key={item.id_property}
                   href={`/Lelang/${item.slug}-${item.id_property}`}
-                  className={`group relative rounded-xl overflow-hidden border transition-all duration-300 ${
-                    isCurrent
-                      ? "border-orange-500/50 ring-1 ring-orange-500/30 shadow-lg shadow-orange-500/15"
-                      : "border-slate-700/40 hover:border-slate-500/60 hover:shadow-lg hover:shadow-black/30"
-                  } bg-slate-900/60`}
+                  className="block group/card"
                 >
-                  {/* Current indicator */}
-                  {isCurrent && (
-                    <div className="absolute top-2 left-2 z-20 flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-500 text-[9px] font-black text-white shadow-md shadow-orange-500/40">
-                      <span className="w-1 h-1 rounded-full bg-white animate-pulse" />
-                      SAAT INI
-                    </div>
-                  )}
-
-                  {/* Urutan badge */}
-                  <div className={`absolute top-2 right-2 z-20 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shadow-md ${
-                    isCurrent
-                      ? "bg-orange-500 text-white"
-                      : "bg-slate-800/90 text-slate-300 border border-slate-600/50"
-                  }`}>
-                    {urutan}
-                  </div>
-
-                  {/* Image */}
-                  <div className="relative w-full h-[100px] bg-slate-800 overflow-hidden">
-                    {item.gambar_utama ? (
-                      <Image
-                        src={item.gambar_utama}
-                        alt={item.judul}
-                        fill
-                        className="object-cover transition-transform duration-500 group-hover:scale-105"
-                        sizes="(max-width: 768px) 50vw, 33vw"
-                        unoptimized
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-slate-800">
-                        <Icon icon="solar:home-bold-duotone" className="text-3xl text-slate-600" />
+                  <div className="flex gap-4 items-start">
+                    {/* Timeline node */}
+                    <div className="flex-shrink-0 flex flex-col items-center pt-5">
+                      <div
+                        className={`relative w-11 h-11 rounded-2xl flex items-center justify-center text-xs font-black transition-all duration-300 ${
+                          isCurrent
+                            ? "bg-gradient-to-br from-orange-500 to-red-500 text-white shadow-lg shadow-orange-500/40"
+                            : "bg-slate-800/80 text-slate-400 border border-slate-700/60 group-hover/card:border-orange-500/30 group-hover/card:text-orange-300"
+                        }`}
+                      >
+                        {isCurrent && (
+                          <div className="absolute inset-0 rounded-2xl bg-orange-500/30 animate-ping opacity-75" />
+                        )}
+                        <span className="relative">{idx + 1}</span>
                       </div>
-                    )}
-                    {/* Gradient overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-transparent to-transparent" />
-                  </div>
-
-                  {/* Content */}
-                  <div className="p-3">
-                    {/* ID listing */}
-                    <div className="flex items-center gap-1 mb-1.5">
-                      <Icon icon="solar:hashtag-bold" className="text-slate-500 text-[10px]" />
-                      <span className="text-[10px] text-slate-500 font-mono">
-                        ID {item.id_property}
-                      </span>
                     </div>
 
-                    {/* Judul */}
-                    <p className="text-xs font-bold text-white leading-snug line-clamp-2 mb-2 min-h-[32px]">
-                      {item.judul}
-                    </p>
-
-                    {/* Harga */}
-                    <p className="text-sm font-black text-white mb-2">
-                      {formatRupiah(item.nilai_limit_lelang ?? item.harga)}
-                    </p>
-
-                    {/* Tanggal + Status */}
-                    <div className="flex items-center justify-between gap-1 flex-wrap">
-                      {tanggal ? (
-                        <div className="flex items-center gap-1 text-[10px] text-gray-400">
-                          <Icon icon="solar:calendar-bold-duotone" className="text-slate-500 text-xs" />
-                          <span>{tanggal}</span>
-                        </div>
-                      ) : (
-                        <span className="text-[10px] text-slate-600">— Belum dijadwalkan</span>
+                    {/* Card */}
+                    <div
+                      className={`relative flex-1 rounded-2xl overflow-hidden border transition-all duration-300 ${
+                        isCurrent
+                          ? "border-orange-500/35 shadow-xl shadow-orange-500/8"
+                          : "border-white/6 group-hover/card:border-white/12 group-hover/card:shadow-lg group-hover/card:shadow-black/40"
+                      }`}
+                      style={{
+                        background: isCurrent
+                          ? "linear-gradient(135deg, rgba(249,115,22,0.06) 0%, rgba(17,24,39,0.95) 50%, rgba(15,23,42,0.98) 100%)"
+                          : "linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(15,23,42,0.90) 100%)",
+                      }}
+                    >
+                      {/* Top edge accent line for current */}
+                      {isCurrent && (
+                        <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-orange-500/60 to-transparent" />
                       )}
 
-                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold ${statusCfg.bg} ${statusCfg.color} border ${statusCfg.border}`}>
-                        <Icon icon={statusCfg.icon} className="text-[9px]" />
-                        {statusCfg.label}
-                      </span>
+                      <div className="flex min-h-[130px]">
+                        {/* Image */}
+                        <div className="relative w-36 sm:w-44 shrink-0 overflow-hidden">
+                          {item.gambar_utama ? (
+                            <>
+                              <Image
+                                src={item.gambar_utama}
+                                alt={item.judul}
+                                fill
+                                className="object-cover transition-transform duration-700 group-hover/card:scale-105"
+                                sizes="(max-width: 640px) 144px, 176px"
+                                unoptimized
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-slate-900/70" />
+                              <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent" />
+                            </>
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-slate-800/60">
+                              <Icon icon="solar:home-2-bold-duotone" className="text-4xl text-slate-700" />
+                            </div>
+                          )}
+
+                          {/* SAAT INI overlay on image */}
+                          {isCurrent && (
+                            <div className="absolute top-2.5 left-2.5 flex items-center gap-1 px-2 py-1 rounded-full bg-orange-500 shadow-md shadow-orange-500/50 backdrop-blur-sm">
+                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                              <span className="text-[9px] font-black text-white tracking-wide">SAAT INI</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-1 p-4 flex flex-col justify-between min-w-0">
+                          <div>
+                            {/* Top row: ID + Status */}
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <span className="text-[10px] text-slate-600 font-mono tracking-wider">
+                                #{item.id_property}
+                              </span>
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold ${statusCfg.bg} ${statusCfg.text} border ${statusCfg.border}`}
+                              >
+                                <span className={`w-1 h-1 rounded-full ${statusCfg.dot}`} />
+                                {statusCfg.label}
+                              </span>
+                            </div>
+
+                            {/* Title */}
+                            <p className="text-xs font-semibold text-slate-200 line-clamp-2 leading-relaxed mb-3">
+                              {item.judul}
+                            </p>
+                          </div>
+
+                          <div>
+                            {/* Price */}
+                            <p
+                              className={`text-sm font-black mb-2 ${
+                                isCurrent ? "text-orange-300" : "text-white"
+                              }`}
+                            >
+                              {formatRupiah(harga)}
+                            </p>
+
+                            {/* Date */}
+                            <div className="flex items-center gap-1.5">
+                              <Icon
+                                icon="solar:calendar-date-bold-duotone"
+                                className="text-slate-600 text-xs flex-shrink-0"
+                              />
+                              {tanggal ? (
+                                <span className="text-[10px] text-slate-400">{tanggal}</span>
+                              ) : (
+                                <span className="text-[10px] text-slate-600 italic">Belum dijadwalkan</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Hover arrow */}
+                      <div className="absolute right-3 top-3 opacity-0 group-hover/card:opacity-100 transition-all duration-200 translate-x-1 group-hover/card:translate-x-0">
+                        <div className="w-6 h-6 rounded-full bg-white/8 flex items-center justify-center">
+                          <Icon icon="solar:arrow-right-up-linear" className="text-white text-xs" />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </Link>
               );
             })}
           </div>
+        </div>
 
-          {/* Footer note */}
-          <div className="mt-4 flex items-start gap-2 p-3 rounded-xl bg-orange-500/5 border border-orange-500/15">
-            <Icon icon="solar:info-circle-bold-duotone" className="text-orange-400 text-base flex-shrink-0 mt-0.5" />
-            <p className="text-[11px] text-gray-400 leading-relaxed">
-              Aset dengan{" "}
-              <span className="text-white font-semibold">
-                {legalitasLabel} No. {nomorLegalitas}
-              </span>{" "}
-              di {lokasiLabel} tercatat dilelang{" "}
-              <span className="text-orange-300 font-bold">{riwayat.length} kali</span>.
+        {/* ── FOOTER NOTE ────────────────────────────────────── */}
+        {legalitasLabel && (
+          <div className="flex items-start gap-3 px-4 py-3.5 rounded-2xl bg-orange-500/4 border border-orange-500/12">
+            <div className="w-7 h-7 rounded-xl bg-orange-500/15 border border-orange-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Icon icon="solar:info-circle-bold-duotone" className="text-orange-400 text-sm" />
+            </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Aset dengan sertifikat{" "}
+              <span className="text-white font-semibold">{legalitasLabel}</span>
+              {nomorLegalitas && (
+                <span className="text-slate-300"> No. {nomorLegalitas}</span>
+              )}{" "}
+              di <span className="text-slate-300">{lokasiLabel}</span> tercatat dilelang{" "}
+              <span className="text-orange-300 font-bold">{riwayat.length}×</span>.{" "}
               Semakin sering dilelang, semakin besar peluang harga lebih fleksibel.
             </p>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

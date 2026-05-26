@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { Icon } from "@iconify/react";
 import Link from "next/link";
 
@@ -69,13 +69,54 @@ export default function KeperluanAgent({ data, currentAgentId }: KeperluanAgentP
   // ✅ Get property ID for edit
   const propertyId = data?.id_property || data?.id || "";
 
-  const handleDownloadImages = () => {
+  const [isDownloadingImages, setIsDownloadingImages] = useState(false);
+
+  const handleDownloadImages = async () => {
     const urls: string[] = data?.foto_list || [];
     if (!urls.length) {
       alert("Belum ada foto untuk diunduh.");
       return;
     }
-    window.open(urls[0], "_blank", "noopener,noreferrer");
+
+    setIsDownloadingImages(true);
+    try {
+      // Fetch all images via server proxy (handles CORS)
+      const files = await Promise.all(
+        urls.map(async (url, i) => {
+          const res = await fetch(`/api/download-images?url=${encodeURIComponent(url)}`);
+          if (!res.ok) throw new Error(`Gagal mengambil foto ${i + 1}`);
+          const blob = await res.blob();
+          const ext = blob.type.includes("png") ? "png" : blob.type.includes("webp") ? "webp" : "jpg";
+          return new File([blob], `foto_${String(i + 1).padStart(3, "0")}.${ext}`, { type: blob.type || "image/jpeg" });
+        })
+      );
+
+      // Mobile (iOS/Android): Web Share API → native share sheet → "Simpan Gambar" → masuk Galeri
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if (isMobile && typeof navigator.share === "function" && navigator.canShare?.({ files })) {
+        await navigator.share({ files, title: "Foto Properti" });
+        return;
+      }
+
+      // Desktop: download satu per satu
+      for (const file of files) {
+        const objectUrl = URL.createObjectURL(file);
+        const a = document.createElement("a");
+        a.href = objectUrl;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(objectUrl);
+        await new Promise((r) => setTimeout(r, 300));
+      }
+    } catch (err: any) {
+      if (err?.name !== "AbortError") {
+        alert("Gagal mengunduh gambar. Silakan coba lagi.");
+      }
+    } finally {
+      setIsDownloadingImages(false);
+    }
   };
 
   const handleDownloadVideos = () => {
@@ -243,30 +284,31 @@ export default function KeperluanAgent({ data, currentAgentId }: KeperluanAgentP
 
             <button
               onClick={handleDownloadImages}
+              disabled={isDownloadingImages}
               className="w-full flex items-center justify-between px-4 py-2.5 rounded-2xl
                 bg-white/[0.03] border border-white/10 hover:border-sky-400/60
-                hover:bg-sky-500/5 transition-all active:scale-[0.99]"
+                hover:bg-sky-500/5 transition-all active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-sky-500/15 border border-sky-400/40 flex items-center justify-center">
-                  <Icon
-                    icon="solar:gallery-download-bold-duotone"
-                    className="text-sky-300 text-lg"
-                  />
+                  {isDownloadingImages ? (
+                    <Icon icon="solar:spinner-bold" className="text-sky-300 text-lg animate-spin" />
+                  ) : (
+                    <Icon icon="solar:gallery-download-bold-duotone" className="text-sky-300 text-lg" />
+                  )}
                 </div>
                 <div className="text-left">
                   <p className="text-[11px] font-semibold text-white">
-                    Download Gambar
+                    {isDownloadingImages ? "Menyiapkan..." : "Download Gambar"}
                   </p>
                   <p className="text-[10px] text-gray-400">
-                    Buka foto utama lalu simpan.
+                    {isDownloadingImages ? "Sedang mengunduh foto..." : `Unduh semua ${(data?.foto_list?.length ?? 0)} foto ke galeri`}
                   </p>
                 </div>
               </div>
-              <Icon
-                icon="solar:arrow-right-up-linear"
-                className="text-gray-500 text-sm"
-              />
+              {!isDownloadingImages && (
+                <Icon icon="solar:download-minimalistic-bold" className="text-gray-500 text-sm" />
+              )}
             </button>
 
             <button
@@ -395,13 +437,14 @@ export default function KeperluanAgent({ data, currentAgentId }: KeperluanAgentP
 
           <button
             onClick={handleDownloadImages}
-            className="flex-1 bg-sky-500/20 border border-sky-400/60 text-sky-50 font-semibold text-[11px] py-2.5 rounded-xl hover:bg-sky-500/30 transition-all active:scale-[0.97] flex justify-center items-center gap-1.5"
+            disabled={isDownloadingImages}
+            className="flex-1 bg-sky-500/20 border border-sky-400/60 text-sky-50 font-semibold text-[11px] py-2.5 rounded-xl hover:bg-sky-500/30 transition-all active:scale-[0.97] flex justify-center items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <Icon
-              icon="solar:gallery-download-bold-duotone"
-              className="text-base"
+              icon={isDownloadingImages ? "solar:spinner-bold" : "solar:gallery-download-bold-duotone"}
+              className={`text-base${isDownloadingImages ? " animate-spin" : ""}`}
             />
-            Gambar
+            {isDownloadingImages ? "..." : "Gambar"}
           </button>
 
           <button

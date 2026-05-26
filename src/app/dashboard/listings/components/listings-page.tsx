@@ -5,6 +5,7 @@ import type { ListingHeaderStats } from "../lib/property-stats";
 import { MetricCard } from "./metric-card";
 import ListingCardGrid from "./ListingCardGrid";
 import type { Listing } from "./listings-table";
+import type { ListingFilterState } from "@/app/dashboard/transaksi/components/ListingFilters";
 
 type ListingsPageProps = {
   headerStats: ListingHeaderStats & {
@@ -13,6 +14,10 @@ type ListingsPageProps = {
   listings: Listing[];
   currentAgentId: string;
   userRole?: string;
+  currentPage: number;
+  totalItems: number;
+  pageSize: number;
+  initialFilters: ListingFilterState;
 };
 
 export default function ListingsPage({
@@ -20,6 +25,10 @@ export default function ListingsPage({
   listings,
   currentAgentId,
   userRole,
+  currentPage,
+  totalItems,
+  pageSize,
+  initialFilters,
 }: ListingsPageProps) {
   const { total, totalHotDeal, totalViewed, totalPriority } = headerStats;
 
@@ -76,6 +85,10 @@ export default function ListingsPage({
         <ListingCardGrid
           listings={listings}
           currentAgentId={currentAgentId}
+          currentPage={currentPage}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          initialFilters={initialFilters}
         />
       </div>
     </div>
