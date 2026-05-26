@@ -200,6 +200,7 @@ export default async function KategoriPage({ params, searchParams }: Props) {
       slug:            item.slug,
       judul:           item.judul,
       kota:            item.kota,
+      alamat_lengkap:  item.alamat_lengkap ?? "",
       harga:           item.nilai_limit_lelang
                          ? Number(item.nilai_limit_lelang)
                          : Number(item.harga),

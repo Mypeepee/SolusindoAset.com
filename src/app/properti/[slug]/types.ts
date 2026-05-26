@@ -3,6 +3,7 @@ export interface PropertyItem {
   slug: string;
   judul: string;
   kota: string;
+  alamat_lengkap: string;
   harga: number;
   harga_promo: number | null;
   jenis_transaksi: string;

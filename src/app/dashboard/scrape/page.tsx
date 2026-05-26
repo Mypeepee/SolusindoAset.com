@@ -18,6 +18,7 @@ interface LogLine {
   type: "log" | "saved" | "error" | "progress" | "done" | "cancelled";
   msg?: string;
   judul?: string;
+  alamat_lengkap?: string | null;
   kota?: string;
   harga?: number;
   gambar?: string | null;
@@ -28,6 +29,7 @@ interface LogLine {
 
 interface SavedItem {
   judul: string;
+  alamat_lengkap: string | null;
   kota: string;
   harga: number;
   gambar: string | null;
@@ -103,7 +105,7 @@ export default function ScrapePage() {
               if (event.type === "saved" && event.judul) {
                 setSaved((p) =>
                   [
-                    { judul: event.judul!, kota: event.kota!, harga: event.harga!, gambar: event.gambar ?? null },
+                    { judul: event.judul!, alamat_lengkap: event.alamat_lengkap ?? null, kota: event.kota!, harga: event.harga!, gambar: event.gambar ?? null },
                     ...p,
                   ].slice(0, 50),
                 );
@@ -402,7 +404,7 @@ export default function ScrapePage() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-white truncate">{item.judul}</p>
+                      <p className="text-xs font-semibold text-white truncate">{item.alamat_lengkap || item.judul}</p>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[10px] text-slate-400 flex items-center gap-1">
                           <Icon icon="solar:map-point-linear" className="text-slate-500" />

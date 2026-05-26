@@ -639,41 +639,26 @@ async function runScrapeJob(
               })();
 
               // ── Alamat ──────────────────────────────────────────────────────
+              // Struktur halaman lelang.go.id: di tab "Uraian" (panel pertama)
+              // ada <div class="text-xs"> yang berisi text "Alamat: <value>".
+              // Cukup scan panel Uraian, ambil elemen text-xs yang diawali "Alamat:".
               const alamat = (() => {
-                // Helper: strip prefix "Alamat:" di semua strategi
-                const clean = (s: string | null | undefined) =>
-                  s?.replace(/\s+/g, " ").trim().replace(/^Alamat\s*[:\-]?\s*/i, "").trim() ?? null;
+                const scope =
+                  document.querySelector<HTMLElement>(".p-tabview-panel") ||
+                  document.body;
 
-                // Strategi 1: cari label "Alamat" (exact) → ambil sibling setelahnya
-                const alamatLabel = Array.from(document.querySelectorAll<HTMLElement>("div, span, td, th, p"))
-                  .find((el) => el.children.length === 0 && /^Alamat$/i.test(el.textContent?.trim() ?? ""));
-
-                if (alamatLabel?.parentElement) {
-                  const kids = Array.from(alamatLabel.parentElement.children);
-                  const idx = kids.indexOf(alamatLabel);
-                  for (let i = idx + 1; i < kids.length; i++) {
-                    const txt = clean((kids[i] as HTMLElement).textContent);
-                    if (txt && txt.length > 5) return txt;
-                  }
-                  const nextParent = alamatLabel.parentElement.nextElementSibling;
-                  if (nextParent) {
-                    const txt = clean((nextParent as HTMLElement).textContent);
-                    if (txt && txt.length > 5) return txt;
+                const els = scope.querySelectorAll<HTMLElement>("div.text-xs");
+                for (let i = 0; i < els.length; i++) {
+                  const text = (els[i].textContent || "").replace(/\s+/g, " ").trim();
+                  if (/^Alamat\s*:/i.test(text)) {
+                    const value = text
+                      .replace(/^Alamat\s*:\s*/i, "")
+                      .replace(/\s*Lihat\s+Lokasi.*$/i, "")
+                      .trim();
+                    if (value.length > 5) return value;
                   }
                 }
-
-                // Strategi 2: div.text-xs dengan pola alamat nyata (KEL, KEC, KAB, JL, RT/RW)
-                const addrEl = Array.from(document.querySelectorAll<HTMLElement>("div.text-xs, td"))
-                  .find((el) => {
-                    const t = el.textContent ?? "";
-                    return /\b(KEL|KEC|KAB|DESA|JL\.?|RT\s*\d|RW\s*\d)\b/i.test(t) && t.length > 10;
-                  });
-                if (addrEl) return clean(addrEl.textContent);
-
-                // Strategi 3: fallback — elemen mengandung kata "Alamat" atau pola lokasi
-                const origEl = Array.from(document.querySelectorAll<HTMLElement>("div.text-xs, td, p"))
-                  .find((el) => /Alamat|KEL\s|KEC\s|KAB\s/i.test(el.textContent ?? ""));
-                return clean(origEl?.textContent);
+                return null;
               })();
 
               // ── Luas ──
@@ -1256,6 +1241,7 @@ async function runScrapeJob(
               type: "saved",
               msg: `    ✅ ${data.judul}`,
               judul: data.judul,
+              alamat_lengkap: alamat.substring(0, 500) || null,
               kota,
               harga: data.nilai_limit,
               gambar: data.gambar[0] ?? null,

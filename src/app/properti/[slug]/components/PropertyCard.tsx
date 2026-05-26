@@ -270,7 +270,9 @@ export default function PropertyCard({ item }: PropertyCardProps) {
               className="text-primary text-base shrink-0 mt-0.5"
             />
             <span className="text-gray-400 text-sm line-clamp-1">
-              {item.kota}
+              {(item.jenis_transaksi?.toUpperCase() === "SECONDARY" || item.jenis_transaksi?.toUpperCase() === "SEWA")
+                ? item.kota
+                : item.alamat_lengkap}
             </span>
           </div>
 
