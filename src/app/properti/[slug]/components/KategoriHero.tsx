@@ -126,11 +126,14 @@ type TabType = "beli" | "sewa" | "lelang";
 interface Region { id: string; name: string; level: "provinsi"|"kota"|"kecamatan"|"kelurahan" }
 interface ApiRegion { id: string; nama: string }
 interface SearchState {
+  keyword: string;
   locations: Region[]; type: string;
   minPrice: string; maxPrice: string;
   minLt: string; maxLt: string;
   minLb: string; maxLb: string;
 }
+
+const isNumericOnly = (val: string) => /^\d+$/.test(val.trim());
 
 const BASE_API = "https://ibnux.github.io/data-indonesia";
 
@@ -269,6 +272,7 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
   const refTipe      = useRef<HTMLDivElement>(null);
   const refHarga     = useRef<HTMLDivElement>(null);
   const refDimensi   = useRef<HTMLDivElement>(null);
+  const keywordInputRef = useRef<HTMLInputElement>(null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
   const [viewLevel, setViewLevel]   = useState<Region["level"]>("provinsi");
@@ -281,7 +285,9 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
 
   const [formData, setFormData] = useState<SearchState>(() => {
     const rawKota = sp.get("kota") ?? sp.get("lokasi") ?? "";
+    const rawKeyword = sp.get("idProperty") ?? sp.get("q") ?? "";
     return {
+      keyword: rawKeyword,
       locations: rawKota ? [{ id: rawKota, name: rawKota, level: "kota" as const }] : [],
       type: "",
       minPrice: fmt(sp.get("minHarga")),
@@ -292,6 +298,10 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
       maxLb:    fmt(sp.get("maxLB") ?? sp.get("maxLb")),
     };
   });
+
+  const keywordTrimmed = formData.keyword.trim();
+  const keywordMode: "id" | "alamat" | null =
+    keywordTrimmed === "" ? null : isNumericOnly(keywordTrimmed) ? "id" : "alamat";
 
   // Sync tipe aset ke kategori halaman yang aktif
   useEffect(() => {
@@ -391,6 +401,10 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
       : slug;
     const raw = (v: string) => v.replace(/\./g, "");
     const params = new URLSearchParams();
+    if (keywordTrimmed) {
+      if (keywordMode === "id") params.set("idProperty", keywordTrimmed);
+      else params.set("q", keywordTrimmed);
+    }
     if (formData.locations.length) params.set("kota", formData.locations.map(l => l.name).join(","));
     if (formData.minPrice) params.set("minHarga", raw(formData.minPrice));
     if (formData.maxPrice) params.set("maxHarga", raw(formData.maxPrice));
@@ -429,20 +443,74 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
       >
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center divide-y lg:divide-y-0 lg:divide-x divide-white/[0.07]">
 
-          {/* A. LOKASI */}
-          <div ref={refLokasi} className="w-full lg:w-[28%] px-4 py-3 relative group min-w-0">
+          {/* A. KEYWORD / ID PROPERTI */}
+          <div
+            className="w-full lg:w-[24%] px-3 py-2.5 relative group min-w-0"
+            onClick={() => { setOpenDropdown(null); keywordInputRef.current?.focus(); }}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <label
+                htmlFor="kategori-search-keyword"
+                className="text-[10px] font-extrabold tracking-wider text-white/30 uppercase block group-focus-within:text-white/60 transition-colors cursor-pointer"
+              >
+                Cari Properti
+              </label>
+              {keywordMode && (
+                <span
+                  className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-[1px] rounded-full leading-none border"
+                  style={
+                    keywordMode === "id"
+                      ? { background: "rgba(96,165,250,0.12)", borderColor: "rgba(96,165,250,0.35)", color: "#93c5fd" }
+                      : { background: `${activeColor}1a`, borderColor: `${activeColor}55`, color: activeColor }
+                  }
+                  title={keywordMode === "id" ? "Akan dicari sebagai ID Properti" : "Akan dicari sebagai Alamat / kata kunci"}
+                >
+                  {keywordMode === "id" ? "ID" : "Alamat"}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Icon
+                icon={keywordMode === "id" ? "solar:hashtag-square-bold-duotone" : "solar:magnifer-bold-duotone"}
+                className="text-xl text-white/30 group-focus-within:text-white/60 transition-colors shrink-0"
+              />
+              <input
+                id="kategori-search-keyword"
+                ref={keywordInputRef}
+                type="text"
+                inputMode="text"
+                autoComplete="off"
+                value={formData.keyword}
+                placeholder="Alamat / ID, ex: 12345"
+                onChange={(e) => setFormData(prev => ({ ...prev, keyword: e.target.value }))}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full bg-transparent outline-none font-bold text-white/85 text-sm placeholder:font-medium placeholder:text-white/20 truncate"
+              />
+              {formData.keyword && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setFormData(prev => ({ ...prev, keyword: "" })); keywordInputRef.current?.focus(); }}
+                  className="shrink-0 p-1 -m-1 rounded-full text-white/25 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                  aria-label="Hapus pencarian"
+                >
+                  <Icon icon="solar:close-circle-bold" className="text-base" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* B. LOKASI */}
+          <div ref={refLokasi} className="w-full lg:w-[20%] px-3 py-2.5 relative group min-w-0">
             <div className="cursor-pointer" onClick={() => setOpenDropdown(openDropdown === "location" ? null : "location")}>
               <label className="text-[10px] font-extrabold tracking-wider text-white/30 uppercase mb-1 block group-hover:text-white/60 transition-colors">
                 Lokasi
               </label>
               <div className="flex items-center gap-2 w-full">
-                <Icon icon="solar:map-point-bold-duotone" className="text-2xl text-white/30 group-hover:text-white/60 transition-colors shrink-0" />
-                <div className="w-full overflow-x-auto no-scrollbar flex items-center gap-1.5 h-7">
+                <Icon icon="solar:map-point-bold-duotone" className="text-xl text-white/30 group-hover:text-white/60 transition-colors shrink-0" />
+                <div className="w-full overflow-x-auto no-scrollbar flex items-center gap-1.5 h-6">
                   {formData.locations.length === 0 ? (
-                    <div className="w-full">
-                      <p className="font-bold text-white/85 text-sm truncate">Semua Lokasi</p>
-                      <p className="text-xs text-white/30 truncate">Pilih Provinsi, Kota...</p>
-                    </div>
+                    <p className="font-bold text-white/85 text-sm truncate">Semua Lokasi</p>
                   ) : (
                     formData.locations.map(loc => (
                       <span key={loc.id}
@@ -548,14 +616,14 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
             </PortalDropdown>
           </div>
 
-          {/* B. TIPE ASET */}
-          <div ref={refTipe} className="w-full lg:w-[18%] px-4 py-3 relative group min-w-0">
+          {/* C. TIPE ASET */}
+          <div ref={refTipe} className="w-full lg:w-[13%] px-3 py-2.5 relative group min-w-0">
             <div className="cursor-pointer" onClick={() => setOpenDropdown(openDropdown === "type" ? null : "type")}>
               <label className="text-[10px] font-extrabold tracking-wider text-white/30 uppercase mb-1 block group-hover:text-white/60 transition-colors">
                 Tipe Aset
               </label>
               <div className="flex items-center gap-2">
-                <Icon icon="solar:buildings-bold-duotone" className="text-2xl text-white/30 group-hover:text-white/60 transition-colors shrink-0" />
+                <Icon icon="solar:buildings-bold-duotone" className="text-xl text-white/30 group-hover:text-white/60 transition-colors shrink-0" />
                 <p className="font-bold text-white/85 text-sm truncate flex-1">{formData.type || "Semua Tipe"}</p>
                 <motion.div animate={{ rotate: openDropdown === "type" ? 180 : 0 }} transition={{ duration: 0.2 }}>
                   <Icon icon="solar:alt-arrow-down-linear" className="text-white/25 shrink-0" />
@@ -606,14 +674,14 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
             </PortalDropdown>
           </div>
 
-          {/* C. HARGA */}
-          <div ref={refHarga} className="w-full lg:w-[22%] px-4 py-3 relative group min-w-0">
+          {/* D. HARGA */}
+          <div ref={refHarga} className="w-full lg:w-[16%] px-3 py-2.5 relative group min-w-0">
             <div className="cursor-pointer" onClick={() => setOpenDropdown(openDropdown === "price" ? null : "price")}>
               <label className="text-[10px] font-extrabold tracking-wider text-white/30 uppercase mb-1 block group-hover:text-white/60 transition-colors">
                 Harga
               </label>
               <div className="flex items-center gap-2">
-                <Icon icon="solar:wallet-money-bold-duotone" className="text-2xl text-white/30 group-hover:text-white/60 transition-colors shrink-0" />
+                <Icon icon="solar:wallet-money-bold-duotone" className="text-xl text-white/30 group-hover:text-white/60 transition-colors shrink-0" />
                 <p className="font-bold text-white/85 text-sm truncate flex-1">
                   {getLabel(formData.minPrice, formData.maxPrice, "Range Harga")}
                 </p>
@@ -654,17 +722,17 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
             </PortalDropdown>
           </div>
 
-          {/* D. DIMENSI */}
-          <div ref={refDimensi} className="w-full lg:w-[22%] px-4 py-3 relative group min-w-0">
+          {/* E. DIMENSI */}
+          <div ref={refDimensi} className="w-full lg:w-[17%] px-3 py-2.5 relative group min-w-0">
             <div className="cursor-pointer" onClick={() => setOpenDropdown(openDropdown === "dimensions" ? null : "dimensions")}>
               <label className="text-[10px] font-extrabold tracking-wider text-white/30 uppercase mb-1 block group-hover:text-white/60 transition-colors">
                 Dimensi
               </label>
               <div className="flex items-center gap-2">
-                <Icon icon="solar:ruler-angular-bold-duotone" className="text-2xl text-white/30 group-hover:text-white/60 transition-colors shrink-0" />
+                <Icon icon="solar:ruler-angular-bold-duotone" className="text-xl text-white/30 group-hover:text-white/60 transition-colors shrink-0" />
                 <p className="font-bold text-white/85 text-sm truncate flex-1">
                   {formData.minLt || formData.maxLt
-                    ? getLabel(formData.minLt, formData.maxLt, "", "LT: ") + " m²"
+                    ? getLabel(formData.minLt, formData.maxLt, "", "") + " m²"
                     : "Luas Tanah/Bangunan"}
                 </p>
                 <motion.div animate={{ rotate: openDropdown === "dimensions" ? 180 : 0 }} transition={{ duration: 0.2 }}>
@@ -728,12 +796,12 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
             </PortalDropdown>
           </div>
 
-          {/* E. TOMBOL CARI */}
-          <div className="w-full lg:w-[10%] p-2 shrink-0 flex items-center justify-center">
+          {/* F. TOMBOL CARI */}
+          <div className="w-full lg:w-[10%] p-1.5 shrink-0 flex items-center justify-center">
             <button
               onClick={handleSearch}
               disabled={searching}
-              className="w-full lg:w-14 h-14 rounded-2xl lg:rounded-full font-bold text-lg flex items-center justify-center transition-all active:scale-95 disabled:opacity-80 disabled:cursor-not-allowed"
+              className="w-full lg:w-12 h-12 rounded-2xl lg:rounded-full font-bold text-lg flex items-center justify-center transition-all active:scale-95 disabled:opacity-80 disabled:cursor-not-allowed"
               style={{
                 background: activeColor,
                 color: "#0a0d14",
@@ -742,10 +810,10 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
               }}
             >
               {searching ? (
-                <div className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin"
+                <div className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin"
                   style={{ borderColor: "#0a0d14 transparent transparent transparent" }} />
               ) : (
-                <Icon icon="solar:magnifer-linear" className="text-2xl" />
+                <Icon icon="solar:magnifer-linear" className="text-xl" />
               )}
               <span className="lg:hidden ml-2 text-base">
                 {searching ? "Mencari..." : "Cari Sekarang"}

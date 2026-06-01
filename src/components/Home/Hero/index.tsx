@@ -41,7 +41,7 @@ const Hero = () => {
     <div className="relative w-full bg-darkmode">
       
       {/* --- BAGIAN 1: BANNER UTAMA (CENTERED) --- */}
-      <section className="relative w-full h-[75vh] min-h-[560px] flex items-start pt-[72px] lg:items-center lg:pt-0 justify-center overflow-hidden" id="main-banner">
+      <section className="relative w-full flex items-end justify-center pt-24 pb-36 lg:pt-28 lg:pb-40 overflow-hidden" id="main-banner">
         
         {/* Background Image */}
         <div className="absolute inset-0 z-0">
@@ -84,7 +84,7 @@ const Hero = () => {
             </h1>
             
             {/* Deskripsi */}
-            <p className="text-gray-200 text-lg md:text-xl mb-10 leading-relaxed max-w-2xl drop-shadow-md">
+            <p className="text-gray-200 text-lg md:text-xl mb-2 leading-relaxed max-w-2xl drop-shadow-md">
             Temukan <b className="text-white">Hunian Sewa</b>, beli <b className="text-white">Rumah Baru & Second</b>, hingga investasi <b className="text-white">Aset Lelang</b>. Semua kebutuhan properti Anda ada di sini.
             </p>
 

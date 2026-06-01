@@ -21,6 +21,7 @@ function toPropertyItem(l: Listing): PropertyItem {
     slug: l.rawSlug,
     judul: l.title,
     kota: l.city,
+    alamat_lengkap: l.address,
     harga: l.priceRaw,
     harga_promo: l.pricePromo,
     jenis_transaksi: l.transactionType,
@@ -282,7 +283,7 @@ export default function ListingCardGrid({
                     isSelected ? "drop-shadow-[0_0_18px_rgba(52,211,153,0.45)]" : ""
                   }`}
                 >
-                  <PropertyCard item={toPropertyItem(listing)} />
+                  <PropertyCard item={toPropertyItem(listing)} forceAlamatLengkap />
                 </div>
 
                 <div

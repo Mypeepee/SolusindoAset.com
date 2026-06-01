@@ -62,6 +62,7 @@ export default function KeperluanAgent({ data, currentAgentId }: KeperluanAgentP
   const propertyId = data?.id_property || data?.id || "";
 
   const [isDownloadingImages, setIsDownloadingImages] = useState(false);
+  const [isDownloadingVideo, setIsDownloadingVideo] = useState(false);
 
   const handleDownloadImages = async () => {
     const urls: string[] = data?.foto_list || [];
@@ -111,9 +112,46 @@ export default function KeperluanAgent({ data, currentAgentId }: KeperluanAgentP
     }
   };
 
-  const handleDownloadVideos = () => {
-    if (!data?.id_property) return;
-    window.open(`/api/property/${data.id_property}/download-videos`, "_blank");
+  const handleDownloadVideos = async () => {
+    if (!data?.id_property || isDownloadingVideo) return;
+
+    setIsDownloadingVideo(true);
+    try {
+      const res = await fetch(`/api/property/${data.id_property}/download-videos`);
+      if (!res.ok) {
+        let msg = "Gagal membuat video.";
+        try {
+          const j = await res.json();
+          if (j?.error) msg = j.error;
+        } catch {}
+        throw new Error(msg);
+      }
+      const blob = await res.blob();
+      const fileName = `properti-${data?.slug || data.id_property}.mp4`;
+      const file = new File([blob], fileName, { type: "video/mp4" });
+
+      // Mobile: bagikan via share sheet (bisa langsung simpan / kirim WA / IG)
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if (isMobile && typeof navigator.share === "function" && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: "Video Properti" });
+        return;
+      }
+
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
+    } catch (err: any) {
+      if (err?.name !== "AbortError") {
+        alert(err?.message || "Gagal membuat video. Silakan coba lagi.");
+      }
+    } finally {
+      setIsDownloadingVideo(false);
+    }
   };
 
   const handleAskStock = () => {
@@ -306,30 +344,36 @@ export default function KeperluanAgent({ data, currentAgentId }: KeperluanAgentP
 
             <button
               onClick={handleDownloadVideos}
+              disabled={isDownloadingVideo}
               className="w-full flex items-center justify-between px-4 py-2 rounded-2xl
                 bg-white/[0.03] border border-white/10 hover:border-purple-400/60
-                hover:bg-purple-500/5 transition-all active:scale-[0.99]"
+                hover:bg-purple-500/5 transition-all active:scale-[0.99]
+                disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-purple-500/15 border border-purple-400/40 flex items-center justify-center">
                   <Icon
-                    icon="solar:videocamera-record-bold-duotone"
-                    className="text-purple-300 text-lg"
+                    icon={isDownloadingVideo ? "solar:spinner-bold" : "solar:videocamera-record-bold-duotone"}
+                    className={`text-purple-300 text-lg${isDownloadingVideo ? " animate-spin" : ""}`}
                   />
                 </div>
                 <div className="text-left">
                   <p className="text-[11px] font-semibold text-white">
-                    Download Video
+                    {isDownloadingVideo ? "Membuat Video..." : "Download Video"}
                   </p>
                   <p className="text-[10px] text-gray-400">
-                    Video tur untuk sosial media.
+                    {isDownloadingVideo
+                      ? "Tunggu ±10-20 detik, sedang dirender."
+                      : "Video 12 detik untuk sosial media."}
                   </p>
                 </div>
               </div>
-              <Icon
-                icon="solar:arrow-right-up-linear"
-                className="text-gray-500 text-sm"
-              />
+              {!isDownloadingVideo && (
+                <Icon
+                  icon="solar:arrow-right-up-linear"
+                  className="text-gray-500 text-sm"
+                />
+              )}
             </button>
 
             <button
@@ -442,13 +486,14 @@ export default function KeperluanAgent({ data, currentAgentId }: KeperluanAgentP
 
           <button
             onClick={handleDownloadVideos}
-            className="flex-1 bg-purple-500/20 border border-purple-400/60 text-purple-50 font-semibold text-[11px] py-2.5 rounded-xl hover:bg-purple-500/30 transition-all active:scale-[0.97] flex justify-center items-center gap-1.5"
+            disabled={isDownloadingVideo}
+            className="flex-1 bg-purple-500/20 border border-purple-400/60 text-purple-50 font-semibold text-[11px] py-2.5 rounded-xl hover:bg-purple-500/30 transition-all active:scale-[0.97] flex justify-center items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <Icon
-              icon="solar:videocamera-record-bold-duotone"
-              className="text-base"
+              icon={isDownloadingVideo ? "solar:spinner-bold" : "solar:videocamera-record-bold-duotone"}
+              className={`text-base${isDownloadingVideo ? " animate-spin" : ""}`}
             />
-            Video
+            {isDownloadingVideo ? "..." : "Video"}
           </button>
 
           <button

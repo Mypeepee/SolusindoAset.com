@@ -120,6 +120,15 @@ export default async function KategoriPage({ params, searchParams }: Props) {
   const maxLT    = typeof searchParams.maxLT    === "string" ? Number(searchParams.maxLT)    : undefined;
   const minLB    = typeof searchParams.minLB    === "string" ? Number(searchParams.minLB)    : undefined;
   const maxLB    = typeof searchParams.maxLB    === "string" ? Number(searchParams.maxLB)    : undefined;
+  // Keyword pencarian: q (alamat) / idProperty (eksak)
+  const q =
+    typeof searchParams.q === "string" && searchParams.q.trim().length > 0
+      ? searchParams.q.trim()
+      : undefined;
+  const idPropertyRaw =
+    typeof searchParams.idProperty === "string" && /^\d+$/.test(searchParams.idProperty.trim())
+      ? searchParams.idProperty.trim()
+      : undefined;
   // rawSort: hanya ada nilai jika user memang memilih sort (untuk highlight pill)
   // sort: selalu punya nilai fallback untuk query DB
   const rawSort = typeof searchParams.sort === "string" ? searchParams.sort : "";
@@ -139,6 +148,10 @@ export default async function KategoriPage({ params, searchParams }: Props) {
     ...(kategori && { kategori }),
     status_tayang: "TERSEDIA",
     jenis_transaksi: transaksiFilter(),
+    ...(idPropertyRaw && { id_property: BigInt(idPropertyRaw) }),
+    ...(!idPropertyRaw && q && {
+      alamat_lengkap: { contains: q, mode: "insensitive" },
+    }),
     ...(kota && { kota: { contains: kota, mode: "insensitive" } }),
     ...((minHarga !== undefined || maxHarga !== undefined) && {
       harga: {

@@ -38,6 +38,7 @@ interface ApiRegion {
 }
 
 interface SearchState {
+  keyword: string;
   locations: Region[];
   type: string;
   minPrice: string;
@@ -47,6 +48,8 @@ interface SearchState {
   minLb: string;
   maxLb: string;
 }
+
+const isNumericOnly = (val: string) => /^\d+$/.test(val.trim());
 
 // --- 2. COMPONENT ---
 
@@ -68,6 +71,8 @@ const DB_TYPE_TO_DISPLAY: Record<string, string> = {
 };
 
 export interface SearchHeroInitial {
+  q?: string;
+  idProperty?: string;
   kota?: string;
   tipe?: string;
   minHarga?: number;
@@ -79,6 +84,7 @@ export interface SearchHeroInitial {
 }
 
 const buildFormData = (init: SearchHeroInitial): SearchState => ({
+  keyword: init.idProperty || init.q || "",
   locations: init.kota
     ? [{ id: init.kota, name: init.kota, level: "kota" as const }]
     : [],
@@ -110,9 +116,14 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
   useEffect(() => {
     setFormData(buildFormData(initial));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initial.kota, initial.tipe, initial.minHarga, initial.maxHarga, initial.minLT, initial.maxLT, initial.minLB, initial.maxLB]);
+  }, [initial.q, initial.idProperty, initial.kota, initial.tipe, initial.minHarga, initial.maxHarga, initial.minLT, initial.maxLT, initial.minLB, initial.maxLB]);
+
+  const keywordTrimmed = formData.keyword.trim();
+  const keywordMode: "id" | "alamat" | null =
+    keywordTrimmed === "" ? null : isNumericOnly(keywordTrimmed) ? "id" : "alamat";
 
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const keywordInputRef = useRef<HTMLInputElement>(null);
   const BASE_API = "https://ibnux.github.io/data-indonesia";
 
   // --- HELPER FUNCTIONS ---
@@ -268,6 +279,11 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
 
     const params = new URLSearchParams();
 
+    if (keywordTrimmed) {
+      if (keywordMode === "id") params.set("idProperty", keywordTrimmed);
+      else params.set("q", keywordTrimmed);
+    }
+
     if (formData.locations.length > 0) {
       params.set("kota", formData.locations[0].name);
     }
@@ -330,11 +346,67 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
       <div className="container mx-auto px-4 relative z-30 -mt-24 mb-10" ref={wrapperRef}>
         
         {/* SEARCH CONTAINER (Dark Theme) */}
-        <div className="bg-[#1A1A1A] rounded-[2rem] shadow-2xl shadow-black/50 p-2 lg:p-4 border border-white/10 backdrop-blur-md">
+        <div className="bg-[#1A1A1A] rounded-[2rem] shadow-2xl shadow-black/50 p-2 lg:p-3 border border-white/10 backdrop-blur-md">
             <div className="flex flex-col lg:flex-row items-stretch lg:items-center divide-y lg:divide-y-0 lg:divide-x divide-white/10">
-            
-            {/* === A. LOKASI === */}
-            <div className="w-full lg:w-[28%] px-4 lg:px-5 py-4 lg:py-3 relative group min-w-0">
+
+            {/* === A. KEYWORD / ID PROPERTI === */}
+            <div
+              className="w-full lg:w-[24%] px-3 lg:px-4 py-4 lg:py-2.5 relative group min-w-0"
+              onClick={() => { setOpenDropdown(null); keywordInputRef.current?.focus(); }}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <label
+                  htmlFor="jual-search-keyword"
+                  className="text-[10px] font-extrabold tracking-wider text-gray-400 uppercase block group-focus-within:text-primary transition-colors cursor-pointer"
+                >
+                  Cari Properti
+                </label>
+                {keywordMode && (
+                  <span
+                    className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-[1px] rounded-full leading-none ${
+                      keywordMode === "id"
+                        ? "bg-blue-500/15 text-blue-300 border border-blue-500/30"
+                        : "bg-primary/15 text-primary border border-primary/30"
+                    }`}
+                    title={keywordMode === "id" ? "Akan dicari sebagai ID Properti" : "Akan dicari sebagai Alamat / kata kunci"}
+                  >
+                    {keywordMode === "id" ? "ID" : "Alamat"}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Icon
+                  icon={keywordMode === "id" ? "solar:hashtag-square-bold-duotone" : "solar:magnifer-bold-duotone"}
+                  className="text-xl text-gray-400 group-focus-within:text-primary transition-colors shrink-0"
+                />
+                <input
+                  id="jual-search-keyword"
+                  ref={keywordInputRef}
+                  type="text"
+                  inputMode="text"
+                  autoComplete="off"
+                  value={formData.keyword}
+                  placeholder="Alamat / ID, ex: 12345"
+                  onChange={(e) => setFormData(prev => ({ ...prev, keyword: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-full bg-transparent outline-none font-bold text-white text-sm placeholder:font-medium placeholder:text-gray-600 truncate"
+                />
+                {formData.keyword && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setFormData(prev => ({ ...prev, keyword: "" })); keywordInputRef.current?.focus(); }}
+                    className="shrink-0 p-1 -m-1 rounded-full text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                    aria-label="Hapus pencarian"
+                  >
+                    <Icon icon="solar:close-circle-bold" className="text-base" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* === B. LOKASI === */}
+            <div className="w-full lg:w-[20%] px-3 lg:px-4 py-4 lg:py-2.5 relative group min-w-0">
                 <div 
                 className="cursor-pointer h-full flex flex-col justify-center"
                 onClick={() => toggleDropdown("location")}
@@ -344,14 +416,11 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
                 </label>
                 
                 <div className="flex items-center gap-2 w-full">
-                    <Icon icon="solar:map-point-bold-duotone" className="text-2xl text-gray-400 group-hover:text-primary transition-colors shrink-0" />
-                    
-                    <div className="w-full overflow-x-auto no-scrollbar flex items-center gap-1.5 h-7">
+                    <Icon icon="solar:map-point-bold-duotone" className="text-xl text-gray-400 group-hover:text-primary transition-colors shrink-0" />
+
+                    <div className="w-full overflow-x-auto no-scrollbar flex items-center gap-1.5 h-6">
                         {formData.locations.length === 0 ? (
-                            <div className="w-full">
-                                <p className="font-bold text-white text-sm truncate">Semua Lokasi</p>
-                                <p className="text-xs text-gray-500 truncate">Pilih Provinsi, Kota...</p>
-                            </div>
+                            <p className="font-bold text-white text-sm truncate">Semua Lokasi</p>
                         ) : (
                             formData.locations.map((loc) => (
                                 <span 
@@ -431,8 +500,8 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
                 )}
             </div>
 
-            {/* === B. TIPE ASET === */}
-            <div className="w-full lg:w-[18%] px-4 lg:px-5 py-4 lg:py-3 relative group min-w-0">
+            {/* === C. TIPE ASET === */}
+            <div className="w-full lg:w-[13%] px-3 lg:px-4 py-4 lg:py-2.5 relative group min-w-0">
                 <div 
                 className="cursor-pointer"
                 onClick={() => toggleDropdown("type")}
@@ -441,13 +510,13 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
                     Tipe Aset
                 </label>
                 <div className="flex items-center gap-2">
-                    <Icon icon="solar:buildings-bold-duotone" className="text-2xl text-gray-400 group-hover:text-primary transition-colors shrink-0" />
+                    <Icon icon="solar:buildings-bold-duotone" className="text-xl text-gray-400 group-hover:text-primary transition-colors shrink-0" />
                     <div className="w-full overflow-hidden">
                         <p className="font-bold text-white text-sm truncate">
                             {formData.type || "Semua Tipe"}
                         </p>
                     </div>
-                    <Icon icon="solar:alt-arrow-down-linear" className={`text-gray-400 transition-transform ${openDropdown === "type" ? "rotate-180" : ""}`} />
+                    <Icon icon="solar:alt-arrow-down-linear" className={`text-gray-400 transition-transform shrink-0 ${openDropdown === "type" ? "rotate-180" : ""}`} />
                 </div>
                 </div>
 
@@ -477,21 +546,21 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
                 )}
             </div>
 
-            {/* === C. HARGA === */}
-            <div className="w-full lg:w-[22%] px-4 lg:px-5 py-4 lg:py-3 relative group min-w-0">
+            {/* === D. HARGA === */}
+            <div className="w-full lg:w-[16%] px-3 lg:px-4 py-4 lg:py-2.5 relative group min-w-0">
                 <div 
                 className="cursor-pointer"
                 onClick={() => toggleDropdown("price")}
                 >
                 <label className="text-[10px] font-extrabold tracking-wider text-gray-400 uppercase mb-1 block group-hover:text-primary transition-colors">Harga</label>
                 <div className="flex items-center gap-2">
-                    <Icon icon="solar:wallet-money-bold-duotone" className="text-2xl text-gray-400 group-hover:text-primary transition-colors shrink-0" />
+                    <Icon icon="solar:wallet-money-bold-duotone" className="text-xl text-gray-400 group-hover:text-primary transition-colors shrink-0" />
                     <div className="w-full overflow-hidden">
                         <p className="font-bold text-white text-sm truncate">
                         {getLabel(formData.minPrice, formData.maxPrice, "Range Harga")}
                         </p>
                     </div>
-                    <Icon icon="solar:alt-arrow-down-linear" className={`text-gray-400 transition-transform ${openDropdown === "price" ? "rotate-180" : ""}`} />
+                    <Icon icon="solar:alt-arrow-down-linear" className={`text-gray-400 transition-transform shrink-0 ${openDropdown === "price" ? "rotate-180" : ""}`} />
                 </div>
                 </div>
 
@@ -512,23 +581,23 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
                 )}
             </div>
 
-            {/* === D. DIMENSI === */}
-            <div className="w-full lg:w-[22%] px-4 lg:px-5 py-4 lg:py-3 relative group min-w-0">
+            {/* === E. DIMENSI === */}
+            <div className="w-full lg:w-[17%] px-3 lg:px-4 py-4 lg:py-2.5 relative group min-w-0">
                 <div 
                 className="cursor-pointer"
                 onClick={() => toggleDropdown("dimensions")}
                 >
                 <label className="text-[10px] font-extrabold tracking-wider text-gray-400 uppercase mb-1 block group-hover:text-primary transition-colors">Dimensi</label>
                 <div className="flex items-center gap-2">
-                    <Icon icon="solar:ruler-angular-bold-duotone" className="text-2xl text-gray-400 group-hover:text-primary transition-colors shrink-0" />
+                    <Icon icon="solar:ruler-angular-bold-duotone" className="text-xl text-gray-400 group-hover:text-primary transition-colors shrink-0" />
                     <div className="w-full overflow-hidden">
                         <p className="font-bold text-white text-sm truncate">
-                            {formData.minLt || formData.maxLt 
-                            ? getLabel(formData.minLt, formData.maxLt, "", "LT: ") + " m²"
+                            {formData.minLt || formData.maxLt
+                            ? getLabel(formData.minLt, formData.maxLt, "", "") + " m²"
                             : "Luas Tanah/Bangunan"}
                         </p>
                     </div>
-                    <Icon icon="solar:alt-arrow-down-linear" className={`text-gray-400 transition-transform ${openDropdown === "dimensions" ? "rotate-180" : ""}`} />
+                    <Icon icon="solar:alt-arrow-down-linear" className={`text-gray-400 transition-transform shrink-0 ${openDropdown === "dimensions" ? "rotate-180" : ""}`} />
                 </div>
                 </div>
 
@@ -556,15 +625,15 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
                 )}
             </div>
 
-            {/* === E. TOMBOL CARI === */}
-            <div className="w-full lg:w-[10%] p-4 lg:p-2 shrink-0 flex items-center justify-center">
+            {/* === F. TOMBOL CARI === */}
+            <div className="w-full lg:w-[10%] p-4 lg:p-1.5 shrink-0 flex items-center justify-center">
                 <motion.button
                   onClick={handleSearch}
                   animate={shaking ? { x: [0, -16, 16, -16, 16, -16, 16, -12, 12, -8, 8, 0], rotate: [0, -3, 3, -3, 3, -3, 3, -2, 2, -1, 1, 0] } : {}}
                   transition={{ duration: 0.7, ease: "easeInOut" }}
-                  className="w-full lg:w-14 h-14 bg-primary hover:bg-[#6ee7b7] text-darkmode rounded-2xl lg:rounded-full font-bold text-lg flex items-center justify-center shadow-lg shadow-primary/30 transition-all transform active:scale-95"
+                  className="w-full lg:w-12 h-12 bg-primary hover:bg-[#6ee7b7] text-darkmode rounded-2xl lg:rounded-full font-bold text-lg flex items-center justify-center shadow-lg shadow-primary/30 transition-all transform active:scale-95"
                 >
-                <Icon icon="solar:magnifer-linear" className="text-2xl stroke-2" />
+                <Icon icon="solar:magnifer-linear" className="text-xl stroke-2" />
                 <span className="lg:hidden ml-2">Cari</span>
                 </motion.button>
             </div>

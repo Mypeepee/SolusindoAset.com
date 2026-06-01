@@ -6,7 +6,7 @@ import { fetchListingHeaderStats } from "./lib/property-stats";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 27;
 
 const VALID_JENIS = ["PRIMARY", "SECONDARY", "LELANG", "SEWA"] as const;
 const VALID_KATEGORI = [

@@ -117,6 +117,16 @@ export default async function SearchPage({ searchParams }: Props) {
       ? searchParams.tipe
       : undefined;
 
+  // Keyword pencarian dari home search: q = alamat / kata kunci, idProperty = id_property eksak
+  const q =
+    typeof searchParams.q === "string" && searchParams.q.trim().length > 0
+      ? searchParams.q.trim()
+      : undefined;
+  const idPropertyRaw =
+    typeof searchParams.idProperty === "string" && /^\d+$/.test(searchParams.idProperty.trim())
+      ? searchParams.idProperty.trim()
+      : undefined;
+
   // A.2. Ambil Parameter Filter Lanjutan (DARI SIDEBAR)
   const minKT =
     typeof searchParams.minKT === "string"
@@ -204,9 +214,17 @@ export default async function SearchPage({ searchParams }: Props) {
   const priceFilter = buildPriceFilter();
 
   // B. BUILD FILTER QUERY (WHERE)
+  // Jika idProperty ada → exact match (paling spesifik, abaikan filter q)
+  // Jika q ada → cari di alamat_lengkap (case-insensitive contains)
   const whereClause: Prisma.ListingWhereInput = {
     jenis_transaksi: { in: ["PRIMARY", "SECONDARY"] },
     status_tayang: "TERSEDIA",
+
+    ...(idPropertyRaw && { id_property: BigInt(idPropertyRaw) }),
+
+    ...(!idPropertyRaw && q && {
+      alamat_lengkap: { contains: q, mode: "insensitive" },
+    }),
 
     ...(kota && {
       kota: { contains: kota, mode: "insensitive" },
@@ -323,8 +341,10 @@ export default async function SearchPage({ searchParams }: Props) {
   return (
     <main className="bg-[#0F0F0F] min-h-screen pb-20">
       <SearchHero
-        key={`${kota ?? ""}_${tipe ?? ""}_${minHarga ?? ""}_${maxHarga ?? ""}_${minLT ?? ""}_${maxLT ?? ""}_${minLB ?? ""}_${maxLB ?? ""}`}
+        key={`${q ?? ""}_${idPropertyRaw ?? ""}_${kota ?? ""}_${tipe ?? ""}_${minHarga ?? ""}_${maxHarga ?? ""}_${minLT ?? ""}_${maxLT ?? ""}_${minLB ?? ""}_${maxLB ?? ""}`}
         initial={{
+          q: q,
+          idProperty: idPropertyRaw,
           kota: kota,
           tipe: tipe,
           minHarga: minHarga,

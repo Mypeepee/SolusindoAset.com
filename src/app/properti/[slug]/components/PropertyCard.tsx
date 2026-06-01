@@ -94,9 +94,11 @@ function LelangBadge({ tanggal_lelang }: { tanggal_lelang: string | null }) {
 
 interface PropertyCardProps {
   item: PropertyItem;
+  /** Kalau true, selalu tampilkan alamat_lengkap tanpa lihat jenis_transaksi. */
+  forceAlamatLengkap?: boolean;
 }
 
-export default function PropertyCard({ item }: PropertyCardProps) {
+export default function PropertyCard({ item, forceAlamatLengkap = false }: PropertyCardProps) {
   const [imgIdx, setImgIdx] = useState(0);
   const images =
     item.foto_list.length > 0
@@ -270,9 +272,11 @@ export default function PropertyCard({ item }: PropertyCardProps) {
               className="text-primary text-base shrink-0 mt-0.5"
             />
             <span className="text-gray-400 text-sm line-clamp-1">
-              {(item.jenis_transaksi?.toUpperCase() === "SECONDARY" || item.jenis_transaksi?.toUpperCase() === "SEWA")
-                ? item.kota
-                : item.alamat_lengkap}
+              {forceAlamatLengkap
+                ? item.alamat_lengkap
+                : (item.jenis_transaksi?.toUpperCase() === "SECONDARY" || item.jenis_transaksi?.toUpperCase() === "SEWA")
+                  ? item.kota
+                  : item.alamat_lengkap}
             </span>
           </div>
 
