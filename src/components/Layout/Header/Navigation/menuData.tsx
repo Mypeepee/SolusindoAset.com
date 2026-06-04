@@ -33,31 +33,34 @@ export const headerData: HeaderItem[] = [
     ],
   },
 
+  // 2. TITIP JUAL — sisi supply, menu utama (pair dengan "Cari Properti")
+  {
+    label: "Titip Jual",
+    href: "/titip-jual",
+  },
+
   // ... (Menu Agent, Tentang Kami, dll tetap sama)
   {
     label: "Agent Kami",
     href: "/agent",
-  },
-  {
-    label: "Tentang Kami",
-    href: "/about",
     submenu: [
       {
-        label: "Profil Perusahaan",
-        href: "/about/profile",
-        icon: "solar:buildings-2-bold",
+        label: "Lihat Daftar Agent",
+        href: "/agent",
+        description: "Jelajahi 1.200+ agent profesional kami",
+        icon: "solar:users-group-rounded-bold",
       },
       {
         label: "Gabung Jadi Agent",
         href: "/gabung-jadi-agent",
+        description: "Bangun karier sebagai agent Solusindo Premier",
         icon: "solar:user-hand-up-bold",
       },
-      {
-        label: "Titip Jual Properti",
-        href: "/titip-jual",
-        icon: "solar:hand-shake-bold",
-      },
     ],
+  },
+  {
+    label: "Tentang Kami",
+    href: "/about/company-profile",
   },
   {
     label: "Blog",

@@ -45,6 +45,12 @@ const nextConfig = {
         hostname: "drive.google.com",
         pathname: "/uc**",
       },
+      // Google Drive serves images via this CDN after the redirect from drive.google.com
+      {
+        protocol: "https",
+        hostname: "drive.usercontent.google.com",
+        pathname: "**",
+      },
 
       // Unsplash
       {
