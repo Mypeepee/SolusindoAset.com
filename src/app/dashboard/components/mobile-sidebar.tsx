@@ -27,7 +27,7 @@ export default function MobileSidebar({ open, onClose }: MobileSidebarProps) {
         <>
           {/* Backdrop */}
           <motion.div
-            className="fixed inset-0 z-40 bg-black/50 md:hidden"
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
             onClick={onClose}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -39,7 +39,7 @@ export default function MobileSidebar({ open, onClose }: MobileSidebarProps) {
             className="
               fixed inset-y-0 left-0 z-50 w-72
               bg-[#040608] border-r border-white/10
-              px-5 py-6 overflow-y-auto
+              flex flex-col
               md:hidden
             "
             initial={{ x: -280 }}
@@ -47,88 +47,127 @@ export default function MobileSidebar({ open, onClose }: MobileSidebarProps) {
             exit={{ x: -280 }}
             transition={{ type: "tween", duration: 0.2 }}
           >
-            {/* Header */}
-            <div className="mb-6 flex items-center justify-between">
-              <Link href="/" onClick={onClose} className="flex items-center gap-2 group">
-                <Icon icon="solar:home-smile-angle-bold-duotone" className="text-emerald-400 text-xl group-hover:text-emerald-300 transition-colors" />
-                <span className="text-lg font-bold text-white group-hover:text-emerald-200 transition-colors">
-                  Premier <span className="text-emerald-400">Asset</span>
-                </span>
-              </Link>
-              <button
-                onClick={onClose}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-slate-300 hover:bg-white/5"
-              >
-                <Icon icon="solar:close-circle-linear" className="text-lg" />
-              </button>
-            </div>
+            {/* ── SCROLLABLE ZONE ────────────────────────── */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 pt-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 
-            {/* Homepage Section */}
-            <SectionLabel>Homepage</SectionLabel>
-            <nav className="mb-6 space-y-1.5">
-              {homepageMenu.map((item) => (
-                <MobileSidebarItem
-                  key={item.label}
-                  item={item}
-                  active={isActive(pathname, item.href)}
-                  onClose={onClose}
-                />
-              ))}
-            </nav>
+              {/* Header */}
+              <div className="mb-6 flex items-center justify-between">
+                <Link href="/" onClick={onClose} className="flex items-center gap-2 group">
+                  <Icon icon="solar:home-smile-angle-bold-duotone" className="text-emerald-400 text-xl group-hover:text-emerald-300 transition-colors" />
+                  <span className="text-lg font-bold text-white group-hover:text-emerald-200 transition-colors">
+                    Premier <span className="text-emerald-400">Asset</span>
+                  </span>
+                </Link>
+                <button
+                  onClick={onClose}
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-slate-300 hover:bg-white/5"
+                >
+                  <Icon icon="solar:close-circle-linear" className="text-lg" />
+                </button>
+              </div>
 
-            {/* Divider */}
-            <div className="my-3 h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+              {/* Homepage Section */}
+              <SectionLabel>Homepage</SectionLabel>
+              <nav className="mb-6 space-y-1.5">
+                {homepageMenu.map((item) => (
+                  <MobileSidebarItem
+                    key={item.label}
+                    item={item}
+                    active={isActive(pathname, item.href)}
+                    onClose={onClose}
+                  />
+                ))}
+              </nav>
 
-            {/* Apps Section */}
-            <SectionLabel>Apps</SectionLabel>
-            <nav className="mb-2 space-y-1.5">
-              {appsMenu.map((item) => (
-                <MobileSidebarItem
-                  key={item.label}
-                  item={item}
-                  active={isActive(pathname, item.href)}
-                  onClose={onClose}
-                />
-              ))}
-            </nav>
+              <div className="my-3 h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
-            {/* EXIT TO HOME */}
-            <div className="mt-6 pt-4 border-t border-white/5">
-              <Link
-                href="/"
-                onClick={onClose}
-                className="
-                  group relative flex items-center gap-3
-                  px-3.5 py-3 rounded-2xl
-                  border border-emerald-500/20
-                  bg-emerald-500/5
-                  hover:bg-emerald-500/12 hover:border-emerald-400/40
-                  active:scale-[0.98]
-                  transition-all duration-300
-                  overflow-hidden
-                "
-              >
-                <span className="pointer-events-none absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-emerald-400/10 to-transparent" />
+              {/* Apps Section */}
+              <SectionLabel>Apps</SectionLabel>
+              <nav className="space-y-1.5">
+                {appsMenu.map((item) => (
+                  <MobileSidebarItem
+                    key={item.label}
+                    item={item}
+                    active={isActive(pathname, item.href)}
+                    onClose={onClose}
+                  />
+                ))}
+              </nav>
 
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-400/30 shrink-0">
-                  <Icon icon="solar:home-smile-angle-bold-duotone" className="text-emerald-400 text-[20px]" />
-                </div>
-
-                <div className="flex flex-col min-w-0">
-                  <span className="text-[0.85rem] font-semibold text-emerald-300 leading-tight">Kembali ke Beranda</span>
-                  <span className="text-[10px] text-slate-500 leading-tight">Keluar dari dashboard</span>
-                </div>
-
-                <Icon
-                  icon="solar:arrow-right-up-linear"
-                  className="ml-auto text-[15px] text-emerald-500/40 group-hover:text-emerald-400 transition-colors shrink-0"
-                />
-              </Link>
+              {/* ── STICKY EXIT — tight after last item, sticks when scrolling ── */}
+              <div className="sticky bottom-0 pt-3 pb-6 bg-[#040608]">
+                <div className="mb-3 h-px w-full bg-gradient-to-r from-transparent via-emerald-500/25 to-transparent" />
+                <MobileExitButton onClose={onClose} />
+              </div>
             </div>
           </motion.aside>
         </>
       )}
     </AnimatePresence>
+  );
+}
+
+function MobileExitButton({ onClose }: { onClose: () => void }) {
+  return (
+    <Link
+      href="/"
+      onClick={onClose}
+      className="
+        group relative flex items-center gap-3.5
+        px-4 py-3.5 rounded-2xl
+        overflow-hidden
+        transition-all duration-500
+        border border-white/[0.07]
+        bg-gradient-to-br from-white/[0.035] to-transparent
+        hover:border-emerald-400/35
+        hover:from-emerald-500/[0.09] hover:to-emerald-900/[0.04]
+        hover:shadow-[0_0_28px_rgba(52,211,153,0.12),inset_0_1px_0_rgba(52,211,153,0.10)]
+        active:scale-[0.985]
+      "
+    >
+      {/* Ambient glow */}
+      <div className="pointer-events-none absolute -inset-1 rounded-2xl bg-emerald-500/[0.06] blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+
+      {/* Shimmer sweep */}
+      <span className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-18deg] bg-gradient-to-r from-transparent via-white/[0.055] to-transparent group-hover:translate-x-full transition-transform duration-700" />
+
+      {/* Icon orb */}
+      <div className="
+        relative shrink-0
+        flex h-9 w-9 items-center justify-center rounded-xl
+        border border-emerald-400/25
+        bg-gradient-to-br from-emerald-500/20 to-emerald-900/10
+        shadow-[0_0_14px_rgba(52,211,153,0.15)]
+        group-hover:border-emerald-400/50
+        group-hover:shadow-[0_0_20px_rgba(52,211,153,0.28)]
+        group-hover:from-emerald-500/30
+        transition-all duration-500
+      ">
+        <Icon icon="solar:home-smile-angle-bold-duotone" className="text-emerald-400 text-[19px] transition-transform duration-300 group-hover:scale-110" />
+        <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-400 ring-2 ring-[#040608] shadow-[0_0_8px_rgba(52,211,153,0.7)]" />
+      </div>
+
+      {/* Text */}
+      <div className="flex flex-col min-w-0">
+        <span className="text-[0.84rem] font-bold text-emerald-200/90 leading-tight group-hover:text-emerald-100 transition-colors duration-300">
+          Kembali ke Beranda
+        </span>
+        <span className="text-[10px] text-slate-500 leading-tight mt-0.5 group-hover:text-slate-400 transition-colors duration-300">
+          Keluar dari dashboard
+        </span>
+      </div>
+
+      {/* Arrow */}
+      <div className="
+        ml-auto shrink-0
+        flex h-7 w-7 items-center justify-center rounded-lg
+        border border-white/[0.06] bg-white/[0.03]
+        group-hover:border-emerald-400/30 group-hover:bg-emerald-500/10
+        transition-all duration-300
+      ">
+        <Icon icon="solar:arrow-right-up-bold" className="text-[12px] text-slate-600 group-hover:text-emerald-400 transition-all duration-300 group-hover:translate-x-px group-hover:-translate-y-px" />
+      </div>
+    </Link>
   );
 }
 
@@ -140,18 +179,9 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function MobileSidebarItem({
-  item,
-  active,
-  onClose,
-}: {
-  item: MenuItem;
-  active?: boolean;
-  onClose: () => void;
-}) {
+function MobileSidebarItem({ item, active, onClose }: { item: MenuItem; active?: boolean; onClose: () => void }) {
   const isLink = Boolean(item.href);
-  const base =
-    "flex items-center gap-3 rounded-2xl px-3.5 py-2.5 text-sm transition-all duration-150";
+  const base = "flex items-center gap-3 rounded-2xl px-3.5 py-2.5 text-sm transition-all duration-150";
   const state = active
     ? "bg-emerald-500/12 text-emerald-200 border border-emerald-400/40"
     : "text-slate-300 border border-transparent hover:bg-white/5 hover:text-emerald-200";
@@ -159,36 +189,18 @@ function MobileSidebarItem({
   const content = (
     <>
       <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#050608] border border-white/10">
-        <Icon
-          icon={item.icon}
-          className={
-            active
-              ? "text-emerald-300 text-[20px]"
-              : "text-slate-400 text-[20px]"
-          }
-        />
+        <Icon icon={item.icon} className={active ? "text-emerald-300 text-[20px]" : "text-slate-400 text-[20px]"} />
       </div>
       <span className="truncate text-[0.95rem]">{item.label}</span>
       {item.href && (
-        <Icon
-          icon="solar:alt-arrow-right-linear"
-          className="ml-auto text-[16px] text-slate-500"
-        />
+        <Icon icon="solar:alt-arrow-right-linear" className="ml-auto text-[16px] text-slate-500" />
       )}
     </>
   );
 
   if (isLink) {
-    return (
-      <Link href={item.href!} onClick={onClose} className={`${base} ${state}`}>
-        {content}
-      </Link>
-    );
+    return <Link href={item.href!} onClick={onClose} className={`${base} ${state}`}>{content}</Link>;
   }
 
-  return (
-    <button type="button" onClick={onClose} className={`${base} ${state}`}>
-      {content}
-    </button>
-  );
+  return <button type="button" onClick={onClose} className={`${base} ${state}`}>{content}</button>;
 }

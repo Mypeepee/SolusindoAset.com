@@ -3025,60 +3025,179 @@ function TopListingsCard() {
    7. SALES MAPPING (regions)
    ──────────────────────────────────────────────────────────────────── */
 
+/* ── kota name → approximate [x, y] on SVG viewBox 0 0 200 80
+   (Indonesia lon 95–141°E, lat 6°N–11°S mapped linearly) ── */
+const KOTA_COORDS: Record<string, [number, number]> = {
+  // Jawa
+  jakarta: [51, 54], "jakarta pusat": [51, 54], "jakarta selatan": [51, 55],
+  "jakarta utara": [51, 52], "jakarta barat": [50, 54], "jakarta timur": [52, 54],
+  "kota jakarta": [51, 54],
+  bandung: [55, 56], semarang: [67, 53], surabaya: [78, 54],
+  yogyakarta: [67, 56], malang: [79, 56], bogor: [52, 55],
+  bekasi: [53, 54], depok: [52, 55], tangerang: [50, 54],
+  "tangerang selatan": [50, 55], cirebon: [59, 54], solo: [72, 54],
+  // Bali & Nusa Tenggara
+  denpasar: [89, 57], bali: [89, 57], mataram: [94, 58],
+  // Sumatera
+  medan: [22, 32], palembang: [44, 48], pekanbaru: [31, 42],
+  padang: [27, 46], batam: [37, 44], bandar_lampung: [48, 53],
+  "bandar lampung": [48, 53], jambi: [38, 47], bengkulu: [33, 49],
+  banda_aceh: [12, 28], "banda aceh": [12, 28],
+  // Kalimantan
+  pontianak: [63, 36], balikpapan: [94, 38], samarinda: [96, 35],
+  banjarmasin: [86, 44], palangkaraya: [79, 38], "palangka raya": [79, 38],
+  // Sulawesi
+  makassar: [107, 53], manado: [130, 23], palu: [119, 38],
+  kendari: [118, 53], gorontalo: [128, 28],
+  // Maluku & Papua
+  ambon: [144, 48], jayapura: [197, 38], sorong: [162, 33],
+  // NTB/NTT
+  kupang: [106, 62],
+};
+
+function cityToSvgCoords(name: string): [number, number] | null {
+  const key = name.toLowerCase().trim();
+  if (KOTA_COORDS[key]) return KOTA_COORDS[key];
+  // partial match
+  for (const [k, v] of Object.entries(KOTA_COORDS)) {
+    if (key.includes(k) || k.includes(key)) return v;
+  }
+  return null;
+}
+
+const PIN_COLORS = [EMERALD.bright, EMERALD.primary, EMERALD.deep, "#38bdf8", "#a78bfa"];
+
+type SalesRegion = { name: string; count: number; pct: number };
+
 function SalesMappingCard() {
-  const regions = [
-    { name: "Jakarta",      value: 38, color: EMERALD.bright },
-    { name: "Surabaya",     value: 28, color: EMERALD.primary },
-    { name: "Bandung",      value: 18, color: EMERALD.deep },
-    { name: "Bali",         value: 10, color: EMERALD.pale },
-    { name: "Medan",        value: 6,  color: "#475569" },
-  ];
+  const [regions, setRegions] = useState<SalesRegion[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/dashboard/agent/sales-distribution", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json) => {
+        if (json?.ok) {
+          setRegions(json.regions ?? []);
+          setTotal(json.total ?? 0);
+        }
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const pins = regions
+    .map((r, i) => ({ ...r, coords: cityToSvgCoords(r.name), color: PIN_COLORS[i] ?? "#475569" }))
+    .filter((r) => r.coords !== null);
 
   return (
     <Card className="h-full">
-      <CardHeader title="Sebaran Penjualan" subtitle="Per wilayah Indonesia" />
+      <CardHeader
+        title="Sebaran Penjualan"
+        subtitle={loading ? "Memuat data…" : total > 0 ? `${total} listing aktif` : "Per wilayah Indonesia"}
+      />
       <div className="px-6 pb-6">
-        {/* stylized archipelago silhouette */}
-        <div className="relative h-32 rounded-2xl border border-white/[0.06] bg-gradient-to-br from-emerald-500/[0.04] to-transparent overflow-hidden">
-          <svg viewBox="0 0 200 80" className="absolute inset-0 h-full w-full opacity-70">
-            {/* Sumatera */}
-            <path d="M10,30 Q15,20 25,22 L40,40 L35,50 L20,48 Z" fill="url(#map-grad)" stroke={EMERALD.primary} strokeWidth="0.5" />
-            {/* Jawa */}
-            <path d="M55,52 Q70,48 90,50 L100,55 L95,60 L60,58 Z" fill="url(#map-grad)" stroke={EMERALD.primary} strokeWidth="0.5" />
-            {/* Bali */}
-            <ellipse cx="105" cy="56" rx="3" ry="1.5" fill={EMERALD.bright} />
-            {/* Kalimantan */}
-            <path d="M75,15 Q90,12 105,18 L110,35 L100,40 L80,35 Z" fill="url(#map-grad)" stroke={EMERALD.primary} strokeWidth="0.5" />
-            {/* Sulawesi */}
-            <path d="M125,20 L130,30 L128,40 L135,42 L138,32 L142,28 L145,35 L140,45 L132,48 L125,42 Z" fill="url(#map-grad)" stroke={EMERALD.primary} strokeWidth="0.5" />
-            {/* Papua */}
-            <path d="M160,25 Q175,22 190,28 L185,42 L165,40 Z" fill="url(#map-grad)" stroke={EMERALD.primary} strokeWidth="0.5" />
+        {/* Peta Indonesia SVG */}
+        <div className="relative h-36 rounded-2xl border border-white/[0.06] bg-gradient-to-br from-emerald-500/[0.04] to-transparent overflow-hidden">
+          <svg viewBox="0 0 200 80" className="absolute inset-0 h-full w-full">
             <defs>
-              <linearGradient id="map-grad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor={EMERALD.bright} stopOpacity="0.5" />
-                <stop offset="100%" stopColor={EMERALD.deep} stopOpacity="0.15" />
+              <linearGradient id="idn-grad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor={EMERALD.bright} stopOpacity="0.45" />
+                <stop offset="100%" stopColor={EMERALD.deep} stopOpacity="0.12" />
               </linearGradient>
+              <filter id="pin-glow">
+                <feGaussianBlur stdDeviation="1.2" result="blur" />
+                <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+              </filter>
             </defs>
-            {/* hot pins */}
-            <circle cx="65" cy="55" r="3" fill={EMERALD.primary}>
-              <animate attributeName="r" values="3;5;3" dur="2s" repeatCount="indefinite" />
-            </circle>
-            <circle cx="85" cy="55" r="2" fill={EMERALD.bright} />
-            <circle cx="105" cy="56" r="2" fill={EMERALD.bright} />
+
+            {/* ── Sumatera ── */}
+            <path
+              d="M8,27 Q11,19 17,20 Q22,21 28,26 Q34,32 38,40 Q42,48 44,54 Q40,58 35,57 Q30,55 24,49 Q17,42 12,35 Q8,31 8,27 Z"
+              fill="url(#idn-grad)" stroke={EMERALD.primary} strokeWidth="0.4" opacity="0.85"
+            />
+            {/* ── Jawa ── */}
+            <path
+              d="M48,52 Q58,49 70,50 Q82,50 92,52 Q100,54 104,57 L102,61 Q92,63 78,62 Q64,60 54,58 Q48,56 48,52 Z"
+              fill="url(#idn-grad)" stroke={EMERALD.primary} strokeWidth="0.4" opacity="0.85"
+            />
+            {/* ── Bali ── */}
+            <ellipse cx="107" cy="59" rx="3.5" ry="2" fill="url(#idn-grad)" stroke={EMERALD.primary} strokeWidth="0.4" opacity="0.85" />
+            {/* ── Lombok & Sumbawa ── */}
+            <ellipse cx="113" cy="60" rx="2.5" ry="1.5" fill="url(#idn-grad)" stroke={EMERALD.primary} strokeWidth="0.3" opacity="0.7" />
+            <ellipse cx="120" cy="61" rx="4" ry="1.8" fill="url(#idn-grad)" stroke={EMERALD.primary} strokeWidth="0.3" opacity="0.7" />
+            {/* ── Flores + Timor ── */}
+            <path d="M128,62 Q136,60 144,62 L143,65 Q135,66 128,65 Z" fill="url(#idn-grad)" stroke={EMERALD.primary} strokeWidth="0.3" opacity="0.65" />
+            <path d="M148,63 Q156,61 162,63 L161,66 Q154,67 148,66 Z" fill="url(#idn-grad)" stroke={EMERALD.primary} strokeWidth="0.3" opacity="0.55" />
+            {/* ── Kalimantan ── */}
+            <path
+              d="M62,14 Q72,10 85,11 Q98,12 108,17 Q116,22 118,30 Q119,40 114,47 Q108,52 98,54 Q87,55 76,52 Q66,48 61,40 Q57,32 62,14 Z"
+              fill="url(#idn-grad)" stroke={EMERALD.primary} strokeWidth="0.4" opacity="0.85"
+            />
+            {/* ── Sulawesi ── (simplified K-shape) */}
+            <path
+              d="M120,22 Q124,19 128,22 L127,35 Q131,31 136,26 Q141,24 144,28 L140,34 Q135,40 130,44 L133,54 Q130,58 127,56 L125,44 Q121,40 120,35 Z"
+              fill="url(#idn-grad)" stroke={EMERALD.primary} strokeWidth="0.4" opacity="0.85"
+            />
+            {/* ── Maluku (Halmahera + Ambon area) ── */}
+            <path d="M147,23 Q150,20 153,22 L152,32 Q155,28 158,24 Q161,22 163,25 L160,32 Q157,37 155,40 L153,44 Q150,46 148,44 L148,34 Q146,30 147,23 Z"
+              fill="url(#idn-grad)" stroke={EMERALD.primary} strokeWidth="0.3" opacity="0.7" />
+            <ellipse cx="143" cy="47" rx="3" ry="2.5" fill="url(#idn-grad)" stroke={EMERALD.primary} strokeWidth="0.3" opacity="0.65" />
+            {/* ── Papua ── */}
+            <path
+              d="M160,28 Q170,22 182,22 Q194,22 200,28 Q200,36 197,42 Q193,48 184,50 Q172,52 163,48 Q158,44 158,36 Q158,30 160,28 Z"
+              fill="url(#idn-grad)" stroke={EMERALD.primary} strokeWidth="0.4" opacity="0.85"
+            />
+
+            {/* ── Hot pins untuk top-5 kota ── */}
+            {pins.map((r, i) => {
+              const [cx, cy] = r.coords!;
+              const isPrimary = i === 0;
+              return (
+                <g key={r.name} filter="url(#pin-glow)">
+                  {isPrimary && (
+                    <circle cx={cx} cy={cy} r="5" fill={r.color} opacity="0.25">
+                      <animate attributeName="r" values="4;7;4" dur="2.2s" repeatCount="indefinite" />
+                      <animate attributeName="opacity" values="0.25;0.08;0.25" dur="2.2s" repeatCount="indefinite" />
+                    </circle>
+                  )}
+                  <circle cx={cx} cy={cy} r={isPrimary ? 3 : 2} fill={r.color} opacity="0.95" />
+                  <circle cx={cx} cy={cy} r={isPrimary ? 1.2 : 0.8} fill="white" opacity="0.9" />
+                </g>
+              );
+            })}
           </svg>
         </div>
 
         <div className="mt-4 space-y-2">
-          {regions.map((r) => (
-            <div key={r.name} className="flex items-center gap-3">
-              <span className="h-2 w-2 rounded-full" style={{ background: r.color }} />
-              <span className="flex-1 text-xs text-slate-300">{r.name}</span>
-              <div className="h-1 w-20 rounded-full bg-white/[0.05] overflow-hidden">
-                <div className="h-full rounded-full" style={{ width: `${r.value * 2}%`, background: r.color }} />
-              </div>
-              <span className="text-[10px] font-semibold text-slate-400 w-8 text-right">{r.value}%</span>
+          {loading ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-5 rounded-lg bg-white/[0.04] animate-pulse" />
+            ))
+          ) : regions.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-4 text-slate-500">
+              <Icon icon="solar:map-point-bold-duotone" className="text-3xl mb-1 text-slate-600" />
+              <p className="text-xs">Belum ada data listing</p>
             </div>
-          ))}
+          ) : (
+            regions.map((r, i) => {
+              const color = PIN_COLORS[i] ?? "#475569";
+              return (
+                <div key={r.name} className="flex items-center gap-3">
+                  <span className="w-4 text-[10px] font-bold tabular-nums text-slate-500">#{i + 1}</span>
+                  <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ background: color }} />
+                  <span className="flex-1 truncate text-xs text-slate-300">{r.name}</span>
+                  <div className="h-1 w-20 flex-shrink-0 overflow-hidden rounded-full bg-white/[0.05]">
+                    <div className="h-full rounded-full transition-[width] duration-700" style={{ width: `${r.pct}%`, background: color }} />
+                  </div>
+                  <span className="w-10 text-right text-[10px] font-semibold tabular-nums text-slate-400">
+                    {r.count} <span className="text-slate-600">({r.pct}%)</span>
+                  </span>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     </Card>
@@ -3199,19 +3318,6 @@ export function PremiumAgentDashboard() {
 
       {/* ROW 4 — Jaringan Referral: full-width, semua downline tree */}
       <NetworkReferralCard />
-
-      {/* ROW 5 — Insight triple: Konversi + Target + Top Listings */}
-      <div className="grid gap-6 lg:grid-cols-3 lg:items-stretch">
-        <ConversionCard />
-        <TargetRealityCard />
-        <TopListingsCard />
-      </div>
-
-      {/* ROW 5 — Sebaran + Volume (split 1:1) */}
-      <div className="grid gap-6 lg:grid-cols-2 lg:items-stretch">
-        <SalesMappingCard />
-        <VolumeServiceCard />
-      </div>
     </div>
   );
 }

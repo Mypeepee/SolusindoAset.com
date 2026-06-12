@@ -202,9 +202,11 @@ export default function ProjectWalletCard({
   pendingProjectCount = 0,
   hasPendingPayment = false,
   realizedProfit = 0,
+  jabatan,
   createdById,
   onCreateProject,
 }: Props) {
+  const isOwner = jabatan === "OWNER";
   const theme = getTierTheme(totalDana);
   const TierIcon = theme.icon;
   const [openAddModal, setOpenAddModal] = useState(false);
@@ -317,13 +319,15 @@ export default function ProjectWalletCard({
               ) : null}
             </div>
 
-            <button
-              type="button"
-              onClick={() => setOpenAddModal(true)}
-              className={`inline-flex h-12 shrink-0 items-center justify-center rounded-2xl px-5 text-sm font-bold shadow-[0_16px_40px_rgba(0,0,0,0.22)] transition active:scale-[0.99] ${theme.actionButton}`}
-            >
-              Tambah Project
-            </button>
+            {isOwner && (
+              <button
+                type="button"
+                onClick={() => setOpenAddModal(true)}
+                className={`inline-flex h-12 shrink-0 items-center justify-center rounded-2xl px-5 text-sm font-bold shadow-[0_16px_40px_rgba(0,0,0,0.22)] transition active:scale-[0.99] ${theme.actionButton}`}
+              >
+                Tambah Project
+              </button>
+            )}
           </div>
 
           <div className="grid gap-4 md:grid-cols-3">

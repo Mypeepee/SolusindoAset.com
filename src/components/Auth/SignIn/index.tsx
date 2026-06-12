@@ -196,7 +196,7 @@ const Signin = ({ closeModal, openSignupModal }: SigninProps) => {
 
           <div className="leading-tight text-left">
             <div className="text-white font-semibold text-xl">
-              Premier<span className="text-primary"> Asset</span>
+              Solusindo<span className="text-primary"> Aset</span>
             </div>
             <div className="text-white/60 text-xs">Masuk akun</div>
           </div>

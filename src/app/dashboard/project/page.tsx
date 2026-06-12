@@ -357,6 +357,7 @@ export default function ProjectPage() {
   const [sort, setSort] = useState<SortKey>("termurah");
 
   const currentAgentId = (session?.user as any)?.agentId ?? null;
+  const jabatan = (session?.user as any)?.jabatan ?? null;
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -553,7 +554,7 @@ export default function ProjectPage() {
           pendingProjectCount={walletSummary.pendingProjectCount}
           hasPendingPayment={walletSummary.hasPendingPayment}
           realizedProfit={walletSummary.realizedProfit}
-          jabatan="AGENT"
+          jabatan={jabatan}
           createdById={currentAgentId ?? undefined}
           onCreateProject={handleProjectCreated}
         />

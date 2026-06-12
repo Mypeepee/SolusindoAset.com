@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { DM_Sans } from "next/font/google";
+import localFont from "next/font/local";
 
 import "./globals.css";
 
@@ -18,10 +18,9 @@ import LoadingBar from "@/components/LoadingBar";
 
 import "@/lib/cron";
 
-const dmSans = DM_Sans({
-  subsets: ["latin"],
+const dmSans = localFont({
+  src: "../../public/fonts/DMSans_24pt-Bold.ttf",
   display: "swap",
-  // optional: kalau suatu saat mau pakai tailwind font variable
   variable: "--font-dm-sans",
 });
 

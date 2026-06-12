@@ -25,6 +25,7 @@ model Pengguna {
   diperbarui_pada  DateTime?        @default(now()) @db.Timestamptz(6)
   agent            Agent?
   mouKlien         Mou[]            @relation("MouKlien")
+  klien            Klien[]
 
   @@index([kode_referral], map: "idx_kode_referral")
   @@index([email], map: "idx_pengguna_email")
@@ -76,6 +77,7 @@ model Agent {
   riwayatPoin            RiwayatPoin[]
   mouAgent               Mou[]                    @relation("MouAgent")
   leads                  Lead[]
+  klien                  Klien[]
   propertyTitipKlaim     PropertyTitip[]          @relation("PropertyTitipKlaim")
   propertyTitipDistribusi PropertyTitipDistribution[]
   targetBulanan          TargetAgent[]            @relation("AgentTarget")
@@ -137,6 +139,7 @@ model Listing {
   projectSelesai     ProjectSelesai[]
   mou                Mou[]
   leads              Lead[]
+  klien              Klien[]
 
   @@index([kota], map: "idx_property_lokasi")
   @@index([jenis_transaksi], map: "idx_property_jenis")
@@ -705,6 +708,7 @@ model Lead {
 
   agent   Agent   @relation(fields: [id_agent], references: [id_agent], onDelete: Cascade, map: "leads_agent_fk")
   listing Listing @relation(fields: [id_property], references: [id_property], onDelete: Cascade, map: "leads_property_fk")
+  klien   Klien?
 
   @@index([id_agent, status], map: "idx_leads_agent_status")
   @@index([id_property], map: "idx_leads_property")
@@ -712,6 +716,70 @@ model Lead {
   @@index([client_phone], map: "idx_leads_phone")
   @@index([session_id], map: "idx_leads_session")
   @@map("leads")
+}
+
+// ── Klien CRM: data kontak & preferensi klien ────────────────────────────────
+model Klien {
+  id_klien    String  @id @default(dbgenerated("('KL'::text || lpad((nextval('klien_code_seq'::regclass))::text, 5, '0'::text))")) @db.VarChar(20)
+  id_agent    String  @db.VarChar(20)
+  id_pengguna String? @db.VarChar(20)
+  id_lead_asal    BigInt? @unique
+  id_properti_asal BigInt?
+
+  nama           String  @db.VarChar(150)
+  nomor_whatsapp String? @db.VarChar(20)
+  email          String? @db.VarChar(150)
+
+  sumber             sumber_klien_enum      @default(wa_organik)
+  metode_pembayaran  metode_pembayaran_enum?
+  bank_kpr           String?                @db.VarChar(50)
+  tenor_kpr          Int?                   @db.SmallInt
+
+  tanggal_masuk           DateTime  @default(dbgenerated("CURRENT_DATE")) @db.Date
+  tanggal_kontak_terakhir DateTime? @db.Timestamptz(6)
+  tanggal_follow_up       DateTime? @db.Timestamptz(6)
+
+  status  status_klien_enum @default(lead_baru)
+  catatan String?
+
+  dibuat_pada     DateTime @default(now()) @db.Timestamptz(6)
+  diperbarui_pada DateTime @default(now()) @db.Timestamptz(6)
+
+  agent        Agent         @relation(fields: [id_agent], references: [id_agent], onDelete: Restrict, map: "klien_agent_fk")
+  pengguna     Pengguna?     @relation(fields: [id_pengguna], references: [id_pengguna], onDelete: SetNull, map: "klien_pengguna_fk")
+  leadAsal     Lead?         @relation(fields: [id_lead_asal], references: [id_lead], onDelete: SetNull, map: "klien_lead_fk")
+  propertiAsal Listing?      @relation(fields: [id_properti_asal], references: [id_property], onDelete: SetNull, map: "klien_properti_fk")
+  preferensi   PreferensiKlien[]
+
+  @@index([id_agent], map: "idx_klien_agent")
+  @@index([id_agent, status], map: "idx_klien_status")
+  @@index([nomor_whatsapp], map: "idx_klien_wa")
+  @@index([tanggal_follow_up], map: "idx_klien_follow_up")
+  @@index([tanggal_masuk(sort: Desc)], map: "idx_klien_masuk")
+  @@map("klien")
+}
+
+model PreferensiKlien {
+  id_preferensi  BigInt                 @id @default(autoincrement())
+  id_klien       String                 @db.VarChar(20)
+
+  tipe_properti   kategori_properti_enum
+  jenis_transaksi jenis_transaksi_enum?
+  lokasi_dicari   String?               @db.VarChar(255)
+  budget_min      Decimal?              @db.Decimal(20, 2)
+  budget_max     Decimal?               @db.Decimal(20, 2)
+  luas_min       Decimal?               @db.Decimal(12, 2)
+  luas_max       Decimal?               @db.Decimal(12, 2)
+  tujuan_beli    tujuan_beli_enum?
+  catatan        String?
+
+  dibuat_pada     DateTime @default(now()) @db.Timestamptz(6)
+  diperbarui_pada DateTime @default(now()) @db.Timestamptz(6)
+
+  klien Klien @relation(fields: [id_klien], references: [id_klien], onDelete: Cascade, map: "preferensi_klien_fk")
+
+  @@index([id_klien], map: "idx_preferensi_klien")
+  @@map("preferensi_klien")
 }
 
 model PropertyTitip {
@@ -861,6 +929,7 @@ enum jenis_transaksi_enum {
   SECONDARY
   LELANG
   SEWA
+  CESSIE
 }
 
 enum kategori_properti_enum {
@@ -1019,6 +1088,36 @@ enum status_mou_enum {
   closing
   kalah
   batal
+}
+
+enum status_klien_enum {
+  lead_baru
+  sudah_dikontak
+  hot_buyer
+  closing
+  lost_iseng
+}
+
+enum sumber_klien_enum {
+  wa_organik
+  iklan
+  referral
+  website
+  walk_in
+  titip_jual
+  lainnya
+}
+
+enum metode_pembayaran_enum {
+  cash
+  kpr
+  cash_bertahap
+}
+
+enum tujuan_beli_enum {
+  ditempati
+  investasi
+  disewakan
 }
 
 enum status_transaksi_enum {

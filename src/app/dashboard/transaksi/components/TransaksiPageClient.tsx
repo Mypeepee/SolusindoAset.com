@@ -6,9 +6,10 @@ import { Icon } from "@iconify/react";
 import PilihListingView from "./PilihListingView";
 import ProgressTransaksiView from "./ProgressTransaksiView";
 
-export default function TransaksiPageClient() {
+export default function TransaksiPageClient({ jabatan }: { jabatan?: string | null; initialListings?: unknown[] }) {
+  const isPrivileged = jabatan === "OWNER" || jabatan === "PRINCIPAL";
   const searchParams = useSearchParams();
-  const initialTab = searchParams.get("tab") === "progress" ? "progress" : "pilih";
+  const initialTab = isPrivileged && searchParams.get("tab") === "pilih" ? "pilih" : "progress";
   const highlightKode = searchParams.get("kode") ?? undefined;
   const [tab, setTab] = useState<"pilih" | "progress">(initialTab);
   const [closingCount, setClosingCount] = useState<number | null>(null);
@@ -158,21 +159,23 @@ export default function TransaksiPageClient() {
           </div>
 
           {/* Tabs */}
-          <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2">
-            <TabButton
-              active={tab === "pilih"}
-              onClick={() => setTab("pilih")}
-              icon="solar:list-check-bold-duotone"
-              label="Pilih Listing"
-              hint="Filter listing dan pilih untuk closing."
-              accent="emerald"
-            />
+          <div className={`mt-6 grid grid-cols-1 gap-3 ${isPrivileged ? "md:grid-cols-2" : ""}`}>
+            {isPrivileged && (
+              <TabButton
+                active={tab === "pilih"}
+                onClick={() => setTab("pilih")}
+                icon="solar:list-check-bold-duotone"
+                label="Pilih Listing"
+                hint="Filter listing dan pilih untuk closing."
+                accent="emerald"
+              />
+            )}
             <TabButton
               active={tab === "progress"}
               onClick={() => setTab("progress")}
               icon="solar:chart-2-bold-duotone"
               label="Progress Transaksi"
-              hint="Pantau stage, timeline, dan status."
+              hint={isPrivileged ? "Pantau semua transaksi seluruh agent." : "Pantau progress transaksi Anda."}
               accent="cyan"
               badge={closingCount}
             />
@@ -182,7 +185,7 @@ export default function TransaksiPageClient() {
 
       {/* Content */}
       <div className="mt-6">
-        {tab === "pilih" ? (
+        {isPrivileged && tab === "pilih" ? (
           <PilihListingView />
         ) : (
           <ProgressTransaksiView highlightKode={highlightKode} />

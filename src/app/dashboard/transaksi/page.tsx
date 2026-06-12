@@ -1,6 +1,8 @@
 // src/app/dashboard/transaksi/page.tsx
 import TransaksiPageClient from "./components/TransaksiPageClient";
 import prisma from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 export const dynamic = "force-dynamic";
 
@@ -200,6 +202,12 @@ async function getInitial(): Promise<ListingClientDTO[]> {
 }
 
 export default async function Page() {
-  const initialListings = await getInitial();
-  return <TransaksiPageClient initialListings={initialListings} />;
+  const [session, initialListings] = await Promise.all([
+    getServerSession(authOptions),
+    getInitial(),
+  ]);
+
+  const jabatan = (session?.user as any)?.jabatan ?? null;
+
+  return <TransaksiPageClient initialListings={initialListings} jabatan={jabatan} />;
 }

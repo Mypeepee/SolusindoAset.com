@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useState } from "react";
 import { Icon } from "@iconify/react";
 import dynamic from "next/dynamic";
 import RiwayatLelang from "./RiwayatLelang";
@@ -216,6 +216,8 @@ export default function DetailInfo({
     currentRole === "AGENT" || currentRole === "OWNER";
   const transactionBadge = getTransactionBadge(data?.jenis_transaksi || "JUAL");
 
+  const [shared, setShared] = useState(false);
+
   const handleShare = async () => {
     if (typeof window === "undefined") return;
     const url = window.location.href;
@@ -228,6 +230,8 @@ export default function DetailInfo({
           text,
           url,
         });
+        setShared(true);
+        setTimeout(() => setShared(false), 2000);
       } catch {
         // user batal / error
       }
@@ -236,6 +240,8 @@ export default function DetailInfo({
         await navigator.clipboard.writeText(
           `${text}\n\n🔗 Info lengkap: ${url}`
         );
+        setShared(true);
+        setTimeout(() => setShared(false), 2000);
       } catch {
         // gagal copy, abaikan
       }
@@ -327,12 +333,31 @@ export default function DetailInfo({
             </div>
           </div>
 
-          <button
-            onClick={handleShare}
-            className="bg-slate-800/50 w-10 h-10 flex items-center justify-center rounded-lg text-white border border-slate-700/50 hover:bg-slate-700/50 active:scale-95 transition-all flex-shrink-0"
-          >
-            <Icon icon="solar:share-bold" className="text-lg" />
-          </button>
+          {/* Share button — glowing */}
+          <div className="relative flex-shrink-0 group">
+            {/* Outer ping ring — always animating */}
+            <span className="absolute inset-0 rounded-xl bg-emerald-400/25 animate-ping" style={{ animationDuration: "1.8s" }} />
+            {/* Soft blur glow behind button */}
+            <span className="absolute inset-0 rounded-xl bg-emerald-500/30 blur-md transition-all duration-500 group-hover:blur-lg group-hover:bg-emerald-400/40" />
+            {/* Button */}
+            <button
+              onClick={handleShare}
+              title="Bagikan properti ini"
+              className={`
+                relative w-10 h-10 flex items-center justify-center rounded-xl
+                border transition-all duration-300 active:scale-95
+                ${shared
+                  ? "border-emerald-300/60 bg-emerald-500/30 shadow-[0_0_20px_rgba(52,211,153,0.6)]"
+                  : "border-emerald-400/40 bg-emerald-500/15 shadow-[0_0_14px_rgba(52,211,153,0.35)] hover:shadow-[0_0_22px_rgba(52,211,153,0.55)] hover:bg-emerald-500/25 hover:border-emerald-300/60"
+                }
+              `}
+            >
+              <Icon
+                icon={shared ? "solar:check-circle-bold-duotone" : "solar:share-bold"}
+                className={`text-lg transition-all duration-300 ${shared ? "text-emerald-200 scale-110" : "text-emerald-300"}`}
+              />
+            </button>
+          </div>
         </div>
       </div>
 

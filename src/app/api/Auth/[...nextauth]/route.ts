@@ -240,8 +240,10 @@ export const authOptions: AuthOptions = {
      * Ini yang bikin suspend/aktif langsung ngaruh ke header + middleware.
      */
     async jwt({ token, user, account }: any) {
-      // 1) Saat login pertama (credentials / google), set identitas awal
-      if (user?.id) token.id = user.id;
+      // 1) Saat login pertama, set identitas awal.
+      //    Untuk Google OAuth, user.id adalah Google's ID (bukan id_pengguna DB),
+      //    jadi skip — biarkan step 2 lookup by email untuk dapat DB ID yang benar.
+      if (user?.id && account?.provider === "credentials") token.id = user.id;
       if (user?.email) token.email = user.email;
 
       // 2) Pastikan token.id ada untuk google (kadang cuma email)

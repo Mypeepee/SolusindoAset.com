@@ -78,7 +78,7 @@ export async function GET(req: Request) {
     where: { id_agent: agentId },
     select: { jabatan: true },
   });
-  const isOwner = agentRow?.jabatan === "OWNER";
+  const isPrivileged = agentRow?.jabatan === "OWNER" || agentRow?.jabatan === "PRINCIPAL";
 
   const { searchParams } = new URL(req.url);
   const take = Math.min(Math.max(Number(searchParams.get("take") ?? 50), 1), 100);
@@ -96,7 +96,7 @@ export async function GET(req: Request) {
   ]);
 
   // Build dynamic WHERE fragments
-  const agentFragment = isOwner ? sql`` : sql`AND m.id_agent = ${agentId}`;
+  const agentFragment = isPrivileged ? sql`` : sql`AND m.id_agent = ${agentId}`;
   const searchFragment = q
     ? sql`AND (m.id_transaksi ILIKE ${`%${q}%`} OR l.kota ILIKE ${`%${q}%`})`
     : sql``;
@@ -195,7 +195,7 @@ export async function GET(req: Request) {
   }
 
   // Stats
-  const agentBaseWhere = isOwner ? {} : { id_agent: agentId };
+  const agentBaseWhere = isPrivileged ? {} : { id_agent: agentId };
   const [total, selesaiCount, allForStats] = await Promise.all([
     prisma.mou.count({ where: agentBaseWhere }),
     prisma.mou.count({
@@ -301,12 +301,11 @@ export async function PATCH(req: Request) {
   const agentId = (session.user as { agentId?: string }).agentId;
   if (!agentId) return NextResponse.json({ error: "Bukan agent" }, { status: 403 });
 
-  // Check owner to bypass agent filter (same logic as GET)
   const agentRow = await prisma.agent.findUnique({
     where: { id_agent: agentId },
     select: { jabatan: true },
   });
-  const isOwner = agentRow?.jabatan === "OWNER";
+  const isPrivileged = agentRow?.jabatan === "OWNER" || agentRow?.jabatan === "PRINCIPAL";
 
   try {
     const body = await req.json();
@@ -323,7 +322,7 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Status tidak valid" }, { status: 400 });
     }
 
-    const mouWhere = isOwner
+    const mouWhere = isPrivileged
       ? { id: BigInt(id) }
       : { id: BigInt(id), id_agent: agentId };
 
