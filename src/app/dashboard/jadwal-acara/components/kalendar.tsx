@@ -11,16 +11,25 @@ interface EventData {
   tanggal_mulai: string;
   tanggal_selesai: string;
   tipe_acara: string;
+  agent?: { id_agent?: string } | null;
+  [key: string]: any;
 }
 
 interface KalendarProps {
   currentDate: Date;
   events: EventData[];
   onDateClick: (date: Date) => void;
+  onEventClick?: (event: EventData) => void;
   onPrevMonth: () => void;
   onNextMonth: () => void;
   onToday: () => void;
   onAddEvent: () => void;
+  /**
+   * Optional title rendered inline with the calendar's navigation cluster.
+   * When provided, replaces any external header — keeps everything on a
+   * single row: title · ← Hari Ini → · Bulan Tahun · + Tambah.
+   */
+  headerTitle?: string;
 }
 
 const monthNames = [
@@ -89,10 +98,12 @@ export default function Kalendar({
   currentDate,
   events,
   onDateClick,
+  onEventClick,
   onPrevMonth,
   onNextMonth,
   onToday,
   onAddEvent,
+  headerTitle,
 }: KalendarProps) {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showMobileInfo, setShowMobileInfo] = useState(false);
@@ -168,97 +179,133 @@ export default function Kalendar({
   const handleDateClick = (date: Date) => {
     const holidayName = getHolidayName(date);
     const dayEvents = getEventsForDate(date);
-    
-    // Mobile: Show info modal if there's holiday or events
-    if (window.innerWidth < 768 && (holidayName || dayEvents.length > 0)) {
+
+    // Mobile: tetap tampilkan info modal kalau ada hari libur (tanpa acara klikable lain)
+    if (window.innerWidth < 768 && holidayName && dayEvents.length === 0) {
       setSelectedDate(date);
       setShowMobileInfo(true);
     } else {
-      // Desktop or no info: trigger parent callback
       onDateClick(date);
     }
   };
 
+  const handleEventBadgeClick = (
+    e: React.MouseEvent,
+    event: EventData
+  ) => {
+    e.stopPropagation();
+    if (onEventClick) {
+      onEventClick(event);
+    }
+  };
+
+  const handleMultiEventClick = (
+    e: React.MouseEvent,
+    date: Date,
+    dayEvents: EventData[]
+  ) => {
+    e.stopPropagation();
+    if (dayEvents.length === 1 && onEventClick) {
+      onEventClick(dayEvents[0]);
+      return;
+    }
+    setSelectedDate(date);
+    setShowMobileInfo(true);
+  };
+
   return (
     <div className="space-y-4">
-      {/* Calendar Header */}
-      <div className="flex items-center justify-between gap-2">
-        {/* Navigation Controls */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onPrevMonth}
-            className="
-              group flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center
-              rounded-xl bg-gradient-to-br from-white/10 to-white/5
-              border border-white/10 backdrop-blur-sm
-              text-slate-300 transition-all duration-300
-              hover:from-emerald-500/20 hover:to-emerald-600/10
-              hover:border-emerald-500/50 hover:text-emerald-300
-              hover:shadow-lg hover:shadow-emerald-500/20
-              active:scale-95
-            "
-          >
-            <Icon icon="solar:alt-arrow-left-bold" className="text-lg sm:text-xl" />
-          </button>
+      {/* Calendar Header — single row when space allows:
+         [title] · ⌜← Hari Ini →⌟ · [Bulan Tahun] · + Tambah
+         Each cluster has its own visual treatment so the row reads
+         as 4 distinct UI primitives instead of a wall of gray glass. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:gap-x-4">
+        {/* LEFT GROUP — optional title + segmented nav pill */}
+        <div className="flex min-w-0 flex-wrap items-center gap-2.5 sm:gap-3.5">
+          {headerTitle && (
+            <h3 className="min-w-0 truncate bg-gradient-to-r from-white via-white to-emerald-100/80 bg-clip-text text-base font-extrabold tracking-tight text-transparent sm:text-lg">
+              {headerTitle}
+            </h3>
+          )}
 
-          <button
-            onClick={onToday}
-            className="
-              rounded-xl bg-gradient-to-br from-white/10 to-white/5
-              border border-white/10 backdrop-blur-sm
-              px-3 py-2 sm:px-5 sm:py-2.5 text-xs sm:text-sm font-semibold text-slate-300
-              transition-all duration-300
-              hover:from-emerald-500/20 hover:to-emerald-600/10
-              hover:border-emerald-500/50 hover:text-emerald-300
-              hover:shadow-lg hover:shadow-emerald-500/20
-              active:scale-95
-            "
+          {/* Segmented Nav Pill — ⌜← │ Hari Ini │ →⌟ as one unified control */}
+          <div
+            role="group"
+            aria-label="Navigasi bulan"
+            className="relative inline-flex items-stretch overflow-hidden rounded-xl border border-white/[0.08] bg-gradient-to-br from-white/[0.05] to-white/[0.015] p-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_16px_-8px_rgba(0,0,0,0.5)] backdrop-blur-md"
           >
-            Hari Ini
-          </button>
+            {/* faint top hairline */}
+            <span className="pointer-events-none absolute inset-x-3 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/20 to-transparent" />
 
-          <button
-            onClick={onNextMonth}
-            className="
-              group flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center
-              rounded-xl bg-gradient-to-br from-white/10 to-white/5
-              border border-white/10 backdrop-blur-sm
-              text-slate-300 transition-all duration-300
-              hover:from-emerald-500/20 hover:to-emerald-600/10
-              hover:border-emerald-500/50 hover:text-emerald-300
-              hover:shadow-lg hover:shadow-emerald-500/20
-              active:scale-95
-            "
-          >
-            <Icon icon="solar:alt-arrow-right-bold" className="text-lg sm:text-xl" />
-          </button>
+            <button
+              onClick={onPrevMonth}
+              aria-label="Bulan sebelumnya"
+              className="group/btn flex h-9 w-9 items-center justify-center rounded-[10px] text-slate-300 transition-all duration-200 hover:bg-emerald-500/15 hover:text-emerald-200 active:scale-90 sm:h-10 sm:w-10"
+            >
+              <Icon
+                icon="solar:alt-arrow-left-bold"
+                className="text-base transition-transform duration-200 group-hover/btn:-translate-x-0.5 sm:text-lg"
+              />
+            </button>
+
+            <span aria-hidden="true" className="my-1.5 w-px self-stretch bg-white/[0.06]" />
+
+            <button
+              onClick={onToday}
+              className="flex items-center gap-1.5 rounded-[10px] px-2.5 text-[11px] font-bold tracking-wide text-slate-200 transition-all duration-200 hover:bg-emerald-500/15 hover:text-emerald-200 active:scale-95 sm:px-4 sm:text-xs"
+            >
+              <Icon icon="solar:target-bold-duotone" className="text-[13px] text-emerald-300 sm:text-sm" />
+              <span>Hari Ini</span>
+            </button>
+
+            <span aria-hidden="true" className="my-1.5 w-px self-stretch bg-white/[0.06]" />
+
+            <button
+              onClick={onNextMonth}
+              aria-label="Bulan berikutnya"
+              className="group/btn flex h-9 w-9 items-center justify-center rounded-[10px] text-slate-300 transition-all duration-200 hover:bg-emerald-500/15 hover:text-emerald-200 active:scale-90 sm:h-10 sm:w-10"
+            >
+              <Icon
+                icon="solar:alt-arrow-right-bold"
+                className="text-base transition-transform duration-200 group-hover/btn:translate-x-0.5 sm:text-lg"
+              />
+            </button>
+          </div>
         </div>
+        {/* END LEFT GROUP */}
 
-        {/* Month/Year Display + Add Button */}
-        <div className="flex items-center gap-2 sm:gap-4">
-          <div className="text-base sm:text-2xl font-bold text-white whitespace-nowrap">
-            {monthNames[currentDate.getMonth()].substring(0, 3)} {currentDate.getFullYear()}
+        {/* RIGHT GROUP — Month/Year context chip + + Tambah */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Month/Year — emerald glass chip, month in gradient, year in slate */}
+          <div className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-400/20 bg-emerald-500/[0.06] px-2.5 py-1.5 backdrop-blur-md sm:gap-2 sm:px-3 sm:py-2">
+            <Icon
+              icon="solar:calendar-minimalistic-bold-duotone"
+              className="text-sm text-emerald-300 sm:text-base"
+            />
+            <span className="whitespace-nowrap text-sm font-extrabold tabular-nums leading-none sm:text-base">
+              <span className="bg-gradient-to-r from-white to-emerald-100 bg-clip-text text-transparent">
+                {monthNames[currentDate.getMonth()].substring(0, 3)}
+              </span>
+              <span className="ml-1 font-bold text-slate-400">
+                {currentDate.getFullYear()}
+              </span>
+            </span>
           </div>
 
+          {/* + Tambah — refined emerald CTA with shimmer */}
           <button
             onClick={onAddEvent}
-            className="
-              group relative overflow-hidden
-              rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600
-              px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold text-white
-              shadow-lg shadow-emerald-500/50
-              transition-all duration-300
-              hover:shadow-xl hover:shadow-emerald-500/60
-              hover:scale-105
-              active:scale-95
-            "
+            aria-label="Tambah acara"
+            className="group relative inline-flex items-center gap-1.5 overflow-hidden rounded-xl border border-emerald-300/30 bg-gradient-to-br from-emerald-400 via-emerald-500 to-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-[0_8px_24px_-8px_rgba(16,185,129,0.6),inset_0_1px_0_rgba(255,255,255,0.25)] transition-all duration-300 hover:shadow-[0_12px_32px_-8px_rgba(16,185,129,0.7),inset_0_1px_0_rgba(255,255,255,0.25)] hover:brightness-110 active:scale-[0.97] sm:gap-2 sm:px-4 sm:py-2.5 sm:text-sm"
           >
-            <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="relative flex items-center gap-1.5 sm:gap-2">
-              <Icon icon="solar:add-circle-bold" className="text-base sm:text-lg" />
-              <span className="hidden sm:inline">Tambah</span>
-              <span className="sm:hidden">+</span>
-            </div>
+            {/* shimmer sweep on hover */}
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 -left-1/2 w-1/3 -skew-x-12 bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-0 transition-all duration-700 ease-out group-hover:left-[120%] group-hover:opacity-100"
+            />
+            <Icon icon="solar:add-circle-bold" className="relative z-10 text-base sm:text-lg" />
+            <span className="relative z-10 hidden sm:inline">Tambah</span>
+            <span className="relative z-10 sm:hidden">Tambah</span>
           </button>
         </div>
       </div>
@@ -290,15 +337,25 @@ export default function Kalendar({
             const dayEvents = getEventsForDate(date);
 
             return (
-              <motion.button
+              <motion.div
                 key={idx}
                 onClick={() => date && handleDateClick(date)}
+                role={date ? "button" : undefined}
+                tabIndex={date ? 0 : -1}
+                onKeyDown={(e) => {
+                  if (!date) return;
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleDateClick(date);
+                  }
+                }}
                 whileHover={date ? { scale: 1.03, y: -1 } : {}}
                 whileTap={date ? { scale: 0.97 } : {}}
-                disabled={!date}
+                aria-disabled={!date}
                 className={`
                   group relative aspect-square rounded-lg sm:rounded-2xl
                   transition-all duration-300 isolate overflow-hidden
+                  ${date ? "cursor-pointer" : ""}
                   ${!date ? "cursor-default opacity-0" : ""}
                   ${
                     isCurrentDay
@@ -371,12 +428,16 @@ export default function Kalendar({
                           {dayEvents.slice(0, 1).map((event) => {
                             const eventConfig = eventIcons[event.tipe_acara] || eventIcons.LAINNYA;
                             return (
-                              <div
+                              <button
                                 key={event.id_acara}
+                                type="button"
+                                onClick={(e) => handleEventBadgeClick(e, event)}
+                                aria-label={`Lihat detail ${event.judul_acara}`}
                                 className={`
                                   flex h-4 w-4 items-center justify-center
                                   rounded bg-gradient-to-br ${eventConfig.gradient}
                                   shadow-md backdrop-blur-sm
+                                  hover:scale-110 active:scale-95 transition-transform
                                 `}
                                 style={{ boxShadow: `0 1px 4px ${eventConfig.color}40` }}
                               >
@@ -384,15 +445,20 @@ export default function Kalendar({
                                   icon={eventConfig.icon}
                                   className="text-[8px] text-white drop-shadow-md"
                                 />
-                              </div>
+                              </button>
                             );
                           })}
                           {dayEvents.length > 1 && (
-                            <div className="flex h-4 w-4 items-center justify-center rounded bg-gradient-to-br from-slate-700 to-slate-800 shadow-md">
+                            <button
+                              type="button"
+                              onClick={(e) => handleMultiEventClick(e, date, dayEvents)}
+                              aria-label={`Lihat ${dayEvents.length - 1} acara lainnya`}
+                              className="flex h-4 w-4 items-center justify-center rounded bg-gradient-to-br from-slate-700 to-slate-800 shadow-md hover:scale-110 active:scale-95 transition-transform"
+                            >
                               <span className="text-[7px] font-bold text-white">
                                 +{dayEvents.length - 1}
                               </span>
-                            </div>
+                            </button>
                           )}
                         </div>
 
@@ -401,14 +467,17 @@ export default function Kalendar({
                           {dayEvents.slice(0, 2).map((event) => {
                             const eventConfig = eventIcons[event.tipe_acara] || eventIcons.LAINNYA;
                             return (
-                              <div
+                              <button
                                 key={event.id_acara}
+                                type="button"
+                                onClick={(e) => handleEventBadgeClick(e, event)}
+                                aria-label={`Lihat detail ${event.judul_acara}`}
                                 className={`
                                   flex h-5 w-5 items-center justify-center
                                   rounded-md bg-gradient-to-br ${eventConfig.gradient}
                                   shadow-lg backdrop-blur-sm
                                   transform transition-transform
-                                  group-hover:scale-110
+                                  group-hover:scale-110 hover:!scale-125 active:scale-95
                                 `}
                                 style={{ boxShadow: `0 2px 6px ${eventConfig.color}40` }}
                               >
@@ -416,15 +485,20 @@ export default function Kalendar({
                                   icon={eventConfig.icon}
                                   className="text-[9px] text-white drop-shadow-md"
                                 />
-                              </div>
+                              </button>
                             );
                           })}
                           {dayEvents.length > 2 && (
-                            <div className="flex h-5 w-5 items-center justify-center rounded-md bg-gradient-to-br from-slate-700 to-slate-800 shadow-lg">
+                            <button
+                              type="button"
+                              onClick={(e) => handleMultiEventClick(e, date, dayEvents)}
+                              aria-label={`Lihat ${dayEvents.length - 2} acara lainnya`}
+                              className="flex h-5 w-5 items-center justify-center rounded-md bg-gradient-to-br from-slate-700 to-slate-800 shadow-lg hover:scale-125 active:scale-95 transition-transform"
+                            >
                               <span className="text-[8px] font-bold text-white">
                                 +{dayEvents.length - 2}
                               </span>
-                            </div>
+                            </button>
                           )}
                         </div>
                       </div>
@@ -481,7 +555,7 @@ export default function Kalendar({
                     <div className="absolute inset-0 rounded-lg sm:rounded-2xl bg-gradient-to-tr from-white/0 via-white/10 to-white/0 opacity-0 transition-opacity group-hover:opacity-100 z-0" />
                   </>
                 )}
-              </motion.button>
+              </motion.div>
             );
           })}
         </div>
@@ -538,9 +612,14 @@ export default function Kalendar({
                   {getEventsForDate(selectedDate).map((event) => {
                     const eventConfig = eventIcons[event.tipe_acara] || eventIcons.LAINNYA;
                     return (
-                      <div
+                      <button
                         key={event.id_acara}
-                        className="flex items-center gap-3 rounded-lg bg-white/5 border border-white/10 p-3"
+                        type="button"
+                        onClick={() => {
+                          setShowMobileInfo(false);
+                          onEventClick?.(event);
+                        }}
+                        className="w-full text-left flex items-center gap-3 rounded-lg bg-white/5 border border-white/10 p-3 hover:bg-white/10 active:scale-[0.98] transition-all"
                       >
                         <div
                           className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${eventConfig.gradient} shadow-lg`}
@@ -554,7 +633,8 @@ export default function Kalendar({
                             {event.tipe_acara.replace("_", " ").toLowerCase()}
                           </p>
                         </div>
-                      </div>
+                        <Icon icon="solar:alt-arrow-right-bold" className="text-slate-500 flex-shrink-0" />
+                      </button>
                     );
                   })}
                 </div>

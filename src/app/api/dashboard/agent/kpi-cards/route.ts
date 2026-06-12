@@ -28,6 +28,11 @@ export async function GET() {
     const awalBulanLalu = new Date(year, month - 1, 1);
     // upper bound bulan lalu = eksklusif awal bulan ini
 
+    // Year boundaries untuk YoY (year-over-year) comparison
+    const awalTahunIni  = new Date(year,     0, 1);
+    const awalTahunDpn  = new Date(year + 1, 0, 1);
+    const awalTahunLalu = new Date(year - 1, 0, 1);
+
     // tanggal_dibuat di acara adalah timestamptz, tetap pakai UTC
     const awalBulanIniUtc = new Date(Date.UTC(year, month, 1));
 
@@ -35,11 +40,17 @@ export async function GET() {
       pendapatanAllTime,
       totalTransaksi,
       totalListing,
-      leadBaru,
-      pendapatanBulanIni,
+      leadsFromTable,
+      leadsBulanIniFromTable,
+      leadsBulanLaluFromTable,
+      pendapatanTahunIniAgg,
+      pendapatanTahunLaluAgg,
       transaksiBulanIni,
-      pendapatanBulanLalu,
       transaksiBulanLalu,
+      transaksiTahunIni,
+      titipClaimedAllTime,
+      titipClaimedBulanIni,
+      titipClaimedBulanLalu,
     ] = await Promise.all([
 
       // Total pendapatan all-time
@@ -61,22 +72,48 @@ export async function GET() {
         },
       }),
 
-      // Lead baru bulan ini
-      prisma.acara.count({
+      // Total leads (all-time) — sumber tabel `leads`, filter id_agent
+      prisma.lead.count({
+        where: { id_agent: agentId },
+      }),
+
+      // Leads yang aktivitasnya update bulan ini — pakai kolom updated_at
+      prisma.lead.count({
         where: {
           id_agent: agentId,
-          tipe_acara: { in: ["FOLLOW_UP", "BUYER_MEETING", "SITE_VISIT"] },
-          tanggal_dibuat: { gte: awalBulanIniUtc },
+          updated_at: { gte: awalBulanIniUtc },
         },
       }),
 
-      // Pendapatan bulan ini — filter via tanggal_transaksi (DATE kolom, bukan timestamptz)
+      // Leads yang aktivitasnya update bulan lalu
+      prisma.lead.count({
+        where: {
+          id_agent: agentId,
+          updated_at: {
+            gte: new Date(Date.UTC(year, month - 1, 1)),
+            lt:  awalBulanIniUtc,
+          },
+        },
+      }),
+
+      // Pendapatan tahun ini (1 Jan tahun ini → 1 Jan tahun depan, eksklusif)
       prisma.detailTransaksi.aggregate({
         _sum: { pendapatan: true },
         where: {
           id_agent: agentId,
           transaksi: {
-            tanggal_transaksi: { gte: awalBulanIni },
+            tanggal_transaksi: { gte: awalTahunIni, lt: awalTahunDpn },
+          },
+        },
+      }),
+
+      // Pendapatan tahun lalu (1 Jan tahun lalu → 1 Jan tahun ini, eksklusif)
+      prisma.detailTransaksi.aggregate({
+        _sum: { pendapatan: true },
+        where: {
+          id_agent: agentId,
+          transaksi: {
+            tanggal_transaksi: { gte: awalTahunLalu, lt: awalTahunIni },
           },
         },
       }),
@@ -86,20 +123,6 @@ export async function GET() {
         where: {
           mou: { id_agent: agentId },
           tanggal_transaksi: { gte: awalBulanIni },
-        },
-      }),
-
-      // Pendapatan bulan lalu
-      prisma.detailTransaksi.aggregate({
-        _sum: { pendapatan: true },
-        where: {
-          id_agent: agentId,
-          transaksi: {
-            tanggal_transaksi: {
-              gte: awalBulanLalu,
-              lt:  awalBulanIni,
-            },
-          },
         },
       }),
 
@@ -113,7 +136,44 @@ export async function GET() {
           },
         },
       }),
+
+      // Jumlah transaksi sepanjang tahun ini (YTD) — konteks achievement,
+      // bukan untuk pembanding (cegah demotivasi early-year)
+      prisma.transaksi.count({
+        where: {
+          mou: { id_agent: agentId },
+          tanggal_transaksi: {
+            gte: awalTahunIni,
+            lt:  awalTahunDpn,
+          },
+        },
+      }),
+
+      // Titip jual yang sudah diterima agent ini = lead aktif juga.
+      // Sumber lead bukan cuma WA — titip jual yang diklaim ikut dihitung.
+      prisma.propertyTitip.count({
+        where: { diklaim_oleh_agent: agentId },
+      }),
+      prisma.propertyTitip.count({
+        where: {
+          diklaim_oleh_agent: agentId,
+          diklaim_pada: { gte: awalBulanIniUtc },
+        },
+      }),
+      prisma.propertyTitip.count({
+        where: {
+          diklaim_oleh_agent: agentId,
+          diklaim_pada: {
+            gte: new Date(Date.UTC(year, month - 1, 1)),
+            lt:  awalBulanIniUtc,
+          },
+        },
+      }),
     ]);
+
+    const totalLeads   = leadsFromTable     + titipClaimedAllTime;
+    const leadBulanIni = leadsBulanIniFromTable  + titipClaimedBulanIni;
+    const leadBulanLalu = leadsBulanLaluFromTable + titipClaimedBulanLalu;
 
     /**
      * Hitung delta %:
@@ -127,9 +187,9 @@ export async function GET() {
       return +((cur - prev) / prev * 100).toFixed(1);
     }
 
-    const totalPendapatan     = Number(pendapatanAllTime._sum.pendapatan   ?? 0);
-    const pendapatanCurMonth  = Number(pendapatanBulanIni._sum.pendapatan  ?? 0);
-    const pendapatanPrevMonth = Number(pendapatanBulanLalu._sum.pendapatan ?? 0);
+    const totalPendapatan     = Number(pendapatanAllTime._sum.pendapatan      ?? 0);
+    const pendapatanTahunIni  = Number(pendapatanTahunIniAgg._sum.pendapatan  ?? 0);
+    const pendapatanTahunLalu = Number(pendapatanTahunLaluAgg._sum.pendapatan ?? 0);
 
     return NextResponse.json({
       ok: true,
@@ -137,10 +197,20 @@ export async function GET() {
         totalPendapatan,
         totalTransaksi,
         totalListing,
-        leadBaru,
-        pendapatanDelta:       pct(pendapatanCurMonth, pendapatanPrevMonth),
+        totalLeads,
+        // YoY (year-over-year) — tahun ini vs tahun lalu, sumber detail_transaksi
+        pendapatanDelta:    pct(pendapatanTahunIni, pendapatanTahunLalu),
+        pendapatanTahunIni,
+        pendapatanTahunLalu,
+        // Monthly — Transaksi tile
         transaksiBulanIni,
         transaksiBulanLalu,
+        // YTD count — achievement context (tidak dipakai untuk perbandingan)
+        transaksiTahunIni,
+        // Monthly — Leads tile (bucket pakai updated_at)
+        leadBulanIni,
+        leadBulanLalu,
+        leadDelta: pct(leadBulanIni, leadBulanLalu),
       },
     });
   } catch (e: any) {

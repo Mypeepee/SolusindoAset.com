@@ -21,6 +21,31 @@ const prisma =
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
+function toPublicPhotoUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const v = raw.trim();
+  if (!v) return null;
+  // Sudah URL (http/https)
+  if (v.startsWith("http://") || v.startsWith("https://")) {
+    try {
+      const u = new URL(v);
+      const idFromQuery = u.searchParams.get("id");
+      if (idFromQuery) {
+        return `https://drive.google.com/uc?export=view&id=${idFromQuery}`;
+      }
+      const m = v.match(/\/d\/([^/]+)/);
+      if (m?.[1]) {
+        return `https://drive.google.com/uc?export=view&id=${m[1]}`;
+      }
+      return v;
+    } catch {
+      return null;
+    }
+  }
+  // Anggap raw Google Drive file ID
+  return `https://drive.google.com/uc?export=view&id=${v}`;
+}
+
 function normalizeEmail(raw: string) {
   return (raw || "").trim().toLowerCase();
 }
@@ -262,8 +287,10 @@ export const authOptions: AuthOptions = {
           token.agentStatus = dbUser.agent?.status_keanggotaan ?? null;
           token.status_akun = dbUser.status_akun ?? null;
 
-          // foto profil dari tabel agent (kalau ada)
-          if (dbUser.agent?.foto_profil_url) token.picture = dbUser.agent.foto_profil_url;
+          // foto profil dari tabel agent (kalau ada) — normalisasi ke URL publik
+          // supaya konsumen (next/image di Header dll) tidak dapat raw Drive ID.
+          const photoUrl = toPublicPhotoUrl(dbUser.agent?.foto_profil_url);
+          if (photoUrl) token.picture = photoUrl;
         } else {
           // user hilang dari DB
           token.peran = "USER";

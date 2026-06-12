@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 import { status_mou_enum } from "@prisma/client";
 import { jsonSafeNumber } from "@/lib/jsonSafeNumber";
@@ -162,6 +164,120 @@ export async function GET(
         },
       })
     );
+  } catch (e: any) {
+    return NextResponse.json(
+      { ok: false, message: e?.message ?? "server_error" },
+      { status: 500 }
+    );
+  }
+}
+
+/* PATCH — update tanggal_lelang saja.
+   Body: { tanggal_lelang: string | null }  (ISO date) */
+export async function PATCH(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json(
+      { ok: false, message: "unauthorized" },
+      { status: 401 }
+    );
+  }
+
+  const raw = decodeURIComponent(params.id);
+  const body = await req.json().catch(() => null);
+
+  if (!body || (body.tanggal_lelang !== null && typeof body.tanggal_lelang !== "string")) {
+    return NextResponse.json(
+      { ok: false, message: "tanggal_lelang wajib (string ISO atau null)" },
+      { status: 400 }
+    );
+  }
+
+  let newDate: Date | null = null;
+  if (body.tanggal_lelang) {
+    const parsed = new Date(body.tanggal_lelang);
+    if (Number.isNaN(parsed.getTime())) {
+      return NextResponse.json(
+        { ok: false, message: "tanggal_lelang tidak valid" },
+        { status: 400 }
+      );
+    }
+    newDate = parsed;
+  }
+
+  try {
+    const isNumericId = /^\d+$/.test(raw);
+
+    // Resolve ke id_property (BigInt) supaya bisa dipakai relasi
+    const listing = await prisma.listing.findFirst({
+      where: isNumericId ? { id_property: BigInt(raw) } : { slug: raw },
+      select: { id_property: true },
+    });
+
+    if (!listing) {
+      return NextResponse.json(
+        { ok: false, message: "listing_not_found" },
+        { status: 404 }
+      );
+    }
+
+    // Sinkronkan 3 tabel dalam 1 transaksi: Listing → MOU aktif → Transaksi
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Listing.tanggal_lelang
+      await tx.listing.update({
+        where: { id_property: listing.id_property },
+        data: { tanggal_lelang: newDate },
+      });
+
+      // 2. MOU aktif (bukan kalah/batal) — ambil id_transaksi untuk update transaksi
+      const mouAktif = await tx.mou.findFirst({
+        where: {
+          id_listing: listing.id_property,
+          status: { notIn: [status_mou_enum.kalah, status_mou_enum.batal] },
+        },
+        orderBy: { dibuat_pada: "desc" },
+        select: { id: true, id_transaksi: true },
+      });
+
+      let mouUpdated = false;
+      let transaksiUpdated = false;
+
+      if (mouAktif) {
+        // MOU.tanggal_transaksi (nullable, bisa null kalau newDate null)
+        await tx.mou.update({
+          where: { id: mouAktif.id },
+          data: { tanggal_transaksi: newDate },
+        });
+        mouUpdated = true;
+
+        // Transaksi.tanggal_transaksi (NOT NULL) — hanya update bila ada transaksi
+        // dan newDate tidak null (kalau null, skip transaksi karena required)
+        if (mouAktif.id_transaksi && newDate) {
+          await tx.transaksi.updateMany({
+            where: { id_transaksi: mouAktif.id_transaksi },
+            data: {
+              tanggal_transaksi: newDate,
+              diperbarui_pada: new Date(),
+            },
+          });
+          transaksiUpdated = true;
+        }
+      }
+
+      return { mouUpdated, transaksiUpdated };
+    });
+
+    return NextResponse.json({
+      ok: true,
+      data: {
+        tanggal_lelang: newDate ? newDate.toISOString() : null,
+        mou_synced: result.mouUpdated,
+        transaksi_synced: result.transaksiUpdated,
+      },
+    });
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, message: e?.message ?? "server_error" },

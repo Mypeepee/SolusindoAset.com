@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Icon } from "@iconify/react";
+import { useSession } from "next-auth/react";
 import Kalendar from "@/app/dashboard/jadwal-acara/components/kalendar";
 import Todo from "@/app/dashboard/jadwal-acara/components/todo";
 import ModalAcara from "@/app/dashboard/jadwal-acara/components/modal-acara";
@@ -18,11 +18,28 @@ interface EventData {
   lokasi?: string;
   status_acara: string;
   id_property?: string;
+  durasi_pilih?: number;
+  agent?: { id_agent?: string } | null;
+  // Diisi dari /api/dashboard/acara GET response — daftar agent yang
+  // di-invite. ModalAcara hydrate ke chip PesertaPicker pas view/edit.
+  undangan?: Array<{
+    id_undangan?: string;
+    id_agent: string;
+    status_undangan?: string;
+    agent?: {
+      id_agent: string;
+      foto_profil_url?: string | null;
+      pengguna?: { nama_lengkap?: string };
+    };
+  }>;
+  // Hint dari backend: hanya owner yang boleh edit.
+  _isOwner?: boolean;
 }
 
 type ModalMode = "create" | "edit" | "view";
 
-export function AgentCalendar() {
+export function AgentCalendar({ compact = false }: { compact?: boolean } = {}) {
+  const { data: session } = useSession();
   const [currentDate, setCurrentDate]     = useState(new Date());
   const [selectedDate, setSelectedDate]   = useState<Date | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<(EventData & { canEdit?: boolean }) | null>(null);
@@ -47,6 +64,18 @@ export function AgentCalendar() {
 
   useEffect(() => { fetchEvents(); }, [currentDate]);
 
+  // Cross-component sync: if any other card (e.g. UpcomingEventsCard) opens
+  // ModalAcara and saves, it dispatches `acara:changed` on window. Refetch
+  // so the calendar dots reflect the new/edited event without a reload.
+  useEffect(() => {
+    const onChanged = () => fetchEvents();
+    window.addEventListener("acara:changed", onChanged);
+    return () => window.removeEventListener("acara:changed", onChanged);
+    // fetchEvents closes over currentDate but we want fresh values each fire,
+    // so we re-bind whenever currentDate changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDate]);
+
   const handleModalSuccess = () => { fetchEvents(); handleCloseModal(); };
   const handleCloseModal   = () => {
     setShowModal(false);
@@ -69,6 +98,24 @@ export function AgentCalendar() {
     setShowModal(true);
   };
 
+  const handleCalendarEventClick = (event: EventData) => {
+    // Prefer hint dari backend (`_isOwner`) yang sudah ngecek
+    // ownership berbasis session — paling akurat. Fallback ke
+    // perbandingan client kalau hint absent (mis. event dari sumber
+    // lain seperti MOU yang belum dapet flag).
+    const userRole = (session?.user as { role?: string } | null)?.role;
+    const currentAgentId = (session?.user as { agentId?: string } | null)
+      ?.agentId;
+    const eventCreatorId = event.agent?.id_agent;
+    const canEdit =
+      userRole === "OWNER" ||
+      event._isOwner === true ||
+      (!!currentAgentId &&
+        !!eventCreatorId &&
+        currentAgentId === eventCreatorId);
+    handleEventClick({ ...event, canEdit });
+  };
+
   const handleAddEvent = () => {
     setSelectedDate(new Date());
     setSelectedEvent(null);
@@ -77,43 +124,30 @@ export function AgentCalendar() {
   };
 
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-white/[0.06] bg-gradient-to-b from-[#0a0f10] to-[#070a0b]">
+    <div className="relative h-full overflow-hidden rounded-3xl border border-white/[0.06] bg-gradient-to-b from-[#0a0f10] to-[#070a0b]">
       {/* top hairline */}
       <div className="pointer-events-none absolute top-0 left-6 right-6 h-px bg-gradient-to-r from-transparent via-emerald-400/25 to-transparent" />
 
-      {/* header */}
-      <div className="flex items-center justify-between gap-3 px-6 pt-6 pb-4">
-        <div>
-          <h3 className="text-base font-bold text-white tracking-tight">Jadwal & Acara</h3>
-          <p className="mt-0.5 text-xs text-slate-500">Klik tanggal untuk tambah acara baru</p>
-        </div>
-        <div className="flex items-center gap-2 rounded-xl border border-emerald-400/20 bg-emerald-500/[0.07] px-3 py-1.5">
-          {loading
-            ? <Icon icon="solar:settings-linear" className="text-emerald-400 animate-spin text-sm" />
-            : <Icon icon="solar:calendar-mark-bold" className="text-emerald-400 text-sm" />
-          }
-          <span className="text-xs font-bold text-emerald-300">
-            {loading ? "Memuat..." : `${events.length} Acara`}
-          </span>
-        </div>
-      </div>
-
-      {/* body: calendar 3/4 + todo 1/4 */}
-      <div className="grid grid-cols-1 gap-4 px-6 pb-6 lg:grid-cols-4">
-        <div className="lg:col-span-3">
+      {/* body: single-row header (inside Kalendar) + grid (+ todo when not compact) */}
+      <div className={`grid grid-cols-1 gap-4 px-4 pt-5 pb-5 sm:px-6 sm:pt-6 sm:pb-6 ${compact ? "" : "lg:grid-cols-4"}`}>
+        <div className={compact ? "" : "lg:col-span-3"}>
           <Kalendar
             currentDate={currentDate}
             events={events}
             onDateClick={handleDateClick}
+            onEventClick={handleCalendarEventClick}
             onPrevMonth={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))}
             onNextMonth={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))}
             onToday={() => { const t = new Date(); setCurrentDate(t); setSelectedDate(t); }}
             onAddEvent={handleAddEvent}
+            headerTitle={compact ? "Jadwal & Acara" : undefined}
           />
         </div>
-        <div className="lg:col-span-1">
-          <Todo events={events} onEventClick={handleEventClick} />
-        </div>
+        {!compact && (
+          <div className="lg:col-span-1">
+            <Todo events={events} onEventClick={handleEventClick} />
+          </div>
+        )}
       </div>
 
       <ModalAcara

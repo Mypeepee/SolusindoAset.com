@@ -175,6 +175,7 @@ export default function DetailClient({
 
     owner: product.agent
       ? {
+          id_agent: currentAgentId,
           name: product.agent.pengguna?.nama_lengkap || "Agent Premier",
           avatar: product.agent.foto_profil_url || "",
           phone: product.agent.nomor_whatsapp || "",
@@ -185,6 +186,7 @@ export default function DetailClient({
           join: "2024",
         }
       : {
+          id_agent: currentAgentId,
           name: "Agent Premier",
           avatar: "",
           phone: "",

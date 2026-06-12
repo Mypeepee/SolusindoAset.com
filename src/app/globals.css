@@ -154,6 +154,35 @@ section {
   background-size: 1000px 100%;
 }
 
+/* Live agenda — breathing ring around card while event is happening */
+@keyframes livePulseRing {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.45),
+      0 0 32px -8px rgba(52, 211, 153, 0.55);
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.12),
+      0 0 48px -6px rgba(52, 211, 153, 0.7);
+    opacity: 0.92;
+  }
+}
+
+/* Live agenda — shimmer sweep across leading edge of progress bar */
+@keyframes liveBarShimmer {
+  0% {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+
 /* ========================================
    CUSTOM SCROLLBAR STYLES
    ======================================== */
@@ -542,4 +571,46 @@ section {
 /* Safe area untuk iPhone dengan notch */
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ── KPI Delta Pill animations ── */
+
+/* Diagonal shine sweep — sweeps across pill then rests */
+@keyframes kpi-shine {
+  0%   { left: -50%;  opacity: 0; }
+  10%  { opacity: 1; }
+  50%  { left: 130%;  opacity: 1; }
+  60%  { left: 130%;  opacity: 0; }
+  100% { left: 130%;  opacity: 0; }
+}
+.animate-kpi-shine {
+  animation: kpi-shine 3.5s ease-in-out infinite;
+}
+
+/* Arrow gentle bob */
+@keyframes kpi-arrow {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-2px); }
+}
+.animate-kpi-arrow {
+  animation: kpi-arrow 1.6s ease-in-out infinite;
+}
+
+/* Pill halo pulse — soft glow behind the pill */
+@keyframes kpi-halo {
+  0%, 100% { opacity: 0.35; transform: scale(0.95); }
+  50%      { opacity: 0.7;  transform: scale(1.05); }
+}
+.animate-kpi-halo {
+  animation: kpi-halo 2.8s ease-in-out infinite;
+}
+
+/* ── DatePicker month transition slides ── */
+@keyframes dp-slide-left {
+  from { transform: translateX(20px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+@keyframes dp-slide-right {
+  from { transform: translateX(-20px); opacity: 0; }
+  to   { transform: translateX(0);     opacity: 1; }
 }

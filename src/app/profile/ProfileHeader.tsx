@@ -162,7 +162,8 @@ const ProfileAvatar = ({
   if (isAgent && agent?.foto_profil_url) {
     photoUrl = buildDriveImageUrl(agent.foto_profil_url);
   } else if (user?.foto_profil_url) {
-    photoUrl = user.foto_profil_url;
+    const raw = user.foto_profil_url as string;
+    photoUrl = raw.startsWith("http") ? raw : buildDriveImageUrl(raw);
   }
 
   const showFallback = !photoUrl || imgError;

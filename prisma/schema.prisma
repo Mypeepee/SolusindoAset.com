@@ -69,11 +69,16 @@ model Agent {
   penukaranPoin          PenukaranPoin[]
   pesertaAcara           PesertaAcara[]
   pilihanPemilu          PilihanPemilu[]
+  undanganAcara          UndanganAcara[]
   projectDibuat          Project[]
   projectInvestor        ProjectInvestor[]
   projectSelesaiInvestor ProjectSelesaiInvestor[]
   riwayatPoin            RiwayatPoin[]
   mouAgent               Mou[]                    @relation("MouAgent")
+  leads                  Lead[]
+  propertyTitipKlaim     PropertyTitip[]          @relation("PropertyTitipKlaim")
+  propertyTitipDistribusi PropertyTitipDistribution[]
+  targetBulanan          TargetAgent[]            @relation("AgentTarget")
 
   @@index([jabatan], map: "idx_agent_jabatan")
   @@index([nama_kantor], map: "idx_agent_kantor")
@@ -86,7 +91,7 @@ model Listing {
   id_property        BigInt                 @id @default(autoincrement())
   id_agent           String                 @db.VarChar(20)
   judul              String                 @db.VarChar(255)
-  slug               String                 @db.VarChar(300)
+  slug               String                 @unique(map: "listing_slug_unique") @db.VarChar(300)
   deskripsi          String?
   jenis_transaksi    jenis_transaksi_enum
   kategori           kategori_properti_enum
@@ -131,6 +136,7 @@ model Listing {
   project            Project[]
   projectSelesai     ProjectSelesai[]
   mou                Mou[]
+  leads              Lead[]
 
   @@index([kota], map: "idx_property_lokasi")
   @@index([jenis_transaksi], map: "idx_property_jenis")
@@ -329,23 +335,23 @@ model Mou {
 
 // ── Transaksi: data realisasi closing (dibuat setelah closing dikonfirmasi) ───
 model Transaksi {
-  id_transaksi             String               @id @db.VarChar(50)
-  harga_bidding            Decimal?             @db.Decimal(20, 2)
+  id_transaksi             String                @id @db.VarChar(50)
+  harga_bidding            Decimal?              @db.Decimal(20, 2)
   selisih                  BigInt?
-  kenaikan_dari_limit      Decimal?             @db.Decimal(10, 6)
+  kenaikan_dari_limit      Decimal?              @db.Decimal(10, 6)
   biaya_baliknama          BigInt?
   biaya_pengosongan        BigInt?
-  cobroke_fee              BigInt               @default(0)
-  tanggal_transaksi        DateTime             @db.Date
+  cobroke_fee              BigInt                @default(0)
+  tanggal_transaksi        DateTime              @db.Date
   rating                   Int?
-  comment                  String?              @db.VarChar(250)
+  comment                  String?               @db.VarChar(250)
   catatan                  String?
-  pendapatan_bersih_kantor BigInt               @default(0)
-  thc_agent                BigInt               @default(0)
+  pendapatan_bersih_kantor BigInt                @default(0)
+  thc_agent                BigInt                @default(0)
   status_transaksi         status_transaksi_enum @default(closing)
-  dibuat_pada              DateTime             @default(now()) @db.Timestamptz(6)
-  diperbarui_pada          DateTime             @default(now()) @db.Timestamptz(6)
-  mou                      Mou                  @relation(fields: [id_transaksi], references: [id_transaksi], map: "transaksi_mou_fk")
+  dibuat_pada              DateTime              @default(now()) @db.Timestamptz(6)
+  diperbarui_pada          DateTime              @default(now()) @db.Timestamptz(6)
+  mou                      Mou                   @relation(fields: [id_transaksi], references: [id_transaksi], map: "transaksi_mou_fk")
   detail                   DetailTransaksi[]
   invoice                  Invoice[]
 
@@ -519,12 +525,34 @@ model Acara {
   listing          Listing?          @relation(fields: [id_property], references: [id_property])
   pesertaAcara     PesertaAcara[]
   pilihanPemilu    PilihanPemilu[]
+  undangan         UndanganAcara[]
 
   @@index([id_agent], map: "idx_acara_agent")
   @@index([tipe_acara], map: "idx_acara_tipe")
   @@index([tanggal_mulai], map: "idx_acara_tanggal")
   @@index([status_acara], map: "idx_acara_status")
   @@map("acara")
+}
+
+/// Undangan acara — peserta yang di-invite ke sebuah acara di jadwal
+/// agent. Berbeda dengan PesertaAcara (yang spesifik buat Pemilu
+/// dengan semantic "memilih"), model ini murni untuk visibility
+/// kalender: acara hanya tampil di kalender agent kalau dia owner
+/// (Acara.id_agent) atau ada di tabel ini.
+model UndanganAcara {
+  id_undangan     BigInt              @id @default(autoincrement())
+  id_acara        BigInt
+  id_agent        String              @db.VarChar(20)
+  status_undangan status_undangan_enum @default(DIUNDANG)
+  diundang_pada   DateTime            @default(now()) @db.Timestamptz(6)
+  direspon_pada   DateTime?           @db.Timestamptz(6)
+  acara           Acara               @relation(fields: [id_acara], references: [id_acara], onDelete: Cascade)
+  agent           Agent               @relation(fields: [id_agent], references: [id_agent], onDelete: Cascade)
+
+  @@unique([id_acara, id_agent])
+  @@index([id_agent], map: "idx_undangan_agent")
+  @@index([id_acara], map: "idx_undangan_acara")
+  @@map("undangan_acara")
 }
 
 model PesertaAcara {
@@ -653,6 +681,161 @@ model property_tampungan {
   exported              Boolean   @default(false)
 }
 
+model Lead {
+  id_lead     BigInt           @id @default(autoincrement())
+  id_property BigInt
+  id_agent    String           @db.VarChar(20)
+  source      lead_source_enum @default(whatsapp)
+  status      lead_status_enum @default(new)
+
+  ip_address  String? @db.Inet
+  user_agent  String?
+  device_type String? @db.VarChar(20)
+  referrer    String?
+  session_id  String? @db.VarChar(64)
+
+  client_name  String? @db.VarChar(150)
+  client_phone String? @db.VarChar(20)
+  client_email String? @db.VarChar(150)
+
+  last_activity DateTime? @db.Timestamptz(6)
+
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+
+  agent   Agent   @relation(fields: [id_agent], references: [id_agent], onDelete: Cascade, map: "leads_agent_fk")
+  listing Listing @relation(fields: [id_property], references: [id_property], onDelete: Cascade, map: "leads_property_fk")
+
+  @@index([id_agent, status], map: "idx_leads_agent_status")
+  @@index([id_property], map: "idx_leads_property")
+  @@index([created_at(sort: Desc)], map: "idx_leads_created")
+  @@index([client_phone], map: "idx_leads_phone")
+  @@index([session_id], map: "idx_leads_session")
+  @@map("leads")
+}
+
+model PropertyTitip {
+  id_titip           BigInt    @id @default(autoincrement())
+
+  jenis_properti     jenis_properti_titip_enum
+  alamat_lengkap     String
+  provinsi           String    @db.VarChar(100)
+  kota               String    @db.VarChar(100)
+  kecamatan          String?   @db.VarChar(100)
+  kelurahan          String?   @db.VarChar(100)
+  latitude           Decimal?  @db.Decimal(10, 8)
+  longitude          Decimal?  @db.Decimal(11, 8)
+  estimasi_harga     Decimal?  @db.Decimal(20, 2)
+
+  pengirim_nama      String    @db.VarChar(150)
+  pengirim_phone     String    @db.VarChar(20)
+  status_kepemilikan status_kepemilikan_titip_enum
+
+  status             status_titip_enum @default(pending)
+  diklaim_oleh_agent String?   @db.VarChar(20)
+  diklaim_pada       DateTime? @db.Timestamptz(6)
+  kedaluwarsa_pada   DateTime  @default(dbgenerated("(now() + interval '48 hours')")) @db.Timestamptz(6)
+
+  ip_address         String?   @db.Inet
+  user_agent         String?
+  session_id         String?   @db.VarChar(64)
+  referrer           String?
+
+  dibuat_pada        DateTime  @default(now()) @db.Timestamptz(6)
+  diperbarui_pada    DateTime  @default(now()) @db.Timestamptz(6)
+
+  agent              Agent?    @relation("PropertyTitipKlaim", fields: [diklaim_oleh_agent], references: [id_agent], onDelete: SetNull, map: "property_titip_agent_fk")
+  distribusi         PropertyTitipDistribution[]
+
+  @@index([status], map: "idx_property_titip_status")
+  @@index([kedaluwarsa_pada], map: "idx_property_titip_expires")
+  @@index([dibuat_pada(sort: Desc)], map: "idx_property_titip_created")
+  @@index([pengirim_phone], map: "idx_property_titip_phone")
+  @@index([diklaim_oleh_agent], map: "idx_property_titip_agent")
+  @@map("property_titip")
+}
+
+model PropertyTitipDistribution {
+  id             BigInt    @id @default(autoincrement())
+  id_titip       BigInt
+  id_agent       String    @db.VarChar(20)
+  status         status_titip_distribution_enum @default(pending)
+  direspon_pada  DateTime? @db.Timestamptz(6)
+  dibuat_pada    DateTime  @default(now()) @db.Timestamptz(6)
+
+  titip          PropertyTitip @relation(fields: [id_titip], references: [id_titip], onDelete: Cascade, map: "property_titip_distribution_titip_fk")
+  agent          Agent         @relation(fields: [id_agent], references: [id_agent], onDelete: Cascade, map: "property_titip_distribution_agent_fk")
+
+  @@unique([id_titip, id_agent], map: "property_titip_distribution_unique")
+  @@index([id_agent, status], map: "idx_titip_dist_agent_status")
+  @@index([id_titip], map: "idx_titip_dist_titip")
+  @@map("property_titip_distribution")
+}
+
+/// Target komisi bulanan per agent. Diisi oleh agent sendiri atau owner.
+/// Dipakai untuk card "Target vs Realisasi" — perbandingan target tetap
+/// vs aktual yang dihitung on-the-fly dari detail_transaksi.
+model TargetAgent {
+  id_target        BigInt   @id @default(autoincrement())
+  id_agent         String   @db.VarChar(20)
+  tahun            Int
+  bulan            Int
+  target_komisi    Decimal  @db.Decimal(20, 2)
+  dibuat_oleh      String   @db.VarChar(20)
+  dibuat_pada      DateTime @default(now()) @db.Timestamptz(6)
+  diperbarui_pada  DateTime @default(now()) @db.Timestamptz(6)
+
+  agent            Agent    @relation("AgentTarget", fields: [id_agent], references: [id_agent], onDelete: Cascade, map: "target_agent_agent_fk")
+
+  @@unique([id_agent, tahun, bulan], map: "target_agent_unique")
+  @@index([id_agent, tahun(sort: Desc), bulan(sort: Desc)], map: "target_agent_agent_period_idx")
+  @@map("target_agent")
+}
+
+enum jenis_properti_titip_enum {
+  RUMAH
+  APARTEMEN
+  RUKO
+  TANAH
+  GUDANG
+  PABRIK
+  HOTEL_DAN_VILLA
+  TOKO
+}
+
+enum status_kepemilikan_titip_enum {
+  PRIBADI
+  ORANG_LAIN
+}
+
+enum status_titip_enum {
+  pending
+  terklaim
+  expired
+}
+
+enum status_titip_distribution_enum {
+  pending
+  diterima
+  ditolak
+}
+
+enum lead_status_enum {
+  new
+  contacted
+  hot
+  closing
+  cold
+}
+
+enum lead_source_enum {
+  whatsapp
+  telepon
+  survei
+  titip_jual
+  form_inquiry
+}
+
 enum peran_enum {
   USER
   AGENT
@@ -765,6 +948,17 @@ enum status_peserta_enum {
   SUDAH_MEMILIH
   DISKUALIFIKASI
   SKIP
+}
+
+/// Status undangan acara untuk model UndanganAcara. DIUNDANG = baru
+/// di-invite oleh owner, belum respond. DITERIMA/DITOLAK = sudah RSVP.
+/// Untuk MVP, frontend boleh nampilin semua status di kalender
+/// (tergantung policy), tapi schema-nya sudah siap buat fitur RSVP
+/// ke depan.
+enum status_undangan_enum {
+  DIUNDANG
+  DITERIMA
+  DITOLAK
 }
 
 enum jenis_pendanaan_enum {

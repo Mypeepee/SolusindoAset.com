@@ -4,6 +4,7 @@
 import React from "react";
 import { Icon } from "@iconify/react";
 import Image from "next/image";
+import { trackLeadClick } from "@/lib/leadTracking";
 
 interface AgentSidebarProps {
   data: any;
@@ -34,20 +35,27 @@ export default function AgentSidebar({ data, currentAgentId }: AgentSidebarProps
 
   const handleContact = (type: "wa" | "call" | "schedule") => {
     const phone = agentData.phone.replace(/^0/, "62").replace(/\D/g, "");
+    const source =
+      type === "wa" ? "whatsapp" : type === "call" ? "telepon" : "survei";
 
-    if (type === "wa") {
-      const text = encodeURIComponent(
-        `Halo ${agentData.name}, saya tertarik dengan properti: *${data.title}*. Apakah masih tersedia?`
-      );
-      window.open(`https://wa.me/${phone}?text=${text}`, "_blank");
-    } else if (type === "call") {
+    trackLeadClick({
+      id_property: data.id_property,
+      id_agent: data.owner?.id_agent || currentAgentId || agentData.id,
+      source,
+    });
+
+    if (type === "call") {
       window.open(`tel:${phone}`);
-    } else if (type === "schedule") {
-      const text = encodeURIComponent(
-        `Halo ${agentData.name}, saya ingin menjadwalkan *Survei Lokasi* untuk properti: *${data.title}*.`
-      );
-      window.open(`https://wa.me/${phone}?text=${text}`, "_blank");
+      return;
     }
+
+    const baseMessage =
+      type === "wa"
+        ? `Halo ${agentData.name}, saya tertarik dengan properti: *${data.title}*. Apakah masih tersedia?`
+        : `Halo ${agentData.name}, saya ingin menjadwalkan *Survei Lokasi* untuk properti: *${data.title}*.`;
+
+    const text = encodeURIComponent(baseMessage);
+    window.open(`https://wa.me/${phone}?text=${text}`, "_blank");
   };
 
   const avatarSrc = agentData.avatar;

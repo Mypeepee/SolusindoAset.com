@@ -8,6 +8,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import GlobalSearch from "./global-search";
+import NotificationBell from "./NotificationBell";
 
 type DashboardTopbarProps = {
   onOpenMobileSidebar?: () => void;
@@ -82,9 +83,7 @@ export default function DashboardTopbar({
 
       {/* RIGHT: notif + profile */}
       <div className="flex items-center gap-2">
-        <button className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full border border-white/10 bg-[#050608] text-slate-200 hover:bg-white/5">
-          <Icon icon="solar:bell-linear" className="h-4 w-4" />
-        </button>
+        <NotificationBell />
 
         {/* Wrapper untuk hover */}
         <div

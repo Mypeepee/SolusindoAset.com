@@ -1,9 +1,7 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { AgentDashboardHeader } from "./components/agent/AgentDashboardHeader";
 import { PremiumAgentDashboard } from "./components/agent/premium/PremiumAgentDashboard";
-import { AgentCalendar } from "./components/agent/AgentCalendar";
 import { Icon } from "@iconify/react";
 
 export default function DashboardAgentPage() {
@@ -34,10 +32,8 @@ export default function DashboardAgentPage() {
   }
 
   return (
-    <div className="px-5 py-6 space-y-5">
-      <AgentDashboardHeader userName={session?.user?.name} />
+    <div className="px-5 py-6 overflow-x-hidden">
       <PremiumAgentDashboard />
-      <AgentCalendar />
     </div>
   );
 }

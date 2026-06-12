@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import ClosingTabs from "./ClosingTabs.client";
+import DatePickerModal from "./DatePickerModal";
 import type { Listing, Agent, TeamLeader } from "../page";
 import Money from "./ui/Money";
 import { Icon } from "@iconify/react";
@@ -141,10 +142,48 @@ export default function ClosingShell({
   }
 
   const priceMain = (listing as any).nilai_limit_lelang ?? listing.harga;
-  const tanggalLelang = (listing as any).tanggal_lelang
+
+  // Tanggal lelang — editable, dengan state lokal supaya bisa optimistic-update
+  const [tanggalLelangRaw, setTanggalLelangRaw] = useState<string | null>(
+    (listing as any).tanggal_lelang ?? null
+  );
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [savingDate, setSavingDate] = useState(false);
+  const [dateError, setDateError] = useState<string | null>(null);
+
+  const tanggalLelang = tanggalLelangRaw
     ? new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" })
-        .format(new Date((listing as any).tanggal_lelang))
+        .format(new Date(tanggalLelangRaw))
     : null;
+
+  async function handleSaveTanggalLelang(date: Date) {
+    setSavingDate(true);
+    setDateError(null);
+    const previous = tanggalLelangRaw;
+    // Optimistic update
+    const iso = date.toISOString();
+    setTanggalLelangRaw(iso);
+    try {
+      const res = await fetch(
+        `/api/closing/listing/${encodeURIComponent(String((listing as any).id_property))}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tanggal_lelang: iso }),
+        }
+      );
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.message || `HTTP ${res.status}`);
+      }
+    } catch (e: any) {
+      // Rollback on failure
+      setTanggalLelangRaw(previous);
+      setDateError(e?.message || "Gagal menyimpan tanggal");
+    } finally {
+      setSavingDate(false);
+    }
+  }
 
   const imgUrl =
     safe((listing as any).imageUrl) ||
@@ -517,14 +556,39 @@ export default function ClosingShell({
                     </div>
 
                     <div className="mt-4 grid grid-cols-2 gap-2">
-                      <div className="rounded-2xl border border-white/10 bg-zinc-950/20 p-3">
-                        <div className="text-[11px] text-zinc-300/70">
-                          Tanggal Lelang
+                      <button
+                        type="button"
+                        onClick={() => setShowDatePicker(true)}
+                        aria-label="Ubah tanggal lelang"
+                        className="group relative overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/20 p-3 text-left transition-all duration-300 hover:-translate-y-[1px] hover:border-emerald-400/30 hover:bg-emerald-500/[0.06] hover:shadow-[0_8px_24px_-12px_rgba(16,185,129,0.5)]"
+                      >
+                        {/* Subtle hover shine */}
+                        <span
+                          aria-hidden="true"
+                          className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 -skew-x-12 bg-gradient-to-r from-transparent via-emerald-400/20 to-transparent opacity-0 transition-all duration-700 ease-out group-hover:left-[120%] group-hover:opacity-100"
+                        />
+                        <div className="relative flex items-center justify-between gap-2">
+                          <div className="text-[11px] text-zinc-300/70">Tanggal Lelang</div>
+                          <Icon
+                            icon={
+                              savingDate
+                                ? "solar:refresh-bold"
+                                : "solar:pen-2-bold-duotone"
+                            }
+                            className={`text-[12px] text-emerald-300/60 transition group-hover:text-emerald-200 ${
+                              savingDate ? "animate-spin" : ""
+                            }`}
+                          />
                         </div>
-                        <div className="mt-1 truncate text-sm font-semibold text-white">
-                          {tanggalLelang ?? "-"}
+                        <div className="relative mt-1 truncate text-sm font-semibold text-white">
+                          {tanggalLelang ?? "Pilih tanggal"}
                         </div>
-                      </div>
+                        {dateError && (
+                          <div className="relative mt-1 truncate text-[10px] font-medium text-rose-300">
+                            {dateError}
+                          </div>
+                        )}
+                      </button>
 
                       <div className="rounded-2xl border border-white/10 bg-zinc-950/20 p-3">
                         <div className="text-[11px] text-zinc-300/70">Lokasi</div>
@@ -554,6 +618,16 @@ export default function ClosingShell({
           />
         </div>
       </div>
+
+      {/* ── Date Picker Modal ── */}
+      <DatePickerModal
+        open={showDatePicker}
+        initial={tanggalLelangRaw ? new Date(tanggalLelangRaw) : null}
+        title="Ubah Tanggal Lelang"
+        syncLabels={["Tanggal Lelang", "MOU", "Transaksi"]}
+        onClose={() => setShowDatePicker(false)}
+        onSelect={handleSaveTanggalLelang}
+      />
 
       {/* ── Riwayat Lelang Modal ── */}
       {showRiwayat &&

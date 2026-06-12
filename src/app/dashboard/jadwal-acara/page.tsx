@@ -1,200 +1,41 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import Kalendar from "./components/kalendar";
-import Todo from "./components/todo";
-import ModalAcara from "./components/modal-acara";
-import { Icon } from "@iconify/react";
+import { AgentCalendar } from "@/app/dashboard/components/agent/AgentCalendar";
+import { UpcomingEventsCard } from "@/app/dashboard/components/agent/premium/UpcomingEventsCard";
 
-interface EventData {
-  id_acara: string;
-  judul_acara: string;
-  deskripsi?: string;
-  tanggal_mulai: string;
-  tanggal_selesai: string;
-  waktu_mulai?: string;
-  waktu_selesai?: string;
-  tipe_acara: string;
-  lokasi?: string;
-  status_acara: string;
-  id_property?: string;
-}
+/* ────────────────────────────────────────────────────────────────────
+   Jadwal & Acara — dedicated page.
+   Mirrors the dashboard's ROW 2 layout 1:1:
+   • Calendar (AgentCalendar, compact) on the left (2/3 width).
+   • Agenda 7 Hari (UpcomingEventsCard) on the right (1/3 width),
+     locked to the calendar's height via the absolute-positioning trick
+     so the right card never pushes the row taller than the calendar.
 
-type ModalMode = "create" | "edit" | "view";
+   All state, fetching, modal, and cross-component sync are handled
+   inside AgentCalendar + UpcomingEventsCard (they listen to the
+   `acara:changed` window event), so this page is a thin shell.
+   ──────────────────────────────────────────────────────────────────── */
 
 export default function JadwalAcaraPage() {
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [selectedEvent, setSelectedEvent] = useState<(EventData & { canEdit?: boolean }) | null>(null);
-  const [events, setEvents] = useState<EventData[]>([]);
-  const [showModal, setShowModal] = useState(false);
-  const [modalMode, setModalMode] = useState<ModalMode>("create");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Fetch events from database
-  const fetchEvents = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const year = currentDate.getFullYear();
-      const month = currentDate.getMonth() + 1;
-      
-      const response = await fetch(
-        `/api/dashboard/acara?year=${year}&month=${month}`
-      );
-      
-      if (!response.ok) {
-        throw new Error("Failed to fetch events");
-      }
-      
-      const data = await response.json();
-      console.log("Fetched events:", data);
-      setEvents(data);
-    } catch (error) {
-      console.error("Error fetching events:", error);
-      setError("Gagal memuat data acara");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fetch events ketika bulan berubah
-  useEffect(() => {
-    fetchEvents();
-  }, [currentDate]);
-
-  const prevMonth = () => {
-    setCurrentDate(
-      new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1)
-    );
-  };
-
-  const nextMonth = () => {
-    setCurrentDate(
-      new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1)
-    );
-  };
-
-  const goToToday = () => {
-    const today = new Date();
-    setCurrentDate(today);
-    setSelectedDate(today);
-  };
-
-  const handleModalSuccess = () => {
-    fetchEvents(); // Refresh data
-    handleCloseModal();
-  };
-
-  const handleCloseModal = () => {
-    setShowModal(false);
-    setSelectedDate(null);
-    setSelectedEvent(null);
-    setModalMode("create");
-  };
-
-  // Handle klik tanggal di kalendar → selalu create mode
-  const handleDateClick = (date: Date) => {
-    console.log("Date clicked:", date);
-    setSelectedDate(date);
-    setSelectedEvent(null);
-    setModalMode("create");
-    setShowModal(true);
-  };
-
-  // Handle klik event di todo list
-  // sekarang menerima event + canEdit dari Todo
-  const handleEventClick = (event: EventData & { canEdit: boolean }) => {
-    console.log("Event clicked:", event);
-    setSelectedEvent(event);
-    setSelectedDate(null);
-    setModalMode(event.canEdit ? "edit" : "view");
-    setShowModal(true);
-  };
-
-  // Handle tombol tambah acara → create mode
-  const handleAddEvent = () => {
-    const today = new Date();
-    setSelectedDate(today);
-    setSelectedEvent(null);
-    setModalMode("create");
-    setShowModal(true);
-  };
-
   return (
-    <div className="min-h-screen bg-[#040608] p-4 md:p-6">
-      {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1">
-              Jadwal & Acara
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-400">
-              Kelola jadwal meeting, site visit, dan event PEMILU
-            </p>
-          </div>
+    <div className="min-h-screen overflow-x-hidden bg-[#040608] p-4 md:p-6">
+      <div className="grid gap-3 sm:gap-4 lg:grid-cols-3 lg:items-stretch">
+        {/* Calendar — 2/3 width on lg+, full width below */}
+        <div className="min-w-0 lg:col-span-2">
+          <AgentCalendar compact />
+        </div>
 
-          {/* Stats Badge */}
-          <div className="hidden sm:flex items-center gap-2">
-            <div className="px-4 py-2 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30">
-              <div className="flex items-center gap-2">
-                {loading ? (
-                  <Icon icon="solar:settings-linear" className="text-emerald-400 animate-spin" />
-                ) : (
-                  <Icon icon="solar:calendar-mark-bold" className="text-emerald-400" />
-                )}
-                <span className="text-xs font-bold text-emerald-300">
-                  {loading ? "Memuat..." : `${events.length} Acara`}
-                </span>
-              </div>
+        {/* Agenda 7 Hari — 1/3 width on lg+, stretched to calendar height.
+           On mobile/tablet, the absolute layer is dropped so the card
+           simply stacks below the calendar at its natural height. */}
+        <div className="relative min-w-0 lg:col-span-1">
+          <div className="flex flex-col gap-3 sm:gap-4 lg:absolute lg:inset-0">
+            <div className="min-w-0 lg:h-full">
+              <UpcomingEventsCard />
             </div>
           </div>
         </div>
       </div>
-
-      {/* Error Message */}
-      {error && (
-        <div className="mb-4 p-4 rounded-xl bg-red-500/10 border border-red-500/30">
-          <div className="flex items-center gap-2">
-            <Icon icon="solar:danger-circle-bold" className="text-red-400" />
-            <span className="text-sm text-red-300">{error}</span>
-          </div>
-        </div>
-      )}
-
-
-      {/* Main Layout: Calendar (3/4) + Todo List (1/4) */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6">
-        {/* Calendar Section - 3/4 width on large screens */}
-        <div className="lg:col-span-3">
-          <Kalendar
-            currentDate={currentDate}
-            events={events}
-            onDateClick={handleDateClick}
-            onPrevMonth={prevMonth}
-            onNextMonth={nextMonth}
-            onToday={goToToday}
-            onAddEvent={handleAddEvent}
-          />
-        </div>
-
-        {/* Todo List Section - 1/4 width on large screens */}
-        <div className="lg:col-span-1">
-          <Todo events={events} onEventClick={handleEventClick} />
-        </div>
-      </div>
-
-      {/* Modal Acara */}
-      <ModalAcara
-        open={showModal}
-        onClose={handleCloseModal}
-        selectedDate={selectedDate}
-        selectedEvent={selectedEvent || undefined}
-        onSuccess={handleModalSuccess}
-        mode={modalMode} // ← ini kunci: create/edit/view
-      />
     </div>
   );
 }

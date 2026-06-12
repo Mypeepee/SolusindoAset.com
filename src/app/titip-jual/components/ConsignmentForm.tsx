@@ -106,6 +106,7 @@ const ConsignmentForm: React.FC = () => {
   const [data, setData] = useState<FormState>(initial);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
 
   const setField = <K extends keyof FormState>(k: K, v: FormState[K]) =>
@@ -130,17 +131,45 @@ const ConsignmentForm: React.FC = () => {
   async function handleSubmit() {
     if (!canSubmit) return;
     setSubmitting(true);
-    // TODO: hook ke /api/titip-jual
-    await new Promise((r) => setTimeout(r, 1000));
-    setSubmitting(false);
-    setDone(true);
-    // Smooth scroll to success state
-    requestAnimationFrame(() => {
-      if (!cardRef.current) return;
-      const top =
-        cardRef.current.getBoundingClientRect().top + window.scrollY - 96;
-      window.scrollTo({ top, behavior: "smooth" });
-    });
+    setSubmitError(null);
+    try {
+      const res = await fetch("/api/titip-jual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jenis_properti: data.propertyType,
+          alamat_lengkap: data.address,
+          provinsi: data.provinsi,
+          kota: data.kota,
+          kecamatan: data.kecamatan || null,
+          kelurahan: data.kelurahan || null,
+          latitude: data.latitude,
+          longitude: data.longitude,
+          estimasi_harga: data.estimatedPrice || null,
+          pengirim_nama: data.ownerName,
+          pengirim_phone: data.ownerPhone,
+          status_kepemilikan: data.ownershipStatus,
+          referrer: typeof document !== "undefined" ? document.referrer : "",
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json?.error || `HTTP ${res.status}`);
+      }
+      setDone(true);
+      requestAnimationFrame(() => {
+        if (!cardRef.current) return;
+        const top =
+          cardRef.current.getBoundingClientRect().top + window.scrollY - 96;
+        window.scrollTo({ top, behavior: "smooth" });
+      });
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : "Gagal mengirim. Coba lagi.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -521,12 +550,22 @@ const ConsignmentForm: React.FC = () => {
                           )}
                         </button>
 
-                        {!canSubmit && !submitting && (
+                        {!canSubmit && !submitting && !submitError && (
                           <p className="mt-3 text-center text-[11px] text-white/40">
                             Lengkapi field bertanda{" "}
                             <span className="text-emerald-300">*</span> untuk
                             mengirim.
                           </p>
+                        )}
+
+                        {submitError && (
+                          <div className="mt-3 rounded-xl border border-red-400/30 bg-red-400/[0.06] p-3 text-[12px] text-red-200 flex items-start gap-2">
+                            <Icon
+                              icon="solar:danger-triangle-bold-duotone"
+                              className="text-red-300 text-base shrink-0 mt-0.5"
+                            />
+                            <span>{submitError}</span>
+                          </div>
                         )}
                       </div>
                     </div>

@@ -6,10 +6,20 @@ export type AgentKpiCardsData = {
   totalPendapatan: number;
   totalTransaksi: number;
   totalListing: number;
-  leadBaru: number;
+  /** All-time count of rows di tabel `leads` untuk agent ini */
+  totalLeads: number;
+  /** YoY delta % (tahun ini vs tahun lalu, sumber detail_transaksi) */
   pendapatanDelta: number | null;
+  pendapatanTahunIni: number;
+  pendapatanTahunLalu: number;
   transaksiBulanIni: number;
   transaksiBulanLalu: number;
+  /** Jumlah transaksi sepanjang tahun ini (YTD) — konteks achievement, bukan untuk dibandingkan */
+  transaksiTahunIni: number;
+  /** Lead MoM — bucket pakai kolom updated_at */
+  leadBulanIni: number;
+  leadBulanLalu: number;
+  leadDelta: number | null;
 };
 
 type State = {

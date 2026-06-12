@@ -4,6 +4,21 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Icon } from "@iconify/react";
 import { createPortal } from "react-dom";
+import { toast } from "sonner";
+import { PesertaPicker, type PesertaOption } from "./PesertaPicker";
+import { DateInput } from "./DateInput";
+import { TimeInput } from "./TimeInput";
+
+interface UndanganApi {
+  id_undangan?: string;
+  id_agent: string;
+  status_undangan?: string;
+  agent?: {
+    id_agent: string;
+    foto_profil_url?: string | null;
+    pengguna?: { nama_lengkap?: string };
+  };
+}
 
 interface EventData {
   id_acara: string;
@@ -16,6 +31,10 @@ interface EventData {
   status_acara: string;
   id_property?: string;
   durasi_pilih?: number;
+  /** Daftar undangan dari API GET — di-hydrate ke PesertaPicker kalau edit/view. */
+  undangan?: UndanganApi[];
+  /** Hint dari API untuk gate edit/delete. */
+  _isOwner?: boolean;
 }
 
 // 🔥 tambah type mode
@@ -80,6 +99,10 @@ export default function ModalAcara({
     durasi_pilih: 60,
     id_property: "",
   });
+  // Daftar peserta yang diundang ke acara. State terpisah dari formData
+  // karena strukturnya objek (PesertaOption[]) bukan primitive — biar
+  // tidak ngerusak handler `handleChange` yang generik.
+  const [peserta, setPeserta] = useState<PesertaOption[]>([]);
 
   // mode final (kalau prop mode tidak dikirim, fallback ke create/edit)
   const isEditMode = !!selectedEvent && (mode ?? "edit") === "edit";
@@ -111,6 +134,20 @@ export default function ModalAcara({
         durasi_pilih: selectedEvent.durasi_pilih || 60,
         id_property: selectedEvent.id_property || "",
       });
+      // Hydrate daftar peserta dari relasi `undangan` yang sudah di-include
+      // di endpoint /api/dashboard/acara GET. Field foto_profil_url +
+      // nama_kantor + email belum ada di relasi minimal — di-default
+      // string kosong supaya picker tetap nampilin chip dengan nama.
+      const hydrated: PesertaOption[] =
+        selectedEvent.undangan?.map((u) => ({
+          id_agent: u.id_agent,
+          nama_lengkap: u.agent?.pengguna?.nama_lengkap ?? u.id_agent,
+          email: null,
+          nama_kantor: "",
+          kota_area: "",
+          foto_profil_url: u.agent?.foto_profil_url ?? null,
+        })) ?? [];
+      setPeserta(hydrated);
     } else if (!selectedEvent && open && !selectedDate) {
       resetForm();
     }
@@ -129,6 +166,7 @@ export default function ModalAcara({
       durasi_pilih: 60,
       id_property: "",
     });
+    setPeserta([]);
     setError(null);
     setDateTimeError(null);
   };
@@ -227,6 +265,10 @@ export default function ModalAcara({
         durasi_pilih:
           formData.tipe_acara === "PEMILU" ? formData.durasi_pilih || 60 : null,
         id_property: formData.id_property ? Number(formData.id_property) : null,
+        // Peserta yang diundang — array of id_agent. Backend handle
+        // dedupe + filter self. Untuk edit, ini akan replace seluruh
+        // daftar undangan (intentional: simpler UX, RSVP belum dipakai).
+        peserta_ids: peserta.map((p) => p.id_agent),
       };
 
       const response = await fetch("/api/dashboard/acara", {
@@ -242,13 +284,53 @@ export default function ModalAcara({
 
       await response.json();
 
+      const isEdit = !!selectedEvent;
+      const titleSnapshot = formData.judul_acara.trim();
+      const dateSnapshot = (() => {
+        try {
+          return new Date(tanggal_mulai_full).toLocaleString("id-ID", {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+        } catch {
+          return formData.tanggal_mulai;
+        }
+      })();
+
       resetForm();
       onSuccess?.();
       onClose();
-      alert(selectedEvent ? "Acara berhasil diperbarui!" : "Acara berhasil ditambahkan!");
+
+      // Notify any subscribers (e.g. UpcomingEventsCard on the dashboard)
+      // that the acara dataset changed, so they can refetch without a page reload.
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("acara:changed", {
+            detail: { mode: isEdit ? "edit" : "create" },
+          }),
+        );
+      }
+
+      // Premium in-app toast (sonner) — non-blocking, auto-dismiss.
+      toast.success(
+        isEdit ? "Acara berhasil diperbarui" : "Acara berhasil ditambahkan",
+        {
+          description: titleSnapshot
+            ? `${titleSnapshot} • ${dateSnapshot}`
+            : dateSnapshot,
+          duration: 3500,
+        },
+      );
     } catch (err: any) {
       console.error("Error submit acara:", err);
       setError(err.message || "Gagal menyimpan acara. Silakan coba lagi.");
+      toast.error("Gagal menyimpan acara", {
+        description: err?.message ?? "Coba periksa koneksi atau form kamu.",
+        duration: 4500,
+      });
     } finally {
       setLoading(false);
     }
@@ -363,34 +445,52 @@ export default function ModalAcara({
                 className="custom-scrollbar max-h-[calc(90vh-180px)] overflow-y-auto px-6 py-4"
               >
                 <div className="space-y-5">
-                  {/* Judul */}
+                  {/* Judul — input dengan icon pencil di kiri */}
                   <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-300">
-                      Judul Acara <span className="text-red-400">*</span>
+                    <label className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-300">
+                      <Icon
+                        icon="solar:pen-new-square-bold-duotone"
+                        className="text-base text-emerald-400/80"
+                      />
+                      Judul Acara
+                      <span className="text-red-400">*</span>
                     </label>
-                    <input
-                      type="text"
-                      name="judul_acara"
-                      value={formData.judul_acara}
-                      onChange={handleChange}
-                      readOnly={isViewMode}
-                      className={`w-full rounded-xl border px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:outline-none transition-all ${
-                        isViewMode
-                          ? "border-white/10 bg-white/5 cursor-default"
-                          : "border-white/10 bg-white/5 focus:border-emerald-500/60 focus:bg-white/10"
-                      }`}
-                      placeholder={
-                        isViewMode
-                          ? ""
-                          : "Contoh: Event Pemilu Unit Cluster Sakura"
-                      }
-                    />
+                    <div className="relative">
+                      <Icon
+                        icon="solar:document-text-bold-duotone"
+                        className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${
+                          isViewMode ? "text-slate-500" : "text-slate-400"
+                        }`}
+                      />
+                      <input
+                        type="text"
+                        name="judul_acara"
+                        value={formData.judul_acara}
+                        onChange={handleChange}
+                        readOnly={isViewMode}
+                        className={`w-full rounded-xl border py-3 pl-10 pr-4 text-sm text-white placeholder:text-slate-500 focus:outline-none transition-all ${
+                          isViewMode
+                            ? "border-white/10 bg-white/5 cursor-default"
+                            : "border-white/10 bg-white/5 focus:border-emerald-500/60 focus:bg-white/10"
+                        }`}
+                        placeholder={
+                          isViewMode
+                            ? ""
+                            : "Contoh: Event Pemilu Unit Cluster Sakura"
+                        }
+                      />
+                    </div>
                   </div>
 
                   {/* Tipe */}
                   <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-300">
-                      Tipe Acara <span className="text-red-400">*</span>
+                    <label className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-300">
+                      <Icon
+                        icon="solar:widget-add-bold-duotone"
+                        className="text-base text-emerald-400/80"
+                      />
+                      Tipe Acara
+                      <span className="text-red-400">*</span>
                     </label>
                     {isViewMode ? (
                       <div className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
@@ -461,84 +561,101 @@ export default function ModalAcara({
                     )}
                   </div>
 
-                  {/* Tanggal + Jam */}
+                  {/* Tanggal + Jam — pakai custom DateInput + TimeInput
+                      (portal + glass UI, modern futuristik). Pickers
+                      ini gantiin native <input type="date|time"> yang
+                      tampilannya inconsistent antar OS/browser dan ga
+                      bisa di-style dengan teme dashboard. */}
                   <div className="relative">
                     <div className="grid gap-4 sm:grid-cols-2">
-                      <div>
-                        <label className="mb-2 block text-sm font-semibold text-slate-300">
-                          Tanggal Mulai <span className="text-red-400">*</span>
-                        </label>
-                        <input
-                          type="date"
-                          name="tanggal_mulai"
-                          value={formData.tanggal_mulai}
-                          onChange={handleChange}
-                          readOnly={isViewMode}
-                          disabled={isViewMode}
-                          className={`w-full rounded-xl border bg-white/5 px-4 py-3 text-sm text-white focus:outline-none transition-all ${
-                            isViewMode
-                              ? "border-white/10 cursor-default"
-                              : hasDateTimeError
-                              ? "border-red-500/60 focus:border-red-500"
-                              : "border-white/10 focus:border-emerald-500/60 focus:bg-white/10"
-                          }`}
-                        />
-                        <label className="mt-3 mb-2 block text-xs font-semibold text-slate-400">
-                          Jam Mulai
-                        </label>
-                        <input
-                          type="time"
-                          name="jam_mulai"
-                          value={formData.jam_mulai}
-                          onChange={handleChange}
-                          readOnly={isViewMode}
-                          disabled={isViewMode}
-                          className={`w-full rounded-xl border bg-white/5 px-4 py-2.5 text-sm text-white focus:outline-none transition-all ${
-                            isViewMode
-                              ? "border-white/10 cursor-default"
-                              : hasDateTimeError
-                              ? "border-red-500/60 focus:border-red-500"
-                              : "border-white/10 focus:border-emerald-500/60 focus:bg-white/10"
-                          }`}
-                        />
+                      <div className="space-y-3">
+                        <div>
+                          <label className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-300">
+                            <Icon
+                              icon="solar:calendar-add-bold-duotone"
+                              className="text-base text-emerald-400/80"
+                            />
+                            Tanggal Mulai
+                            <span className="text-red-400">*</span>
+                          </label>
+                          <DateInput
+                            value={formData.tanggal_mulai}
+                            onChange={(v) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                tanggal_mulai: v,
+                                // Auto-sync tanggal selesai kalau belum
+                                // di-set atau lebih kecil dari mulai —
+                                // mengurangi friksi user.
+                                tanggal_selesai:
+                                  prev.tanggal_selesai &&
+                                  prev.tanggal_selesai >= v
+                                    ? prev.tanggal_selesai
+                                    : v,
+                              }))
+                            }
+                            readOnly={isViewMode}
+                            error={hasDateTimeError}
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+                            <Icon
+                              icon="solar:clock-square-bold-duotone"
+                              className="text-sm text-emerald-400/70"
+                            />
+                            Jam Mulai
+                          </label>
+                          <TimeInput
+                            value={formData.jam_mulai}
+                            onChange={(v) =>
+                              setFormData((prev) => ({ ...prev, jam_mulai: v }))
+                            }
+                            readOnly={isViewMode}
+                            error={hasDateTimeError}
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <label className="mb-2 block text-sm font-semibold text-slate-300">
-                          Tanggal Selesai <span className="text-red-400">*</span>
-                        </label>
-                        <input
-                          type="date"
-                          name="tanggal_selesai"
-                          value={formData.tanggal_selesai}
-                          onChange={handleChange}
-                          readOnly={isViewMode}
-                          disabled={isViewMode}
-                          className={`w-full rounded-xl border bg-white/5 px-4 py-3 text-sm text-white focus:outline-none transition-all ${
-                            isViewMode
-                              ? "border-white/10 cursor-default"
-                              : hasDateTimeError
-                              ? "border-red-500/60 focus:border-red-500"
-                              : "border-white/10 focus:border-emerald-500/60 focus:bg-white/10"
-                          }`}
-                        />
-                        <label className="mt-3 mb-2 block text-xs font-semibold text-slate-400">
-                          Jam Selesai
-                        </label>
-                        <input
-                          type="time"
-                          name="jam_selesai"
-                          value={formData.jam_selesai}
-                          onChange={handleChange}
-                          readOnly={isViewMode}
-                          disabled={isViewMode}
-                          className={`w-full rounded-xl border bg-white/5 px-4 py-2.5 text-sm text-white focus:outline-none transition-all ${
-                            isViewMode
-                              ? "border-white/10 cursor-default"
-                              : hasDateTimeError
-                              ? "border-red-500/60 focus:border-red-500"
-                              : "border-white/10 focus:border-emerald-500/60 focus:bg-white/10"
-                          }`}
-                        />
+                      <div className="space-y-3">
+                        <div>
+                          <label className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-300">
+                            <Icon
+                              icon="solar:calendar-mark-bold-duotone"
+                              className="text-base text-emerald-400/80"
+                            />
+                            Tanggal Selesai
+                            <span className="text-red-400">*</span>
+                          </label>
+                          <DateInput
+                            value={formData.tanggal_selesai}
+                            onChange={(v) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                tanggal_selesai: v,
+                              }))
+                            }
+                            readOnly={isViewMode}
+                            minDate={formData.tanggal_mulai || undefined}
+                            error={hasDateTimeError}
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+                            <Icon
+                              icon="solar:clock-square-bold-duotone"
+                              className="text-sm text-emerald-400/70"
+                            />
+                            Jam Selesai
+                          </label>
+                          <TimeInput
+                            value={formData.jam_selesai}
+                            onChange={(v) =>
+                              setFormData((prev) => ({ ...prev, jam_selesai: v }))
+                            }
+                            readOnly={isViewMode}
+                            error={hasDateTimeError}
+                          />
+                        </div>
                       </div>
                     </div>
 
@@ -566,48 +683,96 @@ export default function ModalAcara({
                     )}
                   </div>
 
-                  {/* Lokasi */}
+                  {/* Lokasi — input dengan icon map pin di kiri */}
                   <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-300">
+                    <label className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-300">
+                      <Icon
+                        icon="solar:map-point-bold-duotone"
+                        className="text-base text-emerald-400/80"
+                      />
                       Lokasi
                     </label>
-                    <input
-                      type="text"
-                      name="lokasi"
-                      value={formData.lokasi}
-                      onChange={handleChange}
+                    <div className="relative">
+                      <Icon
+                        icon="solar:map-arrow-square-bold-duotone"
+                        className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base ${
+                          isViewMode ? "text-slate-500" : "text-slate-400"
+                        }`}
+                      />
+                      <input
+                        type="text"
+                        name="lokasi"
+                        value={formData.lokasi}
+                        onChange={handleChange}
+                        readOnly={isViewMode}
+                        className={`w-full rounded-xl border py-3 pl-10 pr-4 text-sm text-white placeholder:text-slate-500 focus:outline-none transition-all ${
+                          isViewMode
+                            ? "border-white/10 bg-white/5 cursor-default"
+                            : "border-white/10 bg-white/5 focus:border-emerald-500/60 focus:bg-white/10"
+                        }`}
+                        placeholder={
+                          isViewMode ? "" : "Contoh: Kantor Cabang Surabaya"
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  {/* Undang Peserta — Multi-select chip dengan portal
+                      dropdown. Acara hanya muncul di kalender owner +
+                      peserta yang diundang (filter di API GET). */}
+                  <div>
+                    <label className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-300">
+                      <Icon
+                        icon="solar:users-group-rounded-bold-duotone"
+                        className="text-base text-emerald-400/80"
+                      />
+                      Undang Peserta
+                      {!isViewMode && (
+                        <span className="text-xs font-normal text-slate-500">
+                          (opsional)
+                        </span>
+                      )}
+                    </label>
+                    <PesertaPicker
+                      value={peserta}
+                      onChange={setPeserta}
                       readOnly={isViewMode}
-                      className={`w-full rounded-xl border px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:outline-none transition-all ${
-                        isViewMode
-                          ? "border-white/10 bg-white/5 cursor-default"
-                          : "border-white/10 bg-white/5 focus:border-emerald-500/60 focus:bg-white/10"
-                      }`}
-                      placeholder={
-                        isViewMode ? "" : "Contoh: Kantor Cabang Surabaya"
-                      }
+                      placeholder="Ketik nama atau ID agent…"
                     />
                   </div>
 
-                  {/* Deskripsi */}
+                  {/* Deskripsi — textarea dengan icon catatan di kiri */}
                   <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-300">
+                    <label className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-300">
+                      <Icon
+                        icon="solar:notebook-bold-duotone"
+                        className="text-base text-emerald-400/80"
+                      />
                       Deskripsi
                     </label>
-                    <textarea
-                      name="deskripsi"
-                      value={formData.deskripsi}
-                      onChange={handleChange}
-                      rows={4}
-                      readOnly={isViewMode}
-                      className={`w-full resize-none rounded-xl border px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:outline-none transition-all ${
-                        isViewMode
-                          ? "border-white/10 bg-white/5 cursor-default"
-                          : "border-white/10 bg-white/5 focus:border-emerald-500/60 focus:bg-white/10"
-                      }`}
-                      placeholder={
-                        isViewMode ? "" : "Detail atau catatan penting acara..."
-                      }
-                    />
+                    <div className="relative">
+                      <Icon
+                        icon="solar:notes-bold-duotone"
+                        className={`pointer-events-none absolute left-3.5 top-3.5 text-base ${
+                          isViewMode ? "text-slate-500" : "text-slate-400"
+                        }`}
+                      />
+                      <textarea
+                        name="deskripsi"
+                        value={formData.deskripsi}
+                        onChange={handleChange}
+                        rows={4}
+                        readOnly={isViewMode}
+                        className={`w-full resize-none rounded-xl border py-3 pl-10 pr-4 text-sm text-white placeholder:text-slate-500 focus:outline-none transition-all ${
+                          isViewMode
+                            ? "border-white/10 bg-white/5 cursor-default"
+                            : "border-white/10 bg-white/5 focus:border-emerald-500/60 focus:bg-white/10"
+                        }`}
+                        placeholder={
+                          isViewMode ? "" : "Detail atau catatan penting acara..."
+                        }
+                      />
+                    </div>
                   </div>
 
                   {/* Durasi pilih (PEMILU) */}
