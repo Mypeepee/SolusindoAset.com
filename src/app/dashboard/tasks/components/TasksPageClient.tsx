@@ -1205,7 +1205,96 @@ export function TasksPageClient() {
     }));
 
   useEffect(() => {
-    setTasks(buildDailyTasks(markDone, incrTask, () => setShowCatalog(true)));
+    // Fetch auto-generated tasks dari leads, acara, dan listing
+    fetch("/api/dashboard/tugas/auto")
+      .then((r) => r.json())
+      .then(({ tasks: raw }) => {
+        if (!Array.isArray(raw)) return;
+        const mapped: DailyTask[] = raw.map((t: any) => {
+          const actions: ActionDef[] = [];
+
+          if (t.source === "titip") {
+            // Titip jual — aksi per tahap playbook
+            if (t.leadPhone) {
+              const waMsg = t.titipStep === 1
+                ? `Halo Bapak/Ibu ${t.leadName}, saya dari Solusindo Aset. Saya sudah terima titip jual properti Anda. Boleh saya minta waktu 10 menit untuk ngobrol singkat? 🏡`
+                : undefined;
+              actions.push({
+                label: "WA Pemilik",
+                icon: "logos:whatsapp-icon",
+                variant: "green",
+                onClick: () => openWA(t.leadPhone, t.leadName ?? "Pemilik", waMsg),
+              });
+            }
+            if (t.titipStep === 3) {
+              actions.push({
+                label: "Upload Listing",
+                icon: "solar:upload-minimalistic-bold-duotone",
+                variant: "violet",
+                onClick: () => { window.location.href = "/dashboard/listings"; },
+              });
+            }
+            actions.push({
+              label: "Buka Panduan",
+              icon: "solar:book-2-bold-duotone",
+              variant: "amber",
+              onClick: () => { window.location.href = "/"; },
+            });
+          } else {
+            if (t.leadPhone) {
+              actions.push({
+                label: "WA Sekarang",
+                icon: "logos:whatsapp-icon",
+                variant: "green",
+                onClick: () => openWA(t.leadPhone, t.leadName ?? "Klien"),
+              });
+              actions.push({
+                label: "Telepon",
+                icon: "solar:phone-bold",
+                variant: "sky",
+                onClick: () => window.open(`tel:${t.leadPhone}`),
+              });
+            }
+            if (t.source === "listing") {
+              actions.push({
+                label: "Lihat Listing",
+                icon: "solar:star-bold-duotone",
+                variant: "amber",
+                onClick: () => setShowCatalog(true),
+              });
+            }
+          }
+
+          actions.push({
+            label: "Tandai Selesai",
+            icon: "solar:check-circle-bold",
+            variant: "primary",
+            onClick: () => markDone(t.id),
+          });
+
+          return {
+            id: t.id,
+            category: t.category as Category,
+            title: t.title,
+            why: t.why,
+            done: false,
+            overdue: t.overdue ?? false,
+            leadName: t.leadName ?? undefined,
+            leadTemp: t.leadTemp ?? undefined,
+            leadPhone: t.leadPhone ?? undefined,
+            pipelineStage: t.pipelineStage ?? undefined,
+            commissionValue: t.commissionValue ?? undefined,
+            propertyTitle: t.propertyTitle ?? undefined,
+            scheduledAt: t.scheduledAt ?? undefined,
+            actions,
+          };
+        });
+        setTasks(mapped);
+      })
+      .catch(() => {
+        // Fallback ke data statis jika fetch gagal
+        setTasks(buildDailyTasks(markDone, incrTask, () => setShowCatalog(true)));
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

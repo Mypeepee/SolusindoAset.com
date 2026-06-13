@@ -365,7 +365,17 @@ function TambahPropertyContent() {
         router.push(detailUrl);
       } else {
         toast.success('Property berhasil ditambahkan! 🎉\n+10 poin untuk Anda!');
-        router.push(`/listing/${result.data.slug}`);
+
+        const created = result.data as {
+          id_property: number | string;
+          slug: string;
+          jenis_transaksi: 'PRIMARY' | 'SECONDARY' | 'LELANG' | 'SEWA';
+          id_agent: number | string;
+        };
+
+        const base = created.jenis_transaksi === 'LELANG' ? 'Lelang' : 'Jual';
+        const detailUrl = `/${base}/${created.slug}-${created.id_property}/${created.id_agent}`;
+        router.push(detailUrl);
       }
     } catch (error) {
       console.error('Submit error:', error);

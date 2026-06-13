@@ -105,6 +105,7 @@ export async function GET() {
 
     return NextResponse.json({
       ok: true,
+      agent_id: agentId,
       stats: {
         total_direct: directDownlines.length,
         total_network: Number(s.total_network),

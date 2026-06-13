@@ -1785,6 +1785,7 @@ type LeadStatus = "new" | "contacted" | "hot" | "closing" | "cold";
 
 interface HotLead {
   id: string;
+  idProperty: string | null;
   address: string;
   image: string | null;
   source: string;
@@ -1805,6 +1806,7 @@ interface ApiLead {
   client_name: string | null;
   client_phone: string | null;
   device_type: string | null;
+  last_activity: string | null;
   created_at: string;
   listing: {
     id_property: string;
@@ -1846,13 +1848,16 @@ function formatAddress(l: ApiLead["listing"]): string {
 }
 
 function mapApiToHotLead(api: ApiLead): HotLead {
-  const created = new Date(api.created_at).getTime();
-  const ageMinutes = Math.max(0, Math.floor((Date.now() - created) / 60000));
+  const baseTime = api.last_activity
+    ? new Date(api.last_activity).getTime()
+    : new Date(api.created_at).getTime();
+  const ageMinutes = Math.max(0, Math.floor((Date.now() - baseTime) / 60000));
 
   const meta = SOURCE_META[api.source] || SOURCE_META.whatsapp;
 
   return {
     id: api.id_lead,
+    idProperty: api.listing?.id_property ?? null,
     address: formatAddress(api.listing),
     image: api.listing?.gambar_utama ?? null,
     source: meta.label,
@@ -2270,32 +2275,40 @@ function HotLeadsCard() {
                       <p className="line-clamp-2 pr-4 text-[13px] font-bold leading-snug text-white">
                         {lead.address}
                       </p>
-                      <p
-                        className={`mt-1 inline-flex items-center gap-1 truncate text-[11px] ${
-                          lead.clientName
-                            ? "font-semibold text-emerald-300/90"
-                            : lead.phone
-                            ? "text-slate-400"
-                            : "italic text-amber-300/85"
-                        }`}
-                      >
-                        {lead.clientName ? (
-                          <Icon
-                            icon="solar:user-bold-duotone"
-                            className="shrink-0 text-[12px]"
-                          />
-                        ) : !lead.phone ? (
-                          <Icon
-                            icon="solar:hourglass-line-bold-duotone"
-                            className="shrink-0 text-[12px]"
-                          />
-                        ) : null}
-                        {lead.clientName
-                          ? lead.clientName
-                          : lead.phone
-                          ? lead.listing
-                          : "Menunggu balasan WhatsApp…"}
-                      </p>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <p
+                          className={`inline-flex min-w-0 flex-1 items-center gap-1 truncate text-[11px] ${
+                            lead.clientName
+                              ? "font-semibold text-emerald-300/90"
+                              : lead.phone
+                              ? "text-slate-400"
+                              : "italic text-amber-300/85"
+                          }`}
+                        >
+                          {lead.clientName ? (
+                            <Icon
+                              icon="solar:user-bold-duotone"
+                              className="shrink-0 text-[12px]"
+                            />
+                          ) : !lead.phone ? (
+                            <Icon
+                              icon="solar:hourglass-line-bold-duotone"
+                              className="shrink-0 text-[12px]"
+                            />
+                          ) : null}
+                          <span className="truncate">
+                            {lead.clientName
+                              ? lead.clientName
+                              : lead.phone
+                              ? lead.listing
+                              : "Menunggu balasan WhatsApp…"}
+                          </span>
+                        </p>
+                        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-md border border-white/[0.08] bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                          Detail
+                          <Icon icon="solar:alt-arrow-right-bold" className="text-[9px]" />
+                        </span>
+                      </div>
                       {lead.budget && (
                         <p className="mt-2 text-[12px] font-extrabold tabular-nums text-emerald-300">
                           {lead.budget}
@@ -2372,6 +2385,7 @@ function HotLeadsCard() {
                       status: updates.status,
                       clientName: updates.clientName,
                       phone: updates.phone,
+                      ageMinutes: 0,
                     }
                   : l,
               ),

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { Icon } from "@iconify/react";
 
@@ -65,6 +65,7 @@ type NetworkStats = {
 
 type NetworkData = {
   ok: boolean;
+  agent_id: string;
   stats: NetworkStats;
   downlines: Downline[];
 };
@@ -544,6 +545,151 @@ function NetworkEmpty() {
 }
 
 /* ────────────────────────────────────────────────────────────────────
+   Referral CTA Card
+   ──────────────────────────────────────────────────────────────────── */
+
+function ReferralCTACard({ agentId }: { agentId: string }) {
+  const [copied, setCopied] = useState(false);
+  const [shareError, setShareError] = useState(false);
+
+  const prefix = agentId.replace(/\d+$/, "");
+  const number = agentId.replace(/^\D+/, "");
+
+  const shareUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/gabung-jadi-agent?ref=${agentId}`
+      : `/gabung-jadi-agent?ref=${agentId}`;
+
+  const shareText = `Gabung bareng aku jadi agent properti di KosKu! Pakai kode referral *${agentId}* saat daftar, atau langsung klik link ini:\n${shareUrl}`;
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(agentId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback
+      const el = document.createElement("textarea");
+      el.value = agentId;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }, [agentId]);
+
+  const handleShare = useCallback(async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Kode Referral KosKu", text: shareText, url: shareUrl });
+        return;
+      } catch {
+        /* user cancelled — fall through */
+      }
+    }
+    // Fallback: WhatsApp
+    const waUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+    window.open(waUrl, "_blank", "noopener,noreferrer");
+  }, [shareText, shareUrl]);
+
+  const handleCopyLink = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShareError(true);
+      setTimeout(() => setShareError(false), 2000);
+    } catch {
+      /* ignore */
+    }
+  }, [shareUrl]);
+
+  return (
+    <div className="relative mx-6 mb-5 overflow-hidden rounded-2xl border border-emerald-400/15 bg-gradient-to-br from-emerald-500/[0.07] via-teal-500/[0.03] to-transparent">
+      {/* Top shimmer */}
+      <div className="pointer-events-none absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-emerald-400/50 to-transparent" />
+      {/* Glow orb */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-8 -right-8 h-32 w-32 rounded-full bg-emerald-400/10 blur-3xl"
+      />
+
+      <div className="relative flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center">
+        {/* Left: label + code */}
+        <div className="flex flex-1 flex-col gap-1.5">
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
+            Kode Referral Kamu
+          </p>
+          {/* Code display */}
+          <div className="flex items-center gap-0 self-start overflow-hidden rounded-xl border border-white/[0.1] bg-[#0d1413] ring-1 ring-emerald-400/10">
+            {/* Prefix chip */}
+            <div className="flex items-center justify-center border-r border-white/[0.08] bg-emerald-500/[0.12] px-3 py-2.5">
+              <span className="text-[13px] font-black tracking-widest text-emerald-300">
+                {prefix}
+              </span>
+            </div>
+            {/* Number */}
+            <div className="px-4 py-2.5">
+              <span className="text-[22px] font-black tabular-nums leading-none tracking-tight text-white">
+                {number}
+              </span>
+            </div>
+            {/* Copy button inline */}
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="flex h-full items-center justify-center border-l border-white/[0.08] bg-white/[0.03] px-3 text-slate-400 transition hover:bg-emerald-500/10 hover:text-emerald-300 active:scale-95"
+              aria-label="Salin kode"
+            >
+              <Icon
+                icon={copied ? "solar:check-circle-bold-duotone" : "solar:copy-bold-duotone"}
+                className={`text-lg transition-colors ${copied ? "text-emerald-400" : ""}`}
+              />
+            </button>
+          </div>
+          <p className="text-[10.5px] leading-relaxed text-slate-500">
+            Bagikan kode ini ke calon agent. Jika mereka daftar atau transaksi dengan kode ini,
+            aktivitas mereka tercatat di jaringanmu.
+          </p>
+        </div>
+
+        {/* Right: action buttons */}
+        <div className="flex flex-shrink-0 flex-col gap-2 sm:items-end">
+          {/* Primary: Share */}
+          <button
+            type="button"
+            onClick={handleShare}
+            className="group inline-flex items-center gap-2 rounded-xl border border-emerald-400/25 bg-emerald-500/[0.12] px-4 py-2.5 text-[12px] font-bold text-emerald-200 transition hover:border-emerald-400/50 hover:bg-emerald-500/[0.22] active:scale-95"
+          >
+            <Icon
+              icon="solar:share-bold-duotone"
+              className="text-[15px] transition-transform group-hover:scale-110"
+            />
+            Bagikan Link
+          </button>
+
+          {/* Secondary: Copy link */}
+          <button
+            type="button"
+            onClick={handleCopyLink}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.07] bg-white/[0.03] px-4 py-2 text-[11px] font-semibold text-slate-400 transition hover:border-white/[0.12] hover:text-slate-200 active:scale-95"
+          >
+            <Icon
+              icon={shareError ? "solar:check-circle-bold-duotone" : "solar:link-bold-duotone"}
+              className={`text-[13px] ${shareError ? "text-emerald-400" : ""}`}
+            />
+            {shareError ? "Link tersalin!" : "Salin Link Daftar"}
+          </button>
+        </div>
+      </div>
+
+      {/* Bottom shimmer */}
+      <div className="pointer-events-none absolute bottom-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-emerald-400/20 to-transparent" />
+    </div>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────────
    Main Card
    ──────────────────────────────────────────────────────────────────── */
 
@@ -631,6 +777,9 @@ export function NetworkReferralCard() {
 
           {/* ─── Motivational Banner ─── */}
           <MotivationalBanner totalNetwork={data!.stats.total_network} />
+
+          {/* ─── Referral CTA ─── */}
+          <ReferralCTACard agentId={data!.agent_id} />
 
           {/* ─── Divider ─── */}
           <div className="relative mx-6 mb-4 flex items-center gap-3">

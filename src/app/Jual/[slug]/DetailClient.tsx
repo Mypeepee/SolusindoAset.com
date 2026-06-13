@@ -116,6 +116,7 @@ export default function DetailClient({
   // ================== PROPERTY DATA ==================
   const propertyData = {
     id_property: product.id_property,
+    id_agent: currentAgentId || product.id_agent || "",
     slug: product.slug || "",
     kode_properti: product.kode_properti || "-",
     judul: product.judul,
@@ -175,7 +176,7 @@ export default function DetailClient({
 
     owner: product.agent
       ? {
-          id_agent: currentAgentId,
+          id_agent: String(product.id_agent || currentAgentId || ""),
           name: product.agent.pengguna?.nama_lengkap || "Agent Premier",
           avatar: product.agent.foto_profil_url || "",
           phone: product.agent.nomor_whatsapp || "",
@@ -186,7 +187,7 @@ export default function DetailClient({
           join: "2024",
         }
       : {
-          id_agent: currentAgentId,
+          id_agent: String(product.id_agent || currentAgentId || ""),
           name: "Agent Premier",
           avatar: "",
           phone: "",

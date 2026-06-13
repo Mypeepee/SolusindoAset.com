@@ -13,6 +13,7 @@ type SourceRaw =
 
 export interface LeadDetail {
   id: string;
+  idProperty: string | null;
   address: string;
   image: string | null;
   listing: string;
@@ -169,6 +170,8 @@ export default function LeadDetailSheet({ lead, onClose, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Baseline saat modal dibuka atau terakhir disimpan — dipakai untuk deteksi perubahan
+  const [baseline, setBaseline] = useState<{ status: LeadStatus; name: string; phone: string } | null>(null);
   const [statusManuallyChanged, setStatusManuallyChanged] = useState(false);
   const [showAutoPromoteNotif, setShowAutoPromoteNotif] = useState(false);
   const phoneRef = useRef<HTMLInputElement>(null);
@@ -185,9 +188,13 @@ export default function LeadDetailSheet({ lead, onClose, onSaved }: Props) {
   // sync form setiap kali lead berubah (termasuk reopen lead yg sama dgn data fresh)
   useEffect(() => {
     if (lead) {
-      setStatus(lead.status);
-      setName(lead.clientName || "");
-      setPhoneDigits(stripCountryPrefix(lead.phone));
+      const initStatus = lead.status;
+      const initName   = lead.clientName || "";
+      const initPhone  = stripCountryPrefix(lead.phone);
+      setStatus(initStatus);
+      setName(initName);
+      setPhoneDigits(initPhone);
+      setBaseline({ status: initStatus, name: initName, phone: initPhone });
       setErr(null);
       setSavedSuccess(false);
       setStatusManuallyChanged(false);
@@ -244,6 +251,10 @@ export default function LeadDetailSheet({ lead, onClose, onSaved }: Props) {
   const phoneValid = phoneDigits.length >= 8;
   const phoneRecommended = status !== "cold" && status !== "new";
   const fullPhone = phoneDigits ? `62${phoneDigits}` : "";
+  const isDirty = !baseline ||
+    status !== baseline.status ||
+    name.trim() !== baseline.name ||
+    phoneDigits !== baseline.phone;
 
   const activeAccent = ACCENT_MAP[
     STATUS_OPTIONS.find((s) => s.key === status)?.accent ?? "rose"
@@ -267,17 +278,30 @@ export default function LeadDetailSheet({ lead, onClose, onSaved }: Props) {
         throw new Error(j.error || `HTTP ${res.status}`);
       }
       setSavedSuccess(true);
-      // success flash → auto-close dengan animasi smooth
       const trimmedName = name.trim();
-      setTimeout(
-        () =>
-          onSaved({
-            status,
-            clientName: trimmedName || null,
-            phone: fullPhone || null,
-          }),
-        600,
-      );
+      setBaseline({ status, name: trimmedName, phone: phoneDigits });
+      onSaved({ status, clientName: trimmedName || null, phone: fullPhone || null });
+
+      // Auto-simpan ke tabel klien (upsert by WA)
+      fetch("/api/dashboard/klien/from-lead", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nama:           trimmedName || null,
+          nomor_whatsapp: fullPhone || null,
+          lead_status:    status,
+          source_raw:     lead!.sourceRaw,
+          id_lead:        lead!.id,
+          id_property:    lead!.idProperty,
+        }),
+      })
+        .then(r => r.json().then(j => {
+          if (r.ok) console.log("[CRM from-lead] ok:", j.action, j.id_klien);
+          else      console.warn("[CRM from-lead] error:", j);
+        }))
+        .catch(e => console.warn("[CRM from-lead network]", e));
+
+      // Close setelah animasi success
       setTimeout(() => handleClose(), 900);
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Gagal menyimpan");
@@ -778,7 +802,7 @@ export default function LeadDetailSheet({ lead, onClose, onSaved }: Props) {
                         onChange={(e) =>
                           setPhoneDigits(sanitizePhoneInput(e.target.value))
                         }
-                        placeholder="8810-2675-7313"
+                        placeholder="8812-3456-789"
                         className="flex-1 bg-transparent px-3.5 py-2.5 text-sm tabular-nums tracking-wide text-white placeholder-slate-600 outline-none"
                       />
                     </div>
@@ -848,10 +872,10 @@ export default function LeadDetailSheet({ lead, onClose, onSaved }: Props) {
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={saving || savedSuccess}
+                disabled={saving || !isDirty}
                 style={{
                   animation:
-                    !saving && !savedSuccess
+                    isDirty && !saving
                       ? "lead-pulse-glow 2.4s ease-in-out infinite"
                       : undefined,
                 }}

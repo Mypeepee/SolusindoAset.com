@@ -34,12 +34,17 @@ export interface MenuItem {
       href: "/dashboard/surat",
     },
     {
-      label: "Tasks",
+      label: "Tugas",
       icon: "solar:clipboard-check-linear",
-      href: "/dashboard/tasks",
+      href: "/dashboard/tugas",
+    },
+    {
+      label: "CRM",
+      icon: "solar:users-group-rounded-linear",
+      href: "/dashboard/crm",
     },
   ];
-  
+
   export const appsMenu: MenuItem[] = [
     {
       label: "Jadwal & Acara",
@@ -52,14 +57,9 @@ export interface MenuItem {
       href: "/dashboard/scrape"
     },
     {
-      label: "E-commerce", 
+      label: "E-commerce",
       icon: "solar:bag-4-linear",
       href: "/dashboard/e-commerce"
-    },
-    { 
-      label: "CRM", 
-      icon: "solar:card-linear",
-      href: "/dashboard/crm"
     },
     { 
       label: "Invoice", 

@@ -26,6 +26,7 @@ model Pengguna {
   agent            Agent?
   mouKlien         Mou[]            @relation("MouKlien")
   klien            Klien[]
+  bookingSurvei    BookingSurvei[]
 
   @@index([kode_referral], map: "idx_kode_referral")
   @@index([email], map: "idx_pengguna_email")
@@ -59,6 +60,7 @@ model Agent {
   diperbarui_pada        DateTime?                @default(now()) @db.Timestamptz(6)
   id_team_leader         String?                  @db.VarChar(20)
   acara                  Acara[]
+  bookingSurvei          BookingSurvei[]
   pengguna               Pengguna                 @relation(fields: [id_pengguna], references: [id_pengguna], onDelete: Cascade)
   teamLeader             Agent?                   @relation("AgentTeamLeader", fields: [id_team_leader], references: [id_agent])
   teamLeaderMembers      Agent[]                  @relation("AgentTeamLeader")
@@ -81,6 +83,7 @@ model Agent {
   propertyTitipKlaim     PropertyTitip[]          @relation("PropertyTitipKlaim")
   propertyTitipDistribusi PropertyTitipDistribution[]
   targetBulanan          TargetAgent[]            @relation("AgentTarget")
+  tugas                  Tugas[]
 
   @@index([jabatan], map: "idx_agent_jabatan")
   @@index([nama_kantor], map: "idx_agent_kantor")
@@ -140,6 +143,8 @@ model Listing {
   mou                Mou[]
   leads              Lead[]
   klien              Klien[]
+  tugas              Tugas[]
+  bookingSurvei      BookingSurvei[]
 
   @@index([kota], map: "idx_property_lokasi")
   @@index([jenis_transaksi], map: "idx_property_jenis")
@@ -357,6 +362,7 @@ model Transaksi {
   mou                      Mou                   @relation(fields: [id_transaksi], references: [id_transaksi], map: "transaksi_mou_fk")
   detail                   DetailTransaksi[]
   invoice                  Invoice[]
+  tugas                    Tugas[]
 
   @@index([tanggal_transaksi], map: "transaksi_date_idx")
   @@map("transaksi")
@@ -537,6 +543,30 @@ model Acara {
   @@map("acara")
 }
 
+/// Booking survei properti oleh calon pembeli/penyewa
+model BookingSurvei {
+  id_booking       BigInt    @id @default(autoincrement())
+  id_property      BigInt
+  id_agent         String    @db.VarChar(20)
+  id_klien         String?   @db.VarChar(20)
+  nama_klien       String    @db.VarChar(255)
+  nomor_telepon    String    @db.VarChar(20)
+  tanggal_survei   DateTime  @db.Timestamptz(6)
+  status           String    @default("PENDING") @db.VarChar(20)
+  catatan          String?   @db.Text
+  tanggal_dibuat   DateTime  @default(now()) @db.Timestamptz(6)
+
+  listing   Listing   @relation(fields: [id_property], references: [id_property], onDelete: Cascade)
+  agent     Agent     @relation(fields: [id_agent], references: [id_agent], onDelete: Cascade)
+  pengguna  Pengguna? @relation(fields: [id_klien], references: [id_pengguna], onDelete: SetNull)
+
+  @@index([id_agent],    map: "idx_booking_survei_agent")
+  @@index([id_property], map: "idx_booking_survei_property")
+  @@index([id_klien],    map: "idx_booking_survei_klien")
+  @@index([tanggal_survei], map: "idx_booking_survei_tanggal")
+  @@map("booking_survei")
+}
+
 /// Undangan acara — peserta yang di-invite ke sebuah acara di jadwal
 /// agent. Berbeda dengan PesertaAcara (yang spesifik buat Pemilu
 /// dengan semantic "memilih"), model ini murni untuk visibility
@@ -709,6 +739,7 @@ model Lead {
   agent   Agent   @relation(fields: [id_agent], references: [id_agent], onDelete: Cascade, map: "leads_agent_fk")
   listing Listing @relation(fields: [id_property], references: [id_property], onDelete: Cascade, map: "leads_property_fk")
   klien   Klien?
+  tugas   Tugas[]
 
   @@index([id_agent, status], map: "idx_leads_agent_status")
   @@index([id_property], map: "idx_leads_property")
@@ -749,7 +780,7 @@ model Klien {
   pengguna     Pengguna?     @relation(fields: [id_pengguna], references: [id_pengguna], onDelete: SetNull, map: "klien_pengguna_fk")
   leadAsal     Lead?         @relation(fields: [id_lead_asal], references: [id_lead], onDelete: SetNull, map: "klien_lead_fk")
   propertiAsal Listing?      @relation(fields: [id_properti_asal], references: [id_property], onDelete: SetNull, map: "klien_properti_fk")
-  preferensi   PreferensiKlien[]
+  preferensi    PreferensiKlien[]
 
   @@index([id_agent], map: "idx_klien_agent")
   @@index([id_agent, status], map: "idx_klien_status")
@@ -1140,4 +1171,68 @@ enum status_transaksi_enum {
   pelaksanaan_eksekusi
   serah_terima_kunci
   selesai
+}
+
+// ── Tugas Agen ───────────────────────────────────────────────────────────────
+model Tugas {
+  id_tugas          String                @id @default(cuid())
+  id_agent          String                @db.VarChar(20)
+
+  judul             String                @db.VarChar(500)
+  catatan           String?
+  kategori          kategori_tugas_enum   @default(UMUM)
+  prioritas         prioritas_tugas_enum  @default(SEDANG)
+  status            status_tugas_enum     @default(BELUM)
+
+  tanggal_mulai     DateTime?             @db.Timestamptz(6)
+  tanggal_selesai   DateTime?             @db.Timestamptz(6)
+  selesai_pada      DateTime?             @db.Timestamptz(6)
+  jam_terjadwal     String?               @db.VarChar(10)
+
+  target            Int?
+  progress          Int                   @default(0)
+  alasan            String?
+  komisi_potensial  BigInt?
+
+  id_lead           BigInt?
+  id_listing        BigInt?
+  id_transaksi      String?               @db.VarChar(50)
+
+  is_overdue        Boolean               @default(false)
+  is_auto_generated Boolean               @default(false)
+
+  dibuat_pada       DateTime              @default(now()) @db.Timestamptz(6)
+  diperbarui_pada   DateTime              @default(now()) @updatedAt @db.Timestamptz(6)
+
+  agent             Agent                 @relation(fields: [id_agent], references: [id_agent], onDelete: Cascade)
+  lead              Lead?                 @relation(fields: [id_lead], references: [id_lead], onDelete: SetNull)
+  listing           Listing?              @relation(fields: [id_listing], references: [id_property], onDelete: SetNull)
+  transaksi         Transaksi?            @relation(fields: [id_transaksi], references: [id_transaksi], onDelete: SetNull)
+
+  @@index([id_agent, status])
+  @@index([id_agent, tanggal_selesai])
+  @@map("tugas")
+}
+
+enum kategori_tugas_enum {
+  URGENT
+  KONTEN
+  FOLLOWUP
+  VIEWING
+  PIPELINE
+  NETWORKING
+  UMUM
+}
+
+enum status_tugas_enum {
+  BELUM
+  DALAM_PROSES
+  SELESAI
+  DIBATALKAN
+}
+
+enum prioritas_tugas_enum {
+  TINGGI
+  SEDANG
+  RENDAH
 }

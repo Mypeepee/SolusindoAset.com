@@ -1,0 +1,168 @@
+export type KlienStatus =
+  | "lead_baru"
+  | "sudah_dikontak"
+  | "hot_buyer"
+  | "closing"
+  | "lost_iseng";
+
+export type SumberKlien =
+  | "wa_organik"
+  | "iklan"
+  | "referral"
+  | "website"
+  | "walk_in"
+  | "titip_jual"
+  | "lainnya";
+
+export type MetodePembayaran = "cash" | "kpr" | "cash_bertahap";
+
+export type TujuanBeli = "ditempati" | "investasi" | "disewakan";
+
+export type TipeProperti =
+  | "RUMAH"
+  | "APARTEMEN"
+  | "RUKO"
+  | "TANAH"
+  | "GUDANG"
+  | "HOTEL_DAN_VILLA"
+  | "TOKO"
+  | "PABRIK";
+
+export type JenisTransaksi =
+  | "PRIMARY"
+  | "SECONDARY"
+  | "LELANG"
+  | "SEWA"
+  | "CESSIE";
+
+export interface PreferensiKlien {
+  id_preferensi: string;
+  id_klien: string;
+  tipe_properti: TipeProperti;
+  jenis_transaksi: JenisTransaksi | null;
+  lokasi_dicari: string | null;
+  budget_min: number | null;
+  budget_max: number | null;
+  luas_min: number | null;
+  luas_max: number | null;
+  tujuan_beli: TujuanBeli | null;
+  catatan: string | null;
+  dibuat_pada: string;
+}
+
+export interface Klien {
+  id_klien: string;
+  id_agent: string;
+  id_pengguna: string | null;
+  id_lead_asal: string | null;
+  id_properti_asal: string | null;
+  nama: string;
+  nomor_whatsapp: string | null;
+  email: string | null;
+  sumber: SumberKlien;
+  metode_pembayaran: MetodePembayaran | null;
+  bank_kpr: string | null;
+  tenor_kpr: number | null;
+  tanggal_masuk: string;
+  tanggal_kontak_terakhir: string | null;
+  tanggal_follow_up: string | null;
+  status: KlienStatus;
+  catatan: string | null;
+  dibuat_pada: string;
+  diperbarui_pada: string;
+  preferensi: PreferensiKlien[];
+}
+
+export interface PreferensiForm {
+  tipe_properti: TipeProperti | "";
+  jenis_transaksi: JenisTransaksi | "";
+  lokasi_dicari: string;
+  budget_min: string;
+  budget_max: string;
+  luas_min: string;
+  luas_max: string;
+  tujuan_beli: TujuanBeli | "";
+  catatan: string;
+}
+
+export interface KlienForm {
+  nama: string;
+  nomor_whatsapp: string;
+  email: string;
+  sumber: SumberKlien;
+  status: KlienStatus;
+  metode_pembayaran: MetodePembayaran | "";
+  bank_kpr: string;
+  tenor_kpr: string;
+  catatan: string;
+  tanggal_follow_up: string;
+  preferensi: PreferensiForm[];
+  // untuk konversi dari lead
+  id_lead_asal?: string;
+  id_properti_asal?: string;
+}
+
+export const STATUS_LABEL: Record<KlienStatus, string> = {
+  lead_baru:      "Lead Baru",
+  sudah_dikontak: "Sudah Dikontak",
+  hot_buyer:      "Hot Buyer",
+  closing:        "Closing",
+  lost_iseng:     "Lost / Iseng",
+};
+
+export const STATUS_COLOR: Record<KlienStatus, string> = {
+  lead_baru:      "bg-rose-500/15 text-rose-300 border-rose-400/25",
+  sudah_dikontak: "bg-sky-500/15 text-sky-300 border-sky-400/25",
+  hot_buyer:      "bg-amber-500/15 text-amber-300 border-amber-400/25",
+  closing:        "bg-emerald-500/15 text-emerald-300 border-emerald-400/25",
+  lost_iseng:     "bg-slate-500/15 text-slate-400 border-slate-400/20",
+};
+
+export const STATUS_ICON: Record<KlienStatus, string> = {
+  lead_baru:      "solar:bell-bing-bold-duotone",
+  sudah_dikontak: "solar:phone-calling-bold-duotone",
+  hot_buyer:      "solar:fire-bold-duotone",
+  closing:        "solar:document-text-bold-duotone",
+  lost_iseng:     "solar:close-circle-bold-duotone",
+};
+
+export const SUMBER_LABEL: Record<SumberKlien, string> = {
+  wa_organik: "WA Organik",
+  iklan:      "Iklan",
+  referral:   "Referral",
+  website:    "Website",
+  walk_in:    "Walk In",
+  titip_jual: "Titip Jual",
+  lainnya:    "Lainnya",
+};
+
+export const TIPE_PROPERTI_LABEL: Record<TipeProperti, string> = {
+  RUMAH:         "Rumah",
+  APARTEMEN:     "Apartemen",
+  RUKO:          "Ruko",
+  TANAH:         "Tanah",
+  GUDANG:        "Gudang",
+  HOTEL_DAN_VILLA: "Hotel & Villa",
+  TOKO:          "Toko",
+  PABRIK:        "Pabrik",
+};
+
+export const JENIS_TRANSAKSI_LABEL: Record<JenisTransaksi, string> = {
+  PRIMARY:   "Primary",
+  SECONDARY: "Secondary",
+  LELANG:    "Lelang",
+  SEWA:      "Sewa",
+  CESSIE:    "Cessie",
+};
+
+export const EMPTY_PREFERENSI: PreferensiForm = {
+  tipe_properti:   "",
+  jenis_transaksi: "",
+  lokasi_dicari:   "",
+  budget_min:      "",
+  budget_max:      "",
+  luas_min:        "",
+  luas_max:        "",
+  tujuan_beli:     "",
+  catatan:         "",
+};
