@@ -142,7 +142,7 @@ export function AgentDetailPanel({
         <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/5 px-3 py-3 flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-400/40 flex items-center justify-center">
             <Icon
-              icon="solar:hierarchy-bold"
+              icon="solar:user-check-bold"
               className="text-emerald-300 text-lg"
             />
           </div>
@@ -191,39 +191,81 @@ export function AgentDetailPanel({
           Kelola Status Akun
         </h4>
 
-        <p className="text-[11px] text-slate-400 mb-2">
-          Atur status akun agent: Aktif untuk agent yang bisa bertransaksi,
-          Pending untuk menunggu verifikasi, Suspend untuk membekukan akses.
-        </p>
+        {agent.status_keanggotaan === "PENDING" ? (
+          <>
+            <p className="text-[11px] text-slate-400 mb-2">
+              Pendaftar baru belum jadi agent. Terima untuk menjadikannya
+              agent (Aktif), Pending untuk menahan dulu, atau Tolak jika
+              pendaftaran tidak memenuhi syarat.
+            </p>
 
-        <div className="grid grid-cols-3 gap-2">
-          <StatusButton
-            label="Aktif"
-            icon="solar:shield-check-bold"
-            active={agent.status_keanggotaan === "AKTIF"}
-            color="emerald"
-            disabled={updating}
-            onClick={() => handleStatusChange("AKTIF")}
-          />
+            <div className="grid grid-cols-3 gap-2">
+              <StatusButton
+                label="Terima"
+                icon="solar:check-circle-bold"
+                active={false}
+                color="emerald"
+                disabled={updating}
+                onClick={() => handleStatusChange("AKTIF")}
+              />
 
-          <StatusButton
-            label="Pending"
-            icon="solar:clock-circle-bold"
-            active={agent.status_keanggotaan === "PENDING"}
-            color="amber"
-            disabled={updating}
-            onClick={() => handleStatusChange("PENDING")}
-          />
+              <StatusButton
+                label="Pending"
+                icon="solar:clock-circle-bold"
+                active={agent.status_keanggotaan === "PENDING"}
+                color="amber"
+                disabled={updating}
+                onClick={() => handleStatusChange("PENDING")}
+              />
 
-          <StatusButton
-            label="Suspend"
-            icon="solar:shield-cross-bold"
-            active={agent.status_keanggotaan === "SUSPEND"}
-            color="rose"
-            disabled={updating}
-            onClick={() => handleStatusChange("SUSPEND")}
-          />
-        </div>
+              <StatusButton
+                label="Tolak"
+                icon="solar:close-circle-bold"
+                active={false}
+                color="rose"
+                disabled={updating}
+                onClick={() => handleStatusChange("SUSPEND")}
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-[11px] text-slate-400 mb-2">
+              Atur status keanggotaan agent: Aktif untuk agent yang bisa
+              bertransaksi, Pending untuk menahan sementara, Terminasi untuk
+              memutus keanggotaan agent.
+            </p>
+
+            <div className="grid grid-cols-3 gap-2">
+              <StatusButton
+                label="Aktif"
+                icon="solar:shield-check-bold"
+                active={agent.status_keanggotaan === "AKTIF"}
+                color="emerald"
+                disabled={updating}
+                onClick={() => handleStatusChange("AKTIF")}
+              />
+
+              <StatusButton
+                label="Pending"
+                icon="solar:clock-circle-bold"
+                active={false}
+                color="amber"
+                disabled={updating}
+                onClick={() => handleStatusChange("PENDING")}
+              />
+
+              <StatusButton
+                label="Terminasi"
+                icon="solar:shield-cross-bold"
+                active={agent.status_keanggotaan === "SUSPEND"}
+                color="rose"
+                disabled={updating}
+                onClick={() => handleStatusChange("SUSPEND")}
+              />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

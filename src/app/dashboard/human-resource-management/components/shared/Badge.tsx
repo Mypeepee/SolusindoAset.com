@@ -5,7 +5,7 @@ export function StatusBadge({ status }: { status: AgentStatus }) {
   const styles = {
     AKTIF: "bg-emerald-500/15 text-emerald-300 border-emerald-400/50",
     PENDING: "bg-amber-500/15 text-amber-300 border-amber-400/50",
-    NONAKTIF: "bg-rose-500/15 text-rose-300 border-rose-400/50",
+    SUSPEND: "bg-rose-500/15 text-rose-300 border-rose-400/50",
   };
 
   return (

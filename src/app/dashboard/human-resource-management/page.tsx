@@ -36,6 +36,14 @@ function HRMContent() {
     if (!isXlUp()) setDrawerOpen(true);
   };
 
+  // Sinkronkan selectedAgent dengan data terbaru setiap kali daftar agent berubah
+  // (misal setelah update status), supaya panel/drawer detail real-time.
+  useEffect(() => {
+    if (!selectedAgent) return;
+    const updated = agents.find((a) => a.id_agent === selectedAgent.id_agent);
+    if (updated && updated !== selectedAgent) setSelectedAgent(updated);
+  }, [agents, selectedAgent]);
+
   // Auto-select agent dari query param setelah data load
   useEffect(() => {
     if (!targetAgentId || loading || agents.length === 0) return;

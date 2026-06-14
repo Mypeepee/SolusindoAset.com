@@ -46,3 +46,6 @@ backend/keys/
 
 # claude memory
 .claude/
+
+# nested project clone
+/Kosku.com/

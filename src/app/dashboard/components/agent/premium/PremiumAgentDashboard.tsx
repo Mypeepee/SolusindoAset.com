@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef, useLayoutEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Icon } from "@iconify/react";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import {
   AnnualSalesChart,
@@ -1790,24 +1790,40 @@ interface HotLead {
   image: string | null;
   source: string;
   sourceIcon: string;
-  sourceRaw: "whatsapp" | "telepon" | "survei" | "titip_jual" | "form_inquiry";
+  sourceRaw: "whatsapp" | "telepon" | "survei" | "titip_jual" | "form_inquiry" | "penawaran" | "cobroke";
   listing: string;
   ageMinutes: number;
   status: LeadStatus;
   budget?: string;
   phone?: string | null;
   clientName?: string | null;
+  bookingSurveiStatus?: "PENDING" | "CONFIRMED" | "CANCELLED" | null;
+  offerAmount?: string | null;
+  notes?: string | null;
+  verified?: boolean;
+  statusPenawaran?: "pending" | "diterima" | "ditolak" | null;
+  catatanAgent?: string | null;
+  tanggalKeputusan?: string | null;
+  cobrokeAgent?: { id_agent: string; nama: string; kantor: string; whatsapp: string } | null;
 }
 
 interface ApiLead {
   id_lead: string;
-  source: "whatsapp" | "telepon" | "survei" | "titip_jual" | "form_inquiry";
+  source: "whatsapp" | "telepon" | "survei" | "titip_jual" | "form_inquiry" | "penawaran" | "cobroke";
   status: LeadStatus;
   client_name: string | null;
   client_phone: string | null;
+  offer_amount: number | null;
+  notes: string | null;
+  status_penawaran?: "pending" | "diterima" | "ditolak" | null;
+  catatan_agent?: string | null;
+  tanggal_keputusan?: string | null;
+  verified: boolean;
+  booking_survei_status: "PENDING" | "CONFIRMED" | "CANCELLED" | null;
   device_type: string | null;
   last_activity: string | null;
   created_at: string;
+  cobroke_agent?: { id_agent: string; nama: string; kantor: string; whatsapp: string } | null;
   listing: {
     id_property: string;
     judul: string;
@@ -1831,6 +1847,8 @@ const SOURCE_META: Record<
   survei:       { label: "Survei",     icon: "solar:calendar-date-bold" },
   titip_jual:   { label: "Titip Jual", icon: "solar:home-add-bold" },
   form_inquiry: { label: "Form",       icon: "solar:document-text-bold" },
+  penawaran:    { label: "Penawaran",  icon: "solar:tag-price-bold-duotone" },
+  cobroke:      { label: "Co-Broke",   icon: "solar:users-group-two-rounded-bold-duotone" },
 };
 
 function compactPrice(n: number): string {
@@ -1839,6 +1857,12 @@ function compactPrice(n: number): string {
   if (n >= 1_000_000)     return `Rp ${Math.round(n / 1_000_000)} Jt`;
   return `Rp ${n.toLocaleString("id-ID")}`;
 }
+
+const rupiahFormatter = new Intl.NumberFormat("id-ID", {
+  style: "currency",
+  currency: "IDR",
+  maximumFractionDigits: 0,
+});
 
 function formatAddress(l: ApiLead["listing"]): string {
   if (!l) return "Properti dihapus";
@@ -1869,6 +1893,14 @@ function mapApiToHotLead(api: ApiLead): HotLead {
     budget: api.listing ? compactPrice(api.listing.harga) : undefined,
     phone: api.client_phone,
     clientName: api.client_name,
+    bookingSurveiStatus: api.booking_survei_status,
+    offerAmount: api.offer_amount != null ? rupiahFormatter.format(api.offer_amount) : null,
+    notes: api.notes,
+    verified: api.verified,
+    statusPenawaran: api.status_penawaran ?? null,
+    catatanAgent: api.catatan_agent ?? null,
+    tanggalKeputusan: api.tanggal_keputusan ?? null,
+    cobrokeAgent: api.cobroke_agent ?? null,
   };
 }
 
@@ -1960,10 +1992,140 @@ const CHANNEL_BG: Record<HotLead["sourceRaw"], string> = {
   survei:       "bg-violet-500",
   titip_jual:   "bg-amber-500",
   form_inquiry: "bg-slate-500",
+  penawaran:    "bg-teal-500",
+  cobroke:      "bg-fuchsia-500",
 };
 
+type LeadFilter = "action" | "all" | "new" | "followup" | "hot" | "closing" | "archive";
+
+// Lebar panel aksi yang muncul saat lead card di-swipe ke kiri.
+const SWIPE_ACTION_WIDTH = 84;
+
+/* Bungkus tiap lead card dengan gesture swipe-left → reveal panel aksi
+   (Arsip / Pulihkan). Tidak ada penghapusan permanen — sekadar memindahkan
+   lead ke/dari pill "Arsip" agar list utama tetap rapi tanpa risiko data hilang. */
+function SwipeableLeadRow({
+  archived,
+  highlighted,
+  onOpen,
+  onArchive,
+  onRestore,
+  children,
+}: {
+  archived: boolean;
+  highlighted: boolean;
+  onOpen: () => void;
+  onArchive: () => void;
+  onRestore: () => void;
+  children: React.ReactNode;
+}) {
+  const [revealed, setRevealed] = useState(false);
+  // Lacak jarak drag horizontal terkini — dipakai untuk membedakan
+  // "swipe" (jangan buka modal) dari "tap" murni (buka modal).
+  const dragDistanceRef = useRef(0);
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.2 } }}
+      transition={{ type: "spring", stiffness: 380, damping: 32 }}
+      className="relative overflow-hidden rounded-2xl">
+        {/* Panel aksi — terbuka saat swipe ke kiri, dengan entrance animation */}
+        <div className="absolute inset-y-0 right-0 flex w-[84px] items-center justify-center">
+          <motion.div
+            className={`absolute inset-0 ${
+              archived
+                ? "bg-gradient-to-br from-emerald-500 to-emerald-600"
+                : "bg-gradient-to-br from-rose-500 to-rose-600"
+            }`}
+            initial={false}
+            animate={{
+              opacity: revealed ? 1 : 0,
+              clipPath: revealed ? "circle(100% at 100% 50%)" : "circle(0% at 100% 50%)",
+            }}
+            transition={{ type: "spring", stiffness: 320, damping: 28 }}
+          />
+          <motion.button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setRevealed(false);
+              if (archived) onRestore();
+              else onArchive();
+            }}
+            initial={false}
+            animate={
+              revealed
+                ? { opacity: 1, scale: 1, rotate: 0 }
+                : { opacity: 0, scale: 0.4, rotate: archived ? 90 : -90 }
+            }
+            whileTap={{ scale: 0.88 }}
+            transition={{ type: "spring", stiffness: 420, damping: 22, delay: revealed ? 0.08 : 0 }}
+            className="relative z-10 flex w-full flex-col items-center justify-center gap-1 text-[10px] font-bold text-white"
+          >
+            <motion.span
+              animate={revealed ? { y: [0, -3, 0] } : { y: 0 }}
+              transition={{ duration: 0.6, ease: "easeInOut", delay: 0.2 }}
+              className="drop-shadow-[0_2px_6px_rgba(0,0,0,0.35)]"
+            >
+              <Icon
+                icon={archived ? "solar:restart-bold-duotone" : "solar:trash-bin-trash-bold-duotone"}
+                className="text-lg"
+              />
+            </motion.span>
+            {archived ? "Pulihkan" : "Arsip"}
+          </motion.button>
+        </div>
+
+        <motion.div
+          drag="x"
+          dragConstraints={{ left: -SWIPE_ACTION_WIDTH, right: 0 }}
+          dragElastic={0.04}
+          dragMomentum={false}
+          animate={{ x: revealed ? -SWIPE_ACTION_WIDTH : 0 }}
+          transition={{ type: "spring", stiffness: 420, damping: 38 }}
+          onDragStart={() => {
+            dragDistanceRef.current = 0;
+          }}
+          onDrag={(_, info) => {
+            dragDistanceRef.current = Math.max(dragDistanceRef.current, Math.abs(info.offset.x));
+          }}
+          onDragEnd={(_, info) => setRevealed(info.offset.x < -SWIPE_ACTION_WIDTH / 2)}
+          onClick={() => {
+            // Swipe (gerakan > 8px) tidak boleh ikut membuka modal detail.
+            if (dragDistanceRef.current > 8) {
+              dragDistanceRef.current = 0;
+              return;
+            }
+            if (revealed) {
+              setRevealed(false);
+              return;
+            }
+            onOpen();
+          }}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              if (revealed) setRevealed(false);
+              else onOpen();
+            }
+          }}
+          className={`relative cursor-pointer rounded-2xl bg-[#0a0f10] outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40 ${
+            highlighted ? "ring-2 ring-amber-400/70 shadow-[0_0_0_4px_rgba(251,191,36,0.15)]" : ""
+          }`}
+        >
+          {children}
+        </motion.div>
+    </motion.div>
+  );
+}
+
 function HotLeadsCard() {
-  const [filter, setFilter] = useState<"all" | "hot" | "followup">("all");
+  const [filter, setFilter] = useState<LeadFilter>("all");
   const [allLeads, setAllLeads] = useState<HotLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1977,6 +2139,8 @@ function HotLeadsCard() {
   // the user immediately sees "ini tujuannya" instead of being confused why
   // the page jumped.
   const [focusPulse, setFocusPulse] = useState(false);
+  // Highlight item lead tertentu — dipicu dari notifikasi survei di bell
+  const [focusLeadId, setFocusLeadId] = useState<string | null>(null);
 
   useEffect(() => {
     const onFocus = () => {
@@ -1987,6 +2151,40 @@ function HotLeadsCard() {
     };
     window.addEventListener("hot-leads:focus", onFocus);
     return () => window.removeEventListener("hot-leads:focus", onFocus);
+  }, []);
+
+  // Scroll + highlight ke item lead tertentu (klik notif survei di bell)
+  const focusLeadItem = useCallback((idLead: string | null | undefined) => {
+    if (!idLead) return;
+    const el = document.getElementById(`hot-lead-${idLead}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setFocusLeadId(idLead);
+    const t = window.setTimeout(() => setFocusLeadId(null), 2200);
+    return () => window.clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    const onFocusItem = (e: Event) => {
+      const detail = (e as CustomEvent<{ id_lead?: string | null }>).detail;
+      focusLeadItem(detail?.id_lead);
+    };
+    window.addEventListener("hot-leads:focus-item", onFocusItem);
+
+    // Cross-page navigation: id disimpan via sessionStorage sebelum redirect
+    const pending = sessionStorage.getItem("hot-leads:focus-item");
+    if (pending) {
+      sessionStorage.removeItem("hot-leads:focus-item");
+      window.setTimeout(() => focusLeadItem(pending), 600);
+    }
+
+    return () => window.removeEventListener("hot-leads:focus-item", onFocusItem);
+  }, [focusLeadItem]);
+
+  // Refetch leads saat ada perubahan dari luar (mis. Terima/Tolak survei di bell)
+  useEffect(() => {
+    const onRefresh = () => setRefreshTick((t) => t + 1);
+    window.addEventListener("hot-leads:refresh", onRefresh);
+    return () => window.removeEventListener("hot-leads:refresh", onRefresh);
   }, []);
 
   useEffect(() => {
@@ -2018,31 +2216,102 @@ function HotLeadsCard() {
     };
   }, [refreshTick]);
 
-  const counts = useMemo(
-    () => ({
-      all: allLeads.length,
-      hot: allLeads.filter((l) => l.status === "hot").length,
-      followup: allLeads.filter((l) => l.status === "new" || l.status === "contacted").length,
-    }),
+  // "Perlu Aksi" — lead baru yang sudah lewat SLA (>= 60 menit belum
+  // ditindak) atau booking survei yang masih menunggu Terima/Tolak.
+  // Pill ini jadi prioritas paling atas, terlepas dari status lead-nya.
+  const isActionNeeded = useCallback(
+    (l: HotLead) =>
+      (l.status === "new" && l.ageMinutes >= 60) ||
+      l.bookingSurveiStatus === "PENDING",
+    [],
+  );
+
+  // Lead "cold" (lost/tidak lanjut) tidak ikut menumpuk di pill "Semua" —
+  // dipindah ke pill "Arsip" tersendiri agar dashboard tetap rapi tanpa
+  // kehilangan data (tetap bisa dibuka/dipulihkan lewat pill Arsip).
+  const activeLeads = useMemo(
+    () => allLeads.filter((l) => l.status !== "cold"),
     [allLeads],
   );
 
+  const counts = useMemo(
+    () => ({
+      action: allLeads.filter(isActionNeeded).length,
+      all: activeLeads.length,
+      new: allLeads.filter((l) => l.status === "new").length,
+      followup: allLeads.filter((l) => l.status === "contacted").length,
+      hot: allLeads.filter((l) => l.status === "hot").length,
+      closing: allLeads.filter((l) => l.status === "closing").length,
+      archive: allLeads.filter((l) => l.status === "cold").length,
+    }),
+    [allLeads, activeLeads, isActionNeeded],
+  );
+
   const leads = useMemo(() => {
+    if (filter === "action") return allLeads.filter(isActionNeeded);
+    if (filter === "new") return allLeads.filter((l) => l.status === "new");
+    if (filter === "followup") return allLeads.filter((l) => l.status === "contacted");
     if (filter === "hot") return allLeads.filter((l) => l.status === "hot");
-    if (filter === "followup")
-      return allLeads.filter((l) => l.status === "new" || l.status === "contacted");
-    return allLeads;
-  }, [filter, allLeads]);
+    if (filter === "closing") return allLeads.filter((l) => l.status === "closing");
+    if (filter === "archive") return allLeads.filter((l) => l.status === "cold");
+    return activeLeads;
+  }, [filter, allLeads, activeLeads, isActionNeeded]);
+
+  // Arsipkan / pulihkan lead — update optimistic + sinkron ke backend.
+  // Diarsipkan = status "cold" (sudah ada di VALID_STATUS, dipakai juga
+  // untuk hasil "ditolak" pada penawaran/cobroke). Dipulihkan = "contacted"
+  // (kembali ke pill Followup, posisi netral karena status sebelumnya tidak disimpan).
+  const archiveLead = useCallback(async (id: string) => {
+    setAllLeads((prev) => prev.map((l) => (l.id === id ? { ...l, status: "cold" } : l)));
+    try {
+      const res = await fetch(`/api/leads/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "cold" }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("Lead diarsipkan", { description: "Bisa dipulihkan lagi lewat pill Arsip." });
+    } catch {
+      toast.error("Gagal mengarsipkan lead");
+      setRefreshTick((t) => t + 1);
+    }
+  }, []);
+
+  const restoreLead = useCallback(async (id: string) => {
+    setAllLeads((prev) => prev.map((l) => (l.id === id ? { ...l, status: "contacted" } : l)));
+    try {
+      const res = await fetch(`/api/leads/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "contacted" }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("Lead dipulihkan", { description: "Lead kembali aktif di pill Followup." });
+    } catch {
+      toast.error("Gagal memulihkan lead");
+      setRefreshTick((t) => t + 1);
+    }
+  }, []);
 
   // Titip jual yang sudah diterima agent ini juga dihitung sebagai hot lead
   // (sumber lead bukan cuma WA — titip jual yang diklaim juga = lead aktif).
   const titipCount = titip.items.length + titip.claimedItems.length;
-  const newCount = allLeads.filter((l) => l.status === "new").length + titipCount;
+  const titipActionCount = titip.items.length + titip.claimedItems.length;
+  const newCount = counts.new + titipCount;
 
-  const filterPills: { key: "all" | "hot" | "followup"; label: string; count: number; icon: string }[] = [
-    { key: "all",      label: "Semua",    count: counts.all + titipCount, icon: "solar:inbox-bold-duotone" },
-    { key: "followup", label: "Followup", count: counts.followup,         icon: "solar:phone-calling-bold-duotone" },
-    { key: "hot",      label: "Hot",      count: counts.hot,              icon: "solar:fire-bold-duotone" },
+  // Baris titip-jual (claimed/baru/locked) hanya relevan untuk pill "Semua"
+  // dan "Perlu Aksi" — di pill status lain (Baru/Followup/Hot/Closing) lead
+  // titip-jual tidak ikut campur supaya pemetaan per-status tetap akurat.
+  const showTitipRows = filter === "all" || filter === "action";
+
+  const filterPills: { key: LeadFilter; label: string; count: number; icon: string }[] = [
+    { key: "action",   label: "Perlu Aksi", count: counts.action + titipActionCount, icon: "solar:bolt-bold-duotone" },
+    { key: "all",      label: "Semua",      count: counts.all + titipCount,          icon: "solar:inbox-bold-duotone" },
+    { key: "new",      label: "Baru",       count: counts.new,                       icon: "solar:bell-bing-bold-duotone" },
+    { key: "followup", label: "Followup",   count: counts.followup,                  icon: "solar:phone-calling-bold-duotone" },
+    { key: "hot",      label: "Hot",        count: counts.hot,                       icon: "solar:fire-bold-duotone" },
+    { key: "closing",  label: "Closing",    count: counts.closing,                   icon: "solar:document-text-bold-duotone" },
+    { key: "archive",  label: "Arsip",      count: counts.archive,                   icon: "solar:archive-bold-duotone" },
   ];
 
   return (
@@ -2107,74 +2376,120 @@ function HotLeadsCard() {
           </button>
         </div>
 
-        {/* ─── Filter pills (scrollable on overflow) ─── */}
-        <div className="-mx-1 flex items-center gap-1.5 overflow-x-auto px-5 pb-3 sm:px-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {filterPills.map((p) => {
-            const active = filter === p.key;
-            return (
-              <button
-                key={p.key}
-                type="button"
-                onClick={() => setFilter(p.key)}
-                className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold tracking-wide transition ${
-                  active
-                    ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-100 shadow-[0_0_16px_rgba(52,211,153,0.18)]"
-                    : "border-white/[0.06] bg-white/[0.02] text-slate-400 hover:border-white/[0.14] hover:bg-white/[0.05] hover:text-white"
-                }`}
-              >
-                <Icon icon={p.icon} className={`text-[12px] ${active ? "text-emerald-300" : ""}`} />
-                <span>{p.label}</span>
-                <span
-                  className={`tabular-nums rounded-md px-1.5 py-0.5 text-[9px] font-extrabold ${
-                    active ? "bg-emerald-500/25 text-emerald-100" : "bg-white/[0.05] text-slate-500"
+        {/* ─── Filter pills (scrollable, snap + sliding active indicator) ─── */}
+        <div className="relative">
+          <div className="-mx-1 flex items-center gap-1.5 overflow-x-auto px-5 pb-3 sm:px-6 [scrollbar-width:none] snap-x snap-proximity scroll-px-5 [&::-webkit-scrollbar]:hidden [mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-16px),transparent)] sm:[mask-image:linear-gradient(to_right,transparent,black_24px,black_calc(100%-24px),transparent)]">
+            {filterPills.map((p) => {
+              const active = filter === p.key;
+              // Pill "Perlu Aksi" pakai aksen rose (urgensi), "Arsip" pakai slate, lainnya emerald.
+              const isAction = p.key === "action";
+              const isArchive = p.key === "archive";
+              const urgent = isAction && p.count > 0;
+              const accentText = isAction ? "text-rose-300" : isArchive ? "text-slate-300" : "text-emerald-300";
+              const accentBorder = isAction ? "border-rose-400/40" : isArchive ? "border-slate-400/35" : "border-emerald-400/40";
+              const accentTextStrong = isAction ? "text-rose-100" : isArchive ? "text-slate-100" : "text-emerald-100";
+              const accentGlow = isAction
+                ? "shadow-[0_0_16px_rgba(244,63,94,0.2)]"
+                : isArchive
+                ? "shadow-[0_0_16px_rgba(148,163,184,0.16)]"
+                : "shadow-[0_0_16px_rgba(52,211,153,0.18)]";
+              const accentBg = isAction ? "bg-rose-500/15" : isArchive ? "bg-slate-400/15" : "bg-emerald-500/15";
+              const accentCount = isAction ? "bg-rose-500/25 text-rose-100" : isArchive ? "bg-slate-400/25 text-slate-100" : "bg-emerald-500/25 text-emerald-100";
+
+              return (
+                <motion.button
+                  key={p.key}
+                  type="button"
+                  onClick={() => setFilter(p.key)}
+                  whileTap={{ scale: 0.94 }}
+                  className={`relative flex shrink-0 snap-start items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold tracking-wide transition-colors duration-300 ${
+                    active
+                      ? `${accentBorder} ${accentTextStrong}`
+                      : urgent
+                      ? "border-rose-400/25 bg-rose-500/[0.06] text-rose-200 hover:border-rose-400/40 hover:bg-rose-500/15"
+                      : "border-white/[0.06] bg-white/[0.02] text-slate-400 hover:border-white/[0.14] hover:bg-white/[0.05] hover:text-white"
                   }`}
                 >
-                  {p.count}
-                </span>
-              </button>
-            );
-          })}
+                  {active && (
+                    <motion.span
+                      layoutId="hot-leads-pill-active-bg"
+                      className={`absolute inset-0 rounded-full ${accentBg} ${accentGlow}`}
+                      transition={{ type: "spring", stiffness: 500, damping: 34 }}
+                    />
+                  )}
+                  <span className="relative z-10 flex items-center gap-1.5">
+                    <Icon
+                      icon={p.icon}
+                      className={`text-[12px] ${active ? accentText : urgent ? "text-rose-300" : ""}`}
+                    />
+                    <span>{p.label}</span>
+                    <span
+                      className={`tabular-nums rounded-md px-1.5 py-0.5 text-[9px] font-extrabold transition-colors duration-300 ${
+                        active
+                          ? accentCount
+                          : urgent
+                          ? "bg-rose-500/20 text-rose-200"
+                          : "bg-white/[0.05] text-slate-500"
+                      }`}
+                    >
+                      {p.count}
+                    </span>
+                  </span>
+                </motion.button>
+              );
+            })}
+          </div>
         </div>
 
         {/* ─── List ─── */}
         <div className="flex-1 min-w-0 min-h-[220px] space-y-2.5 overflow-x-hidden overflow-y-auto px-3 pb-4 sm:px-4 lg:min-h-0">
-          {/* (1) Lead yang sudah dimenangkan agent ini — paling atas
-                  supaya selalu kelihatan untuk follow-up. */}
-          <AnimatePresence initial={false}>
-            {titip.claimedItems.map((it) => (
-              <ClaimedFollowupRow
-                key={`claimed-${it.id_titip}`}
-                item={it}
-                onOpenPlaybook={titip.reopenPlaybook}
-              />
-            ))}
-          </AnimatePresence>
+          {/* Baris titip-jual hanya tampil di pill "Semua" / "Perlu Aksi" —
+              di pill status lain (Baru/Followup/Hot/Closing) disembunyikan
+              supaya pemetaan per-status tetap akurat. */}
+          {showTitipRows && (
+            <>
+              {/* (1) Lead yang sudah dimenangkan agent ini — paling atas
+                      supaya selalu kelihatan untuk follow-up. */}
+              <AnimatePresence initial={false}>
+                {titip.claimedItems.map((it) => (
+                  <ClaimedFollowupRow
+                    key={`claimed-${it.id_titip}`}
+                    item={it}
+                    onOpenPlaybook={titip.reopenPlaybook}
+                  />
+                ))}
+              </AnimatePresence>
 
-          {/* (2) Titip-jual baru yang masih bisa diklaim */}
-          <AnimatePresence initial={false}>
-            {titip.items.map((it) => (
-              <TitipRow
-                key={`titip-${it.id_titip}`}
-                item={it}
-                pendingAction={titip.pendingAction}
-                conflictId={titip.conflictId}
-                removalId={titip.removalId}
-                onAccept={titip.accept}
-                onReject={titip.reject}
-              />
-            ))}
-          </AnimatePresence>
+              {/* (2) Titip-jual baru yang masih bisa diklaim */}
+              <AnimatePresence initial={false}>
+                {titip.items.map((it) => (
+                  <TitipRow
+                    key={`titip-${it.id_titip}`}
+                    item={it}
+                    pendingAction={titip.pendingAction}
+                    conflictId={titip.conflictId}
+                    removalId={titip.removalId}
+                    onAccept={titip.accept}
+                    onReject={titip.reject}
+                  />
+                ))}
+              </AnimatePresence>
 
-          {/* (3) Closure card untuk lead yang sudah diambil agent lain. */}
-          <AnimatePresence initial={false}>
-            {titip.lockedItems.map((it) => (
-              <LockedRow
-                key={`locked-${it.id_titip}`}
-                item={it}
-                onDismiss={titip.dismissLocked}
-              />
-            ))}
-          </AnimatePresence>
+              {/* (3) Closure card untuk lead yang sudah diambil agent lain —
+                      hanya relevan di pill "Semua", bukan "Perlu Aksi". */}
+              {filter === "all" && (
+                <AnimatePresence initial={false}>
+                  {titip.lockedItems.map((it) => (
+                    <LockedRow
+                      key={`locked-${it.id_titip}`}
+                      item={it}
+                      onDismiss={titip.dismissLocked}
+                    />
+                  ))}
+                </AnimatePresence>
+              )}
+            </>
+          )}
 
           {loading ? (
             // skeleton (3 rows)
@@ -2202,35 +2517,43 @@ function HotLeadsCard() {
               <p className="mt-1 text-[11px] text-slate-500">Coba refresh halaman</p>
             </div>
           ) : leads.length === 0 &&
-            titip.items.length === 0 &&
-            titip.lockedItems.length === 0 &&
-            titip.claimedItems.length === 0 ? (
+            (!showTitipRows ||
+              (titip.items.length === 0 &&
+                titip.lockedItems.length === 0 &&
+                titip.claimedItems.length === 0)) ? (
             <div className="flex h-full flex-col items-center justify-center py-12 text-center">
               <div className="grid h-14 w-14 place-items-center rounded-2xl border border-emerald-400/15 bg-emerald-500/[0.05]">
-                <Icon icon="solar:check-circle-bold-duotone" className="text-3xl text-emerald-400/60" />
+                <Icon
+                  icon={filter === "archive" ? "solar:archive-bold-duotone" : "solar:check-circle-bold-duotone"}
+                  className="text-3xl text-emerald-400/60"
+                />
               </div>
-              <p className="mt-3 text-sm font-semibold text-white">Semua lead sudah ditangani</p>
+              <p className="mt-3 text-sm font-semibold text-white">
+                {filter === "archive" ? "Belum ada lead yang diarsipkan" : "Semua lead sudah ditangani"}
+              </p>
               <p className="mt-1 max-w-[220px] text-[11px] text-slate-500">
-                Belum ada lead di kategori ini. Lead baru akan otomatis muncul di sini.
+                {filter === "archive"
+                  ? "Swipe ke kiri pada lead yang sudah selesai/tidak lanjut untuk memindahkannya ke sini."
+                  : "Belum ada lead di kategori ini. Lead baru akan otomatis muncul di sini."}
               </p>
             </div>
           ) : (
-            leads.map((lead) => {
+            <AnimatePresence initial={false} mode="popLayout">
+            {leads.map((lead) => {
               const v = statusVisual(lead.status, lead.ageMinutes);
               const phoneDigits = lead.phone ? lead.phone.replace(/\D/g, "") : "";
               return (
-                <article
+                <SwipeableLeadRow
                   key={lead.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setSelectedLead(lead)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setSelectedLead(lead);
-                    }
-                  }}
-                  className={`group relative cursor-pointer overflow-hidden rounded-2xl border outline-none backdrop-blur-sm transition hover:-translate-y-[1px] hover:shadow-[0_8px_24px_-12px_rgba(0,0,0,0.5)] focus-visible:ring-2 focus-visible:ring-emerald-400/40 ${v.card}`}
+                  archived={lead.status === "cold"}
+                  highlighted={focusLeadId === lead.id}
+                  onOpen={() => setSelectedLead(lead)}
+                  onArchive={() => archiveLead(lead.id)}
+                  onRestore={() => restoreLead(lead.id)}
+                >
+                <article
+                  id={`hot-lead-${lead.id}`}
+                  className={`group relative overflow-hidden rounded-2xl border backdrop-blur-sm transition hover:shadow-[0_8px_24px_-12px_rgba(0,0,0,0.5)] ${v.card}`}
                 >
                   {/* Left accent bar — status color */}
                   <span className={`absolute inset-y-0 left-0 w-[3px] ${v.bar}`} />
@@ -2277,15 +2600,22 @@ function HotLeadsCard() {
                       </p>
                       <div className="mt-1 flex items-center gap-1.5">
                         <p
-                          className={`inline-flex min-w-0 flex-1 items-center gap-1 truncate text-[11px] ${
-                            lead.clientName
+                          className={`flex min-w-0 flex-1 items-center gap-1 truncate text-[11px] ${
+                            lead.sourceRaw === "cobroke"
+                              ? "font-semibold text-fuchsia-300/85"
+                              : lead.clientName
                               ? "font-semibold text-emerald-300/90"
                               : lead.phone
                               ? "text-slate-400"
                               : "italic text-amber-300/85"
                           }`}
                         >
-                          {lead.clientName ? (
+                          {lead.sourceRaw === "cobroke" ? (
+                            <Icon
+                              icon="solar:shield-keyhole-bold-duotone"
+                              className="shrink-0 text-[12px]"
+                            />
+                          ) : lead.clientName ? (
                             <Icon
                               icon="solar:user-bold-duotone"
                               className="shrink-0 text-[12px]"
@@ -2297,7 +2627,9 @@ function HotLeadsCard() {
                             />
                           ) : null}
                           <span className="truncate">
-                            {lead.clientName
+                            {lead.sourceRaw === "cobroke"
+                              ? "Identitas klien dirahasiakan"
+                              : lead.clientName
                               ? lead.clientName
                               : lead.phone
                               ? lead.listing
@@ -2309,9 +2641,21 @@ function HotLeadsCard() {
                           <Icon icon="solar:alt-arrow-right-bold" className="text-[9px]" />
                         </span>
                       </div>
-                      {lead.budget && (
-                        <p className="mt-2 text-[12px] font-extrabold tabular-nums text-emerald-300">
-                          {lead.budget}
+
+                      {lead.sourceRaw === "survei" &&
+                        lead.bookingSurveiStatus === "PENDING" && (
+                          <p className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-amber-400/25 bg-amber-500/[0.08] px-1.5 py-0.5 text-[10px] font-bold text-amber-300">
+                            <Icon icon="solar:bell-bing-bold-duotone" className="text-[11px]" />
+                            Menunggu Terima/Tolak survei
+                          </p>
+                        )}
+
+                      {lead.sourceRaw === "cobroke" && lead.cobrokeAgent && (
+                        <p className="mt-1.5 flex min-w-0 w-full items-center gap-1 truncate rounded-md border border-fuchsia-400/25 bg-fuchsia-500/[0.08] px-1.5 py-0.5 text-[10px] font-bold text-fuchsia-300">
+                          <Icon icon="solar:users-group-two-rounded-bold-duotone" className="shrink-0 text-[11px]" />
+                          <span className="truncate">
+                            Diajukan oleh {lead.cobrokeAgent.nama} ({lead.cobrokeAgent.kantor})
+                          </span>
                         </p>
                       )}
                     </div>
@@ -2322,7 +2666,7 @@ function HotLeadsCard() {
                     className={`flex items-center justify-between gap-2 border-t px-3 py-2 sm:px-4 ${v.bannerBg}`}
                   >
                     <span
-                      className={`inline-flex min-w-0 items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wide ${v.bannerText}`}
+                      className={`flex min-w-0 flex-1 items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wide ${v.bannerText}`}
                     >
                       <Icon icon={v.icon} className="shrink-0 text-[13px]" />
                       <span className="truncate">{v.label}</span>
@@ -2360,8 +2704,10 @@ function HotLeadsCard() {
                     </div>
                   </div>
                 </article>
+                </SwipeableLeadRow>
               );
-            })
+            })}
+            </AnimatePresence>
           )}
         </div>
       </div>

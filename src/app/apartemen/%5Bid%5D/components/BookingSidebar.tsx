@@ -143,7 +143,7 @@ const CalendarModal = ({ isOpen, onClose, onSelect, mode, startDate, endDate }: 
       {isOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4">
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-          <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-[#121212] border border-white/10 w-full max-w-[320px] rounded-3xl overflow-hidden relative z-10 shadow-2xl">
+          <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-[#121212] border border-white/10 w-full max-w-[320px] max-h-[90vh] overflow-y-auto rounded-3xl relative z-10 shadow-2xl">
              <div className="flex justify-between items-center p-4 border-b border-white/10 bg-[#161616]">
                 <h3 className="text-base font-bold text-white">{mode === 'daily' ? 'Pilih Tanggal' : 'Mulai Sewa'}</h3>
                 <button onClick={onClose}><Icon icon="solar:close-circle-bold" className="text-lg text-gray-400 hover:text-white"/></button>

@@ -43,6 +43,11 @@ export interface MenuItem {
       icon: "solar:users-group-rounded-linear",
       href: "/dashboard/crm",
     },
+    {
+      label: "Jadwal Survei",
+      icon: "solar:map-point-wave-linear",
+      href: "/dashboard/survei",
+    },
   ];
 
   export const appsMenu: MenuItem[] = [

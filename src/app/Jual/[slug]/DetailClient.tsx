@@ -6,7 +6,6 @@ import Link from "next/link";
 import { Icon } from "@iconify/react";
 
 // Components
-import MobileNav from "./[agentId]/components/MobileNav";
 import ImageGallery from "./[agentId]/components/ImageGallery";
 import DetailInfo from "./[agentId]/components/DetailInfo";
 import BookingSidebar from "./[agentId]/components/AgentSidebar";
@@ -156,6 +155,8 @@ export default function DetailClient({
     gambar_utama_url:
       product.gambar_utama_url || "/images/hero/banner.jpg",
 
+    foto_list: product.foto_list || [],
+
     agent: product.agent
       ? {
           nama: product.agent.pengguna?.nama_lengkap || "Agent Premier",
@@ -223,8 +224,6 @@ export default function DetailClient({
   // ================== RENDER ==================
   return (
     <div className="text-white font-sans bg-[#0F0F0F]">
-      <MobileNav />
-
       <div className="lg:hidden h-[60px]" />
       <div className="hidden lg:block h-24 w-full" />
 

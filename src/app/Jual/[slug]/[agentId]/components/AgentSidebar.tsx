@@ -3,8 +3,39 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Icon } from "@iconify/react";
 import Image from "next/image";
+import Link from "next/link";
 import { useSession } from "next-auth/react";
+import Signin from "@/components/Auth/SignIn";
+import SignUp from "@/components/Auth/SignUp";
 import { trackLeadClick } from "@/lib/leadTracking";
+import { getOfferFeedback } from "@/lib/offerFeedback";
+import { PAYMENT_METHODS, PaymentMethod } from "@/lib/paymentMethods";
+import { pusherClient } from "@/lib/pusher-client";
+import CobrokeModal, { CobrokeClaimSummary } from "@/components/PropertyDetail/CobrokeModal";
+import { downloadPropertyImages } from "@/lib/downloadPropertyImages";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PENAWARAN — status penawaran milik user untuk properti ini
+// ─────────────────────────────────────────────────────────────────────────────
+interface ExistingOffer {
+  id_lead: string;
+  penawaran: number | null;
+  diskon?: number | null;
+  pembayaran?: PaymentMethod | null;
+  catatan?: string | null;
+  status_penawaran: "pending" | "diterima" | "ditolak";
+  catatan_agent?: string | null;
+  tanggal_keputusan?: string | null;
+  created_at?: string;
+}
+
+interface DecisionPayload {
+  id_lead: string;
+  id_property: string;
+  status_penawaran: "diterima" | "ditolak";
+  catatan_agent: string | null;
+  penawaran: number | null;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SURVEY MODAL — 4-step smart booking (premium animated)
@@ -145,17 +176,22 @@ function SurveyModal({ isOpen, onClose, agentName, propertyTitle, agentPhone, id
       selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(),
       hh - 7, 0, 0, 0,
     ));
+    // Buat/lengkapi lead dulu supaya bisa di-link ke booking survei
+    const leadRes = await trackLeadClick({
+      id_property: idProperty, id_agent: idAgent, source: "survei",
+      client_name: namaKlien.trim(), client_phone: fullPhone,
+    });
+
     try {
       const res = await fetch("/api/survei/booking", {
         method: "POST", headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ id_property:idProperty, id_agent:idAgent, nama_klien:namaKlien.trim(), nomor_telepon:fullPhone, tanggal_survei:surveiUTC.toISOString(), catatan:catatan.trim()||undefined }),
+        body: JSON.stringify({ id_property:idProperty, id_agent:idAgent, nama_klien:namaKlien.trim(), nomor_telepon:fullPhone, tanggal_survei:surveiUTC.toISOString(), catatan:catatan.trim()||undefined, id_lead:leadRes.id_lead }),
       });
       if (!res.ok) { const err=await res.json(); setSubmitError(err.error||"Gagal menyimpan."); setSubmitting(false); return; }
     } catch { setSubmitError("Koneksi gagal."); setSubmitting(false); return; }
 
     const wa  = agentPhone.replace(/^0/,"62").replace(/\D/g,"");
     const msg = `Halo ${agentName}, saya ingin menjadwalkan *Survei Lokasi* untuk properti:\n*${propertyTitle}*\n\n📅 Tanggal: ${fmtDate()}\n🕐 Waktu: ${selectedTime} WIB\n👤 Nama: ${namaKlien}\n📱 No. Telp: ${fullPhone}${catatan.trim()?`\n📝 Catatan: ${catatan.trim()}`:""}\n\nMohon konfirmasi jadwalnya. Terima kasih!`;
-    trackLeadClick({ id_property:idProperty, id_agent:idAgent, source:"survei" });
     window.open(`https://wa.me/${wa}?text=${encodeURIComponent(msg)}`, "_blank");
     setSubmitting(false);
     handleClose();
@@ -197,7 +233,7 @@ function SurveyModal({ isOpen, onClose, agentName, propertyTitle, agentPhone, id
         style={{ opacity:visible?1:0, transition:"opacity 0.35s ease" }} />
 
       {/* Panel */}
-      <div className="relative w-full sm:max-w-[440px] sm:mx-auto rounded-t-[2.25rem] sm:rounded-[2rem] overflow-hidden"
+      <div className="relative w-full sm:max-w-[440px] sm:mx-auto rounded-t-[2.25rem] sm:rounded-[2rem] overflow-hidden max-h-[92dvh] sm:max-h-[85vh] flex flex-col"
         style={{
           background: "linear-gradient(160deg,#141417 0%,#0d0d10 100%)",
           boxShadow: "0 -32px 80px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.055), inset 0 1px 0 rgba(255,255,255,0.045)",
@@ -242,7 +278,10 @@ function SurveyModal({ isOpen, onClose, agentName, propertyTitle, agentPhone, id
           </div>
         </div>
 
-        <div className="h-px" style={{ background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.06),transparent)" }}/>
+        <div className="h-px shrink-0" style={{ background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.06),transparent)" }}/>
+
+        {/* ── SCROLLABLE CONTENT ── */}
+        <div className="flex-1 overflow-y-auto min-h-0">
 
         {/* ── STEP 1: CALENDAR ── */}
         {step===1 && (
@@ -478,6 +517,7 @@ function SurveyModal({ isOpen, onClose, agentName, propertyTitle, agentPhone, id
 
         {/* iOS safe area */}
         <div className="safe-area-bottom"/>
+        </div>
       </div>
     </div>
   );
@@ -486,6 +526,11 @@ function SurveyModal({ isOpen, onClose, agentName, propertyTitle, agentPhone, id
 // ─────────────────────────────────────────────────────────────────────────────
 // OFFER MODAL — ajukan penawaran harga
 // ─────────────────────────────────────────────────────────────────────────────
+interface MyOfferSummary {
+  status: "pending" | "diterima" | "ditolak";
+  penawaran: number | null;
+}
+
 interface OfferModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -495,27 +540,78 @@ interface OfferModalProps {
   askingPrice: number;
   idProperty: string | number;
   idAgent: string | number | undefined;
+  onOfferChange?: (offer: MyOfferSummary | null) => void;
 }
 
 function OfferModal({
-  isOpen, onClose, agentName, propertyTitle, agentPhone, askingPrice, idProperty, idAgent,
+  isOpen, onClose, agentName, propertyTitle, agentPhone, askingPrice, idProperty, idAgent, onOfferChange,
 }: OfferModalProps) {
+  const { data: session, status: sessionStatus } = useSession();
   const [offerRaw, setOfferRaw] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
   const [notes,    setNotes]    = useState("");
   const [visible,  setVisible]  = useState(false);
   const [error,    setError]    = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [profile, setProfile] = useState<{ name: string; phone: string; email: string } | null>(null);
+  const [authView, setAuthView] = useState<"gate" | "signin" | "signup">("gate");
+  const [justAuthenticated, setJustAuthenticated] = useState(false);
+  const [successVisible, setSuccessVisible] = useState(false);
+  const [existingOffer, setExistingOffer] = useState<ExistingOffer | null>(null);
+  const [loadingOffer, setLoadingOffer] = useState(true);
 
   useEffect(() => {
     if (isOpen) {
-      setOfferRaw(""); setNotes(""); setError("");
+      setOfferRaw(""); setNotes(""); setPaymentMethod(""); setError(""); setSubmitting(false); setAuthView("gate"); setJustAuthenticated(false);
       requestAnimationFrame(() => setVisible(true));
+
+      if (session?.user) {
+        fetch("/api/profile")
+          .then(r => r.ok ? r.json() : null)
+          .then(data => {
+            setProfile({
+              name: data?.pengguna?.nama_lengkap || session.user?.name || "",
+              phone: data?.pengguna?.nomor_telepon || "",
+              email: data?.pengguna?.email || session.user?.email || "",
+            });
+          })
+          .catch(() => setProfile(null));
+
+        setLoadingOffer(true);
+        fetch(`/api/leads/penawaran/mine?id_property=${idProperty}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(data => {
+            const offer = data?.offer ?? null;
+            setExistingOffer(offer);
+            onOfferChange?.(offer ? { status: offer.status_penawaran, penawaran: offer.penawaran } : null);
+          })
+          .catch(() => setExistingOffer(null))
+          .finally(() => setLoadingOffer(false));
+      } else {
+        setProfile(null);
+        setExistingOffer(null);
+      }
     } else { setVisible(false); }
-  }, [isOpen]);
+  }, [isOpen, session, idProperty]);
 
   useEffect(() => {
     document.body.style.overflow = isOpen ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [isOpen]);
+
+  // ── Transisi mulus setelah login berhasil di dalam modal ──
+  const needsLoginNow = sessionStatus !== "loading" && sessionStatus !== "authenticated";
+  useEffect(() => {
+    if (!justAuthenticated) { setSuccessVisible(false); return; }
+    requestAnimationFrame(() => setSuccessVisible(true));
+    if (!needsLoginNow) {
+      const t = setTimeout(() => {
+        setSuccessVisible(false);
+        setTimeout(() => setJustAuthenticated(false), 200);
+      }, 1100);
+      return () => clearTimeout(t);
+    }
+  }, [justAuthenticated, needsLoginNow]);
 
   const handleClose = useCallback(() => {
     setVisible(false); setTimeout(onClose, 250);
@@ -531,15 +627,48 @@ function OfferModal({
     ? Math.round(((askingPrice - offerNum) / askingPrice) * 100)
     : 0;
 
+  const offerFeedback = offerNum > 0 ? getOfferFeedback(diffPct, "harga listing") : null;
+
   const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     setOfferRaw(e.target.value.replace(/\D/g, ""));
     setError("");
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!offerRaw || offerNum < 1_000_000) {
       setError("Tawaran minimal Rp 1.000.000"); return;
     }
+    if (!paymentMethod) {
+      setError("Pilih cara bayar terlebih dahulu"); return;
+    }
+    setSubmitting(true); setError("");
+
+    const paymentLabel = PAYMENT_METHODS.find(p => p.value === paymentMethod)?.waLabel;
+    const leadNotes = [paymentLabel ? `Cara bayar: ${paymentLabel}` : "", notes.trim()].filter(Boolean).join("\n");
+
+    const result = await trackLeadClick({
+      id_property: idProperty, id_agent: idAgent, source: "penawaran",
+      offer_amount: offerNum, discount_pct: diffPct, payment_method: paymentMethod,
+      notes: leadNotes || undefined,
+    });
+    if (!result.ok) {
+      if (result.error === "PENDING_OFFER_EXISTS" && result.existing) {
+        setExistingOffer({
+          id_lead: result.existing.id_lead,
+          penawaran: result.existing.penawaran,
+          status_penawaran: "pending",
+          created_at: result.existing.created_at,
+        });
+        onOfferChange?.({ status: "pending", penawaran: result.existing.penawaran });
+      } else {
+        setError("Gagal mengirim penawaran. Silakan coba lagi.");
+      }
+      setSubmitting(false);
+      return;
+    }
+
+    onOfferChange?.({ status: "pending", penawaran: offerNum });
+
     const phone = agentPhone.replace(/^0/, "62").replace(/\D/g, "");
     let msg =
       `Halo ${agentName}, saya ingin mengajukan penawaran untuk properti:\n` +
@@ -548,15 +677,18 @@ function OfferModal({
       `🤝 Tawaran Saya: *${fmt(offerNum)}*`;
     if (diffPct > 0)       msg += ` (${diffPct}% di bawah harga listing)`;
     if (offerNum > askingPrice) msg += ` (melebihi harga listing)`;
+    if (paymentLabel)      msg += `\n💳 Cara Bayar: ${paymentLabel}`;
     if (notes.trim())      msg += `\n\n📝 Catatan: ${notes.trim()}`;
     msg += `\n\nMohon pertimbangan dan konfirmasinya. Terima kasih!`;
 
-    trackLeadClick({ id_property: idProperty, id_agent: idAgent, source: "penawaran" });
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
+    setSubmitting(false);
     handleClose();
   };
 
   if (!isOpen) return null;
+
+  const needsLogin = needsLoginNow && !justAuthenticated;
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center">
@@ -566,16 +698,16 @@ function OfferModal({
         style={{ opacity: visible ? 1 : 0 }}
       />
       <div
-        className="relative w-full sm:max-w-[420px] sm:mx-auto bg-[#0C0C0C] border border-white/[0.07] rounded-t-[2.5rem] sm:rounded-[2rem] overflow-hidden shadow-[0_-24px_80px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.04)] transition-all duration-300 ease-out"
+        className="relative w-full sm:max-w-[420px] sm:mx-auto bg-[#0C0C0C] border border-white/[0.07] rounded-t-[2.5rem] sm:rounded-[2rem] overflow-hidden shadow-[0_-24px_80px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.04)] transition-all duration-300 ease-out max-h-[92dvh] sm:max-h-[85vh] flex flex-col"
         style={{ transform: visible ? "translateY(0)" : "translateY(24px)", opacity: visible ? 1 : 0 }}
       >
         {/* Pull bar */}
-        <div className="sm:hidden flex justify-center pt-3.5 pb-1">
+        <div className="sm:hidden flex justify-center pt-3.5 pb-1 shrink-0">
           <div className="w-8 h-[3px] rounded-full bg-white/15" />
         </div>
 
         {/* Header */}
-        <div className="px-6 pt-5 pb-4 border-b border-white/[0.06]">
+        <div className="px-6 pt-5 pb-4 border-b border-white/[0.06] shrink-0">
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] font-black text-[#86efac]/60 uppercase tracking-widest">
               Negosiasi Harga
@@ -590,66 +722,251 @@ function OfferModal({
           <p className="text-[11px] text-white/30 mt-0.5 truncate font-medium">{propertyTitle}</p>
         </div>
 
-        <div className="px-6 py-5 space-y-4">
-          {/* Harga listing reference */}
-          <div className="flex items-center justify-between bg-white/[0.03] border border-white/[0.06] rounded-2xl px-4 py-3">
-            <span className="text-[11px] text-white/40 font-medium">Harga Listing</span>
-            <span className="text-sm font-extrabold text-white">{fmt(askingPrice)}</span>
-          </div>
-
-          {/* Offer input */}
-          <div>
-            <label className="text-[9px] font-black text-white/30 uppercase tracking-widest block mb-2">
-              Tawaran Anda
-            </label>
-            <div className={`flex items-center gap-2 rounded-2xl px-4 py-3.5 transition-colors border ${error ? "border-rose-500/40 bg-rose-500/[0.04]" : "border-white/[0.08] bg-white/[0.04] focus-within:border-[#86efac]/30"}`}>
-              <span className="text-sm font-bold text-white/30 shrink-0">Rp</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={displayVal}
-                onChange={handleInput}
-                placeholder="0"
-                className="flex-1 bg-transparent text-white font-extrabold text-lg outline-none placeholder:text-white/15 tabular-nums"
-              />
+        <div className="px-6 py-5 space-y-4 overflow-y-auto min-h-0 flex-1">
+          {justAuthenticated ? (
+            <div
+              className="flex flex-col items-center text-center gap-4 py-10 transition-all duration-500 ease-out"
+              style={{ opacity: successVisible ? 1 : 0, transform: successVisible ? "translateY(0) scale(1)" : "translateY(8px) scale(0.96)" }}
+            >
+              <div className="relative w-20 h-20 rounded-full bg-[#86efac]/10 border border-[#86efac]/20 flex items-center justify-center">
+                <div className="absolute inset-0 rounded-full bg-[#86efac]/20 animate-ping" />
+                <Icon icon="solar:check-circle-bold" className="text-4xl text-[#86efac] relative z-10" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Berhasil masuk!</h3>
+                <p className="text-[12px] text-white/40 mt-1.5 leading-relaxed">
+                  Menyiapkan formulir penawaran kamu...
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#86efac] animate-bounce" style={{ animationDelay: "0ms" }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#86efac] animate-bounce" style={{ animationDelay: "150ms" }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#86efac] animate-bounce" style={{ animationDelay: "300ms" }} />
+              </div>
             </div>
-            {error ? (
-              <p className="text-[10px] text-rose-400 mt-1.5 font-medium">{error}</p>
-            ) : offerNum > 0 && diffPct !== 0 ? (
-              <p className={`text-[10px] mt-1.5 font-medium ${diffPct > 0 ? "text-[#86efac]/60" : "text-amber-400/70"}`}>
-                {diffPct > 0
-                  ? `${diffPct}% di bawah harga listing — kemungkinan diterima lebih besar`
-                  : `Tawaran Anda melebihi harga listing`}
+          ) : needsLogin ? (
+            authView === "signin" ? (
+              <div className="auth-embed">
+                <Signin
+                  closeModal={() => setAuthView("gate")}
+                  openSignupModal={() => setAuthView("signup")}
+                  skipRedirect
+                  onSuccess={() => setJustAuthenticated(true)}
+                />
+              </div>
+            ) : authView === "signup" ? (
+              <div className="auth-embed">
+                <SignUp
+                  closeModal={() => setAuthView("gate")}
+                  openSigninModal={() => setAuthView("signin")}
+                />
+              </div>
+            ) : (
+            <>
+              <div className="flex flex-col items-center text-center gap-3 py-2">
+                <div className="w-14 h-14 rounded-2xl bg-[#86efac]/10 border border-[#86efac]/20 flex items-center justify-center">
+                  <Icon icon="solar:shield-keyhole-bold-duotone" className="text-2xl text-[#86efac]" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Masuk untuk mengajukan penawaran</h3>
+                  <p className="text-[12px] text-white/40 mt-1.5 leading-relaxed">
+                    Demi keamanan transaksi, penawaran hanya bisa diajukan oleh akun terdaftar —
+                    agar identitas Anda jelas dan agent bisa menghubungi balik dengan tenang.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setAuthView("signin")}
+                className="w-full bg-[#86efac] hover:bg-[#6ee7a8] active:scale-[0.98] text-black font-extrabold py-3.5 rounded-2xl transition-all text-sm flex items-center justify-center gap-2"
+              >
+                <Icon icon="solar:login-3-bold" className="text-lg" />
+                Masuk
+              </button>
+              <button
+                onClick={() => setAuthView("signup")}
+                className="w-full bg-white/[0.05] hover:bg-white/[0.09] active:scale-[0.98] text-white font-bold py-3.5 rounded-2xl transition-all text-sm border border-white/[0.08]"
+              >
+                Daftar Akun Baru
+              </button>
+            </>
+            )
+          ) : loadingOffer && !existingOffer ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16">
+              <div className="w-9 h-9 rounded-full border-2 border-white/10 border-t-[#86efac] animate-spin" />
+              <p className="text-[12px] text-white/30 font-medium">Memeriksa status penawaran...</p>
+            </div>
+          ) : existingOffer?.status_penawaran === "pending" ? (
+            <div className="flex flex-col items-center text-center gap-4 py-6">
+              <div className="relative w-16 h-16 rounded-full bg-amber-400/10 border border-amber-400/20 flex items-center justify-center">
+                <div className="absolute inset-0 rounded-full bg-amber-400/15 animate-ping" />
+                <Icon icon="solar:hourglass-line-bold-duotone" className="text-3xl text-amber-300 relative z-10" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Menunggu Respon Agent</h3>
+                <p className="text-[12px] text-white/40 mt-1.5 leading-relaxed">
+                  Penawaran Anda sedang dipertimbangkan oleh agent. Anda akan diberi tahu begitu ada keputusan.
+                </p>
+              </div>
+              <div className="w-full bg-white/[0.03] border border-white/[0.06] rounded-2xl px-4 py-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-white/40 font-medium">Tawaran Anda</span>
+                  <span className="text-sm font-extrabold text-white">
+                    {existingOffer.penawaran != null ? fmt(existingOffer.penawaran) : "-"}
+                  </span>
+                </div>
+                {existingOffer.pembayaran && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-white/40 font-medium">Cara Bayar</span>
+                    <span className="text-[12px] font-bold text-white/80">
+                      {PAYMENT_METHODS.find(p => p.value === existingOffer.pembayaran)?.label}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={handleClose}
+                className="w-full bg-white/[0.05] hover:bg-white/[0.09] active:scale-[0.98] text-white font-bold py-3.5 rounded-2xl transition-all text-sm border border-white/[0.08]"
+              >
+                Tutup
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Hasil keputusan penawaran sebelumnya */}
+              {existingOffer && existingOffer.status_penawaran !== "pending" && (
+                <div className={`flex items-start gap-2.5 rounded-2xl border p-3 ${existingOffer.status_penawaran === "diterima" ? "border-[#86efac]/20 bg-[#86efac]/[0.06]" : "border-rose-400/20 bg-rose-500/[0.06]"}`}>
+                  <Icon
+                    icon={existingOffer.status_penawaran === "diterima" ? "solar:check-circle-bold" : "solar:close-circle-bold"}
+                    className={`text-base mt-0.5 shrink-0 ${existingOffer.status_penawaran === "diterima" ? "text-[#86efac]" : "text-rose-400"}`}
+                  />
+                  <div className="min-w-0">
+                    <p className={`text-[12px] font-bold ${existingOffer.status_penawaran === "diterima" ? "text-[#86efac]" : "text-rose-300"}`}>
+                      {existingOffer.status_penawaran === "diterima" ? "Penawaran sebelumnya diterima!" : "Penawaran sebelumnya ditolak"}
+                    </p>
+                    {existingOffer.catatan_agent && (
+                      <p className="text-[11px] text-white/50 mt-1 italic">"{existingOffer.catatan_agent}"</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Harga listing reference */}
+              <div className="flex items-center justify-between bg-white/[0.03] border border-white/[0.06] rounded-2xl px-4 py-3">
+                <span className="text-[11px] text-white/40 font-medium">Harga Listing</span>
+                <span className="text-sm font-extrabold text-white">{fmt(askingPrice)}</span>
+              </div>
+
+              {/* Identitas pengaju */}
+              {profile && (
+                <div className="flex items-center gap-2 bg-white/[0.03] border border-white/[0.06] rounded-2xl px-4 py-2.5">
+                  <Icon icon="solar:user-check-bold-duotone" className="text-[#86efac] text-base shrink-0" />
+                  <p className="text-[11px] text-white/45 font-medium truncate">
+                    Mengajukan sebagai <span className="text-white/80 font-bold">{profile.name}</span>
+                    {profile.phone ? ` · ${profile.phone}` : ""}
+                  </p>
+                </div>
+              )}
+
+              {/* Offer input */}
+              <div>
+                <label className="text-[9px] font-black text-white/30 uppercase tracking-widest block mb-2">
+                  Tawaran Anda
+                </label>
+                <div className={`flex items-center gap-2 rounded-2xl px-4 py-3.5 transition-colors border ${error ? "border-rose-500/40 bg-rose-500/[0.04]" : "border-white/[0.08] bg-white/[0.04] focus-within:border-[#86efac]/30"}`}>
+                  <span className="text-sm font-bold text-white/30 shrink-0">Rp</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={displayVal}
+                    onChange={handleInput}
+                    placeholder="0"
+                    className="flex-1 bg-transparent text-white font-extrabold text-lg outline-none placeholder:text-white/15 tabular-nums"
+                  />
+                </div>
+                {error ? (
+                  <p className="text-[10px] text-rose-400 mt-1.5 font-medium">{error}</p>
+                ) : offerFeedback ? (
+                  <div key={offerFeedback.tier} className="mt-2 animate-offerFeedbackIn">
+                    {offerFeedback.gaugePct > 0 && (
+                      <div className="relative h-1 rounded-full bg-white/[0.06] overflow-hidden mb-1.5">
+                        <div className="absolute inset-0 rounded-full bg-gradient-to-r from-[#86efac] via-amber-400 to-rose-500 opacity-25" />
+                        <div
+                          className={`absolute inset-y-0 left-0 rounded-full transition-all duration-300 ease-out ${offerFeedback.barClass}`}
+                          style={{ width: `${offerFeedback.gaugePct}%` }}
+                        />
+                      </div>
+                    )}
+                    <p className={`text-[10px] font-medium flex items-center gap-1 transition-colors duration-300 ${offerFeedback.textClass}`}>
+                      <Icon icon={offerFeedback.icon} className="text-[11px] shrink-0" />
+                      <span>{offerFeedback.message}</span>
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Cara Bayar */}
+              <div>
+                <label className="text-[9px] font-black text-white/30 uppercase tracking-widest block mb-2">
+                  Cara Bayar
+                </label>
+                <div className="relative grid grid-cols-2 p-1 rounded-2xl border border-white/[0.08] bg-white/[0.03]">
+                  <div
+                    className="absolute top-1 bottom-1 left-1 rounded-xl bg-[#86efac]/[0.10] border border-[#86efac]/25 transition-transform duration-300 ease-out"
+                    style={{
+                      width: "calc(50% - 4px)",
+                      transform: paymentMethod === "kpr" ? "translateX(calc(100% + 4px))" : "translateX(0)",
+                      opacity: paymentMethod ? 1 : 0,
+                    }}
+                  />
+                  {PAYMENT_METHODS.map(pm => {
+                    const active = paymentMethod === pm.value;
+                    return (
+                      <button
+                        key={pm.value}
+                        type="button"
+                        onClick={() => setPaymentMethod(pm.value)}
+                        className={`relative z-10 flex items-center justify-center gap-2 rounded-xl py-3 transition-colors duration-200 active:scale-[0.97] ${
+                          active ? "text-white" : "text-white/40 hover:text-white/60"
+                        }`}
+                      >
+                        <Icon icon={pm.icon} className={`text-base transition-colors duration-200 ${active ? "text-[#86efac]" : ""}`} />
+                        <span className="text-[11px] font-bold">{pm.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="text-[9px] font-black text-white/30 uppercase tracking-widest block mb-2">
+                  Catatan <span className="text-white/15 normal-case font-normal tracking-normal">(opsional)</span>
+                </label>
+                <textarea
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  placeholder="Contoh: Siap KPR, bisa survey minggu ini..."
+                  rows={2}
+                  className="w-full bg-white/[0.04] border border-white/[0.08] focus:border-[#86efac]/30 rounded-2xl px-4 py-3 text-white text-[13px] font-medium outline-none placeholder:text-white/15 resize-none transition-colors"
+                />
+              </div>
+
+              {/* Submit */}
+              <button
+                onClick={handleSubmit}
+                disabled={submitting}
+                className="w-full bg-[#25D366] hover:bg-[#1dbd5a] active:scale-[0.98] text-black font-extrabold py-4 rounded-2xl transition-all text-sm flex items-center justify-center gap-2 shadow-[0_8px_24px_rgba(37,211,102,0.2)] disabled:opacity-60"
+              >
+                <Icon icon={submitting ? "solar:refresh-bold" : "ic:baseline-whatsapp"} className={`text-lg ${submitting ? "animate-spin" : ""}`} />
+                {submitting ? "Mengirim..." : "Kirim Penawaran via WhatsApp"}
+              </button>
+
+              <p className="text-center text-[10px] text-white/20 font-medium">
+                Penawaran dikirim langsung ke agent untuk dipertimbangkan
               </p>
-            ) : null}
-          </div>
-
-          {/* Notes */}
-          <div>
-            <label className="text-[9px] font-black text-white/30 uppercase tracking-widest block mb-2">
-              Catatan <span className="text-white/15 normal-case font-normal tracking-normal">(opsional)</span>
-            </label>
-            <textarea
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              placeholder="Contoh: Siap KPR, bisa survey minggu ini..."
-              rows={2}
-              className="w-full bg-white/[0.04] border border-white/[0.08] focus:border-[#86efac]/30 rounded-2xl px-4 py-3 text-white text-[13px] font-medium outline-none placeholder:text-white/15 resize-none transition-colors"
-            />
-          </div>
-
-          {/* Submit */}
-          <button
-            onClick={handleSubmit}
-            className="w-full bg-[#25D366] hover:bg-[#1dbd5a] active:scale-[0.98] text-black font-extrabold py-4 rounded-2xl transition-all text-sm flex items-center justify-center gap-2 shadow-[0_8px_24px_rgba(37,211,102,0.2)]"
-          >
-            <Icon icon="ic:baseline-whatsapp" className="text-lg" />
-            Kirim Penawaran via WhatsApp
-          </button>
-
-          <p className="text-center text-[10px] text-white/20 font-medium">
-            Penawaran dikirim langsung ke agent untuk dipertimbangkan
-          </p>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -662,13 +979,83 @@ function OfferModal({
 interface AgentSidebarProps { data: any }
 
 export default function AgentSidebar({ data }: AgentSidebarProps) {
+  const { data: session } = useSession();
   const [surveyOpen,   setSurveyOpen]   = useState(false);
   const [offerOpen,    setOfferOpen]    = useState(false);
+  const [cobrokeOpen,  setCobrokeOpen]  = useState(false);
   const [displayPrice, setDisplayPrice] = useState<number>(0);
+  const [decisionToast, setDecisionToast] = useState<DecisionPayload | null>(null);
+  const [myOffer, setMyOffer] = useState<MyOfferSummary | null>(null);
+  const [myCobroke, setMyCobroke] = useState<CobrokeClaimSummary | null>(null);
+  const [isDownloadingBrosur, setIsDownloadingBrosur] = useState(false);
+
+  // ── Cek status penawaran milik user untuk properti ini (mewarnai tombol CTA) ──
+  useEffect(() => {
+    const uid = (session?.user as any)?.id;
+    if (!uid || !data.id_property) return;
+    fetch(`/api/leads/penawaran/mine?id_property=${data.id_property}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        const offer = d?.offer;
+        setMyOffer(offer ? { status: offer.status_penawaran, penawaran: offer.penawaran } : null);
+      })
+      .catch(() => {});
+  }, [session, data.id_property]);
+
+  // ── Toast real-time saat agent memutuskan penawaran / co-broke ──
+  useEffect(() => {
+    const uid = (session?.user as any)?.id;
+    if (!uid) return;
+    const channel = pusherClient.subscribe(`user-${uid}`);
+    const handler = (payload: DecisionPayload) => {
+      if (String(payload.id_property) === String(data.id_property)) {
+        setDecisionToast(payload);
+        setMyOffer({ status: payload.status_penawaran, penawaran: payload.penawaran });
+      }
+    };
+    const cobrokeHandler = (payload: DecisionPayload) => {
+      if (String(payload.id_property) === String(data.id_property)) {
+        setMyCobroke({ status: payload.status_penawaran });
+      }
+    };
+    channel.bind("penawaran:decision", handler);
+    channel.bind("cobroke:decision", cobrokeHandler);
+    return () => {
+      channel.unbind("penawaran:decision", handler);
+      channel.unbind("cobroke:decision", cobrokeHandler);
+      pusherClient.unsubscribe(`user-${uid}`);
+    };
+  }, [session, data.id_property]);
+
+  useEffect(() => {
+    if (!decisionToast) return;
+    const t = setTimeout(() => setDecisionToast(null), 6000);
+    return () => clearTimeout(t);
+  }, [decisionToast]);
 
   // ── Resolve agent ID (fallback chain: owner → listing's own id_agent field) ──
   const owner   = data.owner || {};
   const effectiveAgentId: string = String(owner.id_agent || data.id_agent || "");
+
+  // ── Co-broke mode: viewer adalah agent lain (bukan pemilik listing) ──
+  const viewerAgentId: string | undefined = (session?.user as any)?.agentId;
+  const isCobrokeViewer = !!viewerAgentId && viewerAgentId !== effectiveAgentId;
+  // ── Owner mode: viewer adalah pemilik listing sendiri ──
+  const isOwnerViewer = !!viewerAgentId && viewerAgentId === effectiveAgentId;
+  const editPropertyHref = `/tambah-property?id=${data.id_property}&mode=edit`;
+
+  useEffect(() => {
+    if (!isCobrokeViewer || !data.id_property) return;
+    fetch(`/api/leads/cobroke/mine?id_property=${data.id_property}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        const claim = d?.claim;
+        setMyCobroke(claim ? { status: claim.status_penawaran } : null);
+      })
+      .catch(() => {});
+  }, [isCobrokeViewer, data.id_property]);
+
+  const handleDownloadBrosur = () => downloadPropertyImages(data.foto_list || [], setIsDownloadingBrosur);
 
   // ── Avatar ──
   const rawAvatar: string = owner.avatar || "";
@@ -759,7 +1146,46 @@ export default function AgentSidebar({ data }: AgentSidebarProps) {
         agentName={agent.name} propertyTitle={data.title || data.judul || ""}
         agentPhone={agent.phone} askingPrice={hargaPromo ?? harga}
         idProperty={data.id_property} idAgent={effectiveAgentId}
+        onOfferChange={setMyOffer}
       />
+      <CobrokeModal
+        isOpen={cobrokeOpen} onClose={() => setCobrokeOpen(false)}
+        agentName={agent.name} agentOffice={agent.office} agentPhone={agent.phone}
+        propertyTitle={data.title || data.judul || ""} askingPrice={hargaPromo ?? harga}
+        idProperty={data.id_property} idAgent={effectiveAgentId}
+        onClaimChange={setMyCobroke}
+      />
+
+      {/* ── Toast real-time: keputusan penawaran ── */}
+      {decisionToast && (
+        <div className="fixed bottom-4 inset-x-4 sm:inset-x-auto sm:right-4 sm:w-[380px] z-[10000] animate-offerFeedbackIn">
+          <div className={`flex items-start gap-3 rounded-2xl border p-4 shadow-[0_16px_48px_rgba(0,0,0,0.6)] backdrop-blur-xl ${decisionToast.status_penawaran === "diterima" ? "border-[#86efac]/25 bg-[#0C0C0C]/95" : "border-rose-400/25 bg-[#0C0C0C]/95"}`}>
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${decisionToast.status_penawaran === "diterima" ? "bg-[#86efac]/10" : "bg-rose-500/10"}`}>
+              <Icon
+                icon={decisionToast.status_penawaran === "diterima" ? "solar:check-circle-bold" : "solar:close-circle-bold"}
+                className={`text-lg ${decisionToast.status_penawaran === "diterima" ? "text-[#86efac]" : "text-rose-400"}`}
+              />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className={`text-[12px] font-bold ${decisionToast.status_penawaran === "diterima" ? "text-[#86efac]" : "text-rose-300"}`}>
+                {decisionToast.status_penawaran === "diterima" ? "Penawaran Anda Diterima!" : "Penawaran Anda Ditolak"}
+              </p>
+              {decisionToast.catatan_agent && (
+                <p className="text-[11px] text-white/50 mt-1 italic line-clamp-2">"{decisionToast.catatan_agent}"</p>
+              )}
+              <button
+                onClick={() => { setOfferOpen(true); setDecisionToast(null); }}
+                className="mt-2 text-[11px] font-bold text-white/70 hover:text-white underline underline-offset-2"
+              >
+                Lihat Detail
+              </button>
+            </div>
+            <button onClick={() => setDecisionToast(null)} className="shrink-0 text-white/30 hover:text-white/60">
+              <Icon icon="solar:close-circle-bold" className="text-base" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ════════════════════ DESKTOP ════════════════════ */}
       <div className="hidden lg:flex flex-col w-[360px] shrink-0 sticky top-[max(6rem,_calc(50vh-320px))] h-fit rounded-[1.75rem] overflow-hidden"
@@ -877,24 +1303,82 @@ export default function AgentSidebar({ data }: AgentSidebarProps) {
 
         {/* ── CTA ── */}
         <div className="px-6 py-5 space-y-2.5">
+          {isOwnerViewer ? (
+            <>
+              <Link href={editPropertyHref}
+                className="w-full bg-[#86efac] hover:bg-[#6ee7a8] active:scale-[0.98] text-black font-extrabold text-sm py-3.5 rounded-xl transition-all flex justify-center items-center gap-2.5"
+                style={{ boxShadow:"0 8px 32px rgba(134,239,172,0.22)" }}>
+                <Icon icon="solar:pen-2-bold-duotone" className="text-xl" />
+                Edit Properti
+              </Link>
+              <button onClick={handleDownloadBrosur} disabled={isDownloadingBrosur}
+                className="w-full bg-white/[0.04] border border-white/[0.09] hover:bg-white/[0.08] text-white/70 hover:text-white font-bold text-sm py-3.5 rounded-xl transition-all flex justify-center items-center gap-2 disabled:opacity-60">
+                <Icon icon={isDownloadingBrosur ? "solar:refresh-bold" : "solar:gallery-download-bold-duotone"} className={`text-base ${isDownloadingBrosur ? "animate-spin" : ""}`} />
+                {isDownloadingBrosur ? "Mengunduh..." : "Download Poster"}
+              </button>
+            </>
+          ) : (
+          <>
           <button onClick={()=>call("wa")}
             className="w-full bg-[#25D366] hover:bg-[#1dbd5a] active:scale-[0.98] text-black font-extrabold text-sm py-3.5 rounded-xl transition-all flex justify-center items-center gap-2.5"
             style={{ boxShadow:"0 8px 32px rgba(37,211,102,0.22)" }}>
             <Icon icon="ic:baseline-whatsapp" className="text-xl" />
-            Chat WhatsApp
+            {isCobrokeViewer ? "Hubungi Agent" : "Chat WhatsApp"}
           </button>
-          <div className="grid grid-cols-2 gap-2.5">
-            <button onClick={()=>setOfferOpen(true)}
-              className="w-full bg-white/[0.04] border border-white/[0.09] hover:bg-white/[0.08] text-white/70 hover:text-white font-bold text-sm py-3 rounded-xl transition-all flex justify-center items-center gap-2">
-              <Icon icon="solar:hand-money-bold" className="text-base" />
-              Penawaran
-            </button>
-            <button onClick={()=>setSurveyOpen(true)}
-              className="w-full bg-white/[0.04] border border-white/[0.09] hover:bg-white/[0.08] text-white/70 hover:text-white font-bold text-sm py-3 rounded-xl transition-all flex justify-center items-center gap-2">
-              <Icon icon="solar:calendar-date-bold" className="text-base" />
-              Survei
-            </button>
-          </div>
+          {isCobrokeViewer ? (
+            <div className="grid grid-cols-2 gap-2.5">
+              {myCobroke?.status === "pending" ? (
+                <button onClick={()=>setCobrokeOpen(true)}
+                  className="btn-premium-pending w-full font-bold text-sm py-3 px-2 rounded-xl transition-all flex justify-center items-center gap-2 active:scale-[0.98]">
+                  <span className="pp-glow" />
+                  <Icon icon="solar:hourglass-line-bold-duotone" className="text-base relative z-10 animate-pulse shrink-0" />
+                  <span className="relative z-10 text-shimmer-amber whitespace-nowrap">Menunggu</span>
+                </button>
+              ) : myCobroke?.status === "diterima" ? (
+                <button onClick={()=>setCobrokeOpen(true)}
+                  className="w-full bg-[#86efac]/[0.08] border border-[#86efac]/25 text-[#86efac] font-bold text-sm py-3 rounded-xl transition-all flex justify-center items-center gap-2">
+                  <Icon icon="solar:medal-ribbons-star-bold-duotone" className="text-base" />
+                  Co-Broke Aktif
+                </button>
+              ) : (
+                <button onClick={()=>setCobrokeOpen(true)}
+                  className="btn-cobroke w-full font-bold text-sm py-3 px-2 rounded-xl transition-all flex justify-center items-center gap-2 active:scale-[0.98]">
+                  <span className="pp-glow-green" />
+                  <Icon icon="solar:users-group-two-rounded-bold-duotone" className="text-base relative z-10 shrink-0" />
+                  <span className="relative z-10 whitespace-nowrap">Ajukan Co-Broke</span>
+                </button>
+              )}
+              <button onClick={handleDownloadBrosur} disabled={isDownloadingBrosur}
+                className="w-full bg-white/[0.04] border border-white/[0.09] hover:bg-white/[0.08] text-white/70 hover:text-white font-bold text-sm py-3 rounded-xl transition-all flex justify-center items-center gap-2 disabled:opacity-60">
+                <Icon icon={isDownloadingBrosur ? "solar:refresh-bold" : "solar:gallery-download-bold-duotone"} className={`text-base ${isDownloadingBrosur ? "animate-spin" : ""}`} />
+                {isDownloadingBrosur ? "Mengunduh..." : "Brosur"}
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2.5">
+              {myOffer?.status === "pending" ? (
+                <button onClick={()=>setOfferOpen(true)}
+                  className="btn-premium-pending w-full font-bold text-sm py-3 px-2 rounded-xl transition-all flex justify-center items-center gap-2 active:scale-[0.98]">
+                  <span className="pp-glow" />
+                  <Icon icon="solar:hourglass-line-bold-duotone" className="text-base relative z-10 animate-pulse shrink-0" />
+                  <span className="relative z-10 text-shimmer-amber whitespace-nowrap">Menunggu</span>
+                </button>
+              ) : (
+                <button onClick={()=>setOfferOpen(true)}
+                  className="w-full bg-white/[0.04] border border-white/[0.09] hover:bg-white/[0.08] text-white/70 hover:text-white font-bold text-sm py-3 rounded-xl transition-all flex justify-center items-center gap-2">
+                  <Icon icon="solar:hand-money-bold" className="text-base" />
+                  Penawaran
+                </button>
+              )}
+              <button onClick={()=>setSurveyOpen(true)}
+                className="w-full bg-white/[0.04] border border-white/[0.09] hover:bg-white/[0.08] text-white/70 hover:text-white font-bold text-sm py-3 rounded-xl transition-all flex justify-center items-center gap-2">
+                <Icon icon="solar:calendar-date-bold" className="text-base" />
+                Survei
+              </button>
+            </div>
+          )}
+          </>
+          )}
         </div>
       </div>
 
@@ -955,8 +1439,35 @@ export default function AgentSidebar({ data }: AgentSidebarProps) {
             </div>
           </div>
 
-          {/* ── Row 2: 3 CTAs ── */}
+          {/* ── Row 2: CTAs ── */}
           <div className="flex gap-2">
+            {isOwnerViewer ? (
+              <>
+                {/* Edit Properti — primary, wider */}
+                <Link
+                  href={editPropertyHref}
+                  className="flex-[2] flex items-center justify-center gap-2 bg-[#86efac] hover:bg-[#6ee7a8] active:scale-[0.98] text-black font-extrabold text-[13px] py-3 rounded-2xl transition-all"
+                  style={{ boxShadow: "0 6px 20px rgba(134,239,172,0.22)" }}
+                >
+                  <Icon icon="solar:pen-2-bold-duotone" className="text-[18px] shrink-0" />
+                  Edit Properti
+                </Link>
+
+                {/* Download Poster */}
+                <button
+                  onClick={handleDownloadBrosur}
+                  disabled={isDownloadingBrosur}
+                  className="flex-1 flex flex-col items-center justify-center gap-[3px] rounded-2xl transition-all active:scale-[0.96] disabled:opacity-60"
+                  style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)" }}
+                >
+                  <Icon icon={isDownloadingBrosur ? "solar:refresh-bold" : "solar:gallery-download-bold-duotone"} className={`text-white/70 text-[17px] ${isDownloadingBrosur ? "animate-spin" : ""}`} />
+                  <span className="text-[8px] font-black text-white/35 uppercase tracking-widest">
+                    Poster
+                  </span>
+                </button>
+              </>
+            ) : (
+            <>
             {/* WhatsApp — primary, wider */}
             <button
               onClick={() => call("wa")}
@@ -967,29 +1478,99 @@ export default function AgentSidebar({ data }: AgentSidebarProps) {
               WhatsApp
             </button>
 
-            {/* Ajukan Penawaran */}
-            <button
-              onClick={() => setOfferOpen(true)}
-              className="flex-1 flex flex-col items-center justify-center gap-[3px] rounded-2xl transition-all active:scale-[0.96]"
-              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)" }}
-            >
-              <Icon icon="solar:hand-money-bold" className="text-white/70 text-[17px]" />
-              <span className="text-[8px] font-black text-white/35 uppercase tracking-widest">
-                Penawaran
-              </span>
-            </button>
+            {isCobrokeViewer ? (
+              <>
+                {/* Ajukan Co-Broke */}
+                {myCobroke?.status === "pending" ? (
+                  <button
+                    onClick={() => setCobrokeOpen(true)}
+                    className="btn-premium-pending flex-1 flex flex-col items-center justify-center gap-[3px] rounded-2xl transition-all active:scale-[0.96]"
+                  >
+                    <span className="pp-glow" />
+                    <Icon icon="solar:hourglass-line-bold-duotone" className="text-[17px] relative z-10 animate-pulse" />
+                    <span className="text-[8px] font-black uppercase tracking-widest relative z-10 text-shimmer-amber">
+                      Menunggu
+                    </span>
+                  </button>
+                ) : myCobroke?.status === "diterima" ? (
+                  <button
+                    onClick={() => setCobrokeOpen(true)}
+                    className="flex-1 flex flex-col items-center justify-center gap-[3px] rounded-2xl transition-all active:scale-[0.96]"
+                    style={{ background: "rgba(134,239,172,0.08)", border: "1px solid rgba(134,239,172,0.25)" }}
+                  >
+                    <Icon icon="solar:medal-ribbons-star-bold-duotone" className="text-[#86efac] text-[17px]" />
+                    <span className="text-[8px] font-black text-[#86efac] uppercase tracking-widest">
+                      Co-Broke Aktif
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setCobrokeOpen(true)}
+                    className="btn-cobroke flex-1 flex flex-col items-center justify-center gap-[3px] rounded-2xl transition-all active:scale-[0.96]"
+                  >
+                    <span className="pp-glow-green" />
+                    <Icon icon="solar:users-group-two-rounded-bold-duotone" className="text-[17px] relative z-10" />
+                    <span className="text-[8px] font-black uppercase tracking-widest relative z-10">
+                      Co-Broke
+                    </span>
+                  </button>
+                )}
 
-            {/* Survei */}
-            <button
-              onClick={() => setSurveyOpen(true)}
-              className="flex-1 flex flex-col items-center justify-center gap-[3px] rounded-2xl transition-all active:scale-[0.96]"
-              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)" }}
-            >
-              <Icon icon="solar:calendar-date-bold" className="text-white/70 text-[17px]" />
-              <span className="text-[8px] font-black text-white/35 uppercase tracking-widest">
-                Survei
-              </span>
-            </button>
+                {/* Download Brosur */}
+                <button
+                  onClick={handleDownloadBrosur}
+                  disabled={isDownloadingBrosur}
+                  className="flex-1 flex flex-col items-center justify-center gap-[3px] rounded-2xl transition-all active:scale-[0.96] disabled:opacity-60"
+                  style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)" }}
+                >
+                  <Icon icon={isDownloadingBrosur ? "solar:refresh-bold" : "solar:gallery-download-bold-duotone"} className={`text-white/70 text-[17px] ${isDownloadingBrosur ? "animate-spin" : ""}`} />
+                  <span className="text-[8px] font-black text-white/35 uppercase tracking-widest">
+                    Brosur
+                  </span>
+                </button>
+              </>
+            ) : (
+              <>
+                {/* Ajukan Penawaran */}
+                {myOffer?.status === "pending" ? (
+                  <button
+                    onClick={() => setOfferOpen(true)}
+                    className="btn-premium-pending flex-1 flex flex-col items-center justify-center gap-[3px] rounded-2xl transition-all active:scale-[0.96]"
+                  >
+                    <span className="pp-glow" />
+                    <Icon icon="solar:hourglass-line-bold-duotone" className="text-[17px] relative z-10 animate-pulse" />
+                    <span className="text-[8px] font-black uppercase tracking-widest relative z-10 text-shimmer-amber">
+                      Menunggu
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setOfferOpen(true)}
+                    className="flex-1 flex flex-col items-center justify-center gap-[3px] rounded-2xl transition-all active:scale-[0.96]"
+                    style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)" }}
+                  >
+                    <Icon icon="solar:hand-money-bold" className="text-white/70 text-[17px]" />
+                    <span className="text-[8px] font-black text-white/35 uppercase tracking-widest">
+                      Penawaran
+                    </span>
+                  </button>
+                )}
+
+                {/* Survei */}
+                <button
+                  onClick={() => setSurveyOpen(true)}
+                  className="flex-1 flex flex-col items-center justify-center gap-[3px] rounded-2xl transition-all active:scale-[0.96]"
+                  style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)" }}
+                >
+                  <Icon icon="solar:calendar-date-bold" className="text-white/70 text-[17px]" />
+                  <span className="text-[8px] font-black text-white/35 uppercase tracking-widest">
+                    Survei
+                  </span>
+                </button>
+              </>
+            )}
+            </>
+            )}
           </div>
         </div>
       </div>

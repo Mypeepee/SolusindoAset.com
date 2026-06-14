@@ -22,6 +22,15 @@ function extractIdPropertyFromSlug(slugWithId: string): bigint | null {
   return BigInt(asNumber);
 }
 
+// --- HELPER GAMBAR: bikin array foto_list dari kolom gambar (CSV) ---
+function buildFotoList(gambar: string | null): string[] {
+  if (!gambar || gambar.trim() === "") return [];
+  return gambar
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
 // --------- SERIALIZER ---------
 function serializeListing(listing: any) {
   if (!listing) return null;
@@ -303,27 +312,32 @@ export default async function DetailPage({ params }: Props) {
 
   const canonicalUrl = `https://premierasset.com/Jual/${params.slug}`;
 
-  const firstImage =
-    (product.gambar &&
-      product.gambar.split(",").map((s) => s.trim())[0]) ||
-    "/images/hero/banner.jpg";
+  const foto_list = buildFotoList(product.gambar);
+  const firstImage = foto_list[0] || "/images/hero/banner.jpg";
 
   const finalFotoArray = [firstImage];
 
   const similarPropertiesRaw = await getSimilarProperties(product);
   const similarProperties = similarPropertiesRaw.map((prop) => {
-    const firstImg =
-      (prop.gambar &&
-        prop.gambar.split(",").map((s: string) => s.trim())[0]) ||
-      "/images/hero/banner.jpg";
+    const propFotoList = buildFotoList(prop.gambar);
+    const firstImg = propFotoList[0] || "/images/hero/banner.jpg";
     return {
       ...prop,
       gambar_utama_url: firstImg,
+      foto_list: propFotoList,
     };
   });
 
-  const serializedProduct = serializeListing(product);
-  const serializedSimilar = similarProperties.map(serializeListing);
+  const serializedProduct = {
+    ...serializeListing(product),
+    gambar_utama_url: firstImage,
+    foto_list,
+  };
+  const serializedSimilar = similarProperties.map((prop) => ({
+    ...serializeListing(prop),
+    gambar_utama_url: prop.gambar_utama_url,
+    foto_list: prop.foto_list,
+  }));
 
   const jsonLd = {
     "@context": "https://schema.org",

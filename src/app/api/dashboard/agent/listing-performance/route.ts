@@ -120,6 +120,7 @@ export async function GET() {
     type Enriched = {
       id_property: string;
       slug: string;
+      id_agent: string;
       judul: string;
       kota: string;
       kecamatan: string | null;
@@ -174,6 +175,7 @@ export async function GET() {
       return {
         id_property: l.id_property.toString(),
         slug: l.slug,
+        id_agent: agentId,
         judul: l.judul,
         kota: l.kota,
         kecamatan: l.kecamatan,

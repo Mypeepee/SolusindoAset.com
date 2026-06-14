@@ -29,13 +29,15 @@ const PALETTE = [
 ];
 
 function getInitials(name: string) {
-  const parts = name.trim().split(/\s+/);
+  const trimmed = (name ?? "").trim();
+  if (!trimmed) return "?";
+  const parts = trimmed.split(/\s+/);
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return name.slice(0, 2).toUpperCase();
+  return trimmed.slice(0, 2).toUpperCase();
 }
 
 function getColor(name: string) {
-  const code = name.charCodeAt(0) || 0;
+  const code = (name ?? "").charCodeAt(0) || 0;
   return PALETTE[code % PALETTE.length];
 }
 

@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import prisma from '@/lib/prisma';
+import { pusherServer } from '@/lib/pusher-server';
 
 // POST /api/survei/booking
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id_property, id_agent, nama_klien, nomor_telepon, tanggal_survei, catatan } = body;
+    const { id_property, id_agent, nama_klien, nomor_telepon, tanggal_survei, catatan, id_lead } = body;
 
     if (!id_property || !id_agent || !nama_klien || !nomor_telepon || !tanggal_survei) {
       return NextResponse.json({ error: 'Data tidak lengkap' }, { status: 400 });
@@ -42,15 +43,17 @@ export async function POST(req: NextRequest) {
     const phone    = normalizePhone(String(nomor_telepon));
     const acaraEnd = new Date(surveiDate.getTime() + 60 * 60 * 1000);
     const keterangan = `Booking survei oleh ${String(nama_klien).trim()} (${phone})${catatan ? '. Catatan: ' + String(catatan).trim() : ''}`;
+    const idLead = id_lead ? BigInt(id_lead) : null;
 
     // Simpan ke booking_survei via raw SQL (Prisma client cache mungkin belum reload)
-    await prisma.$executeRaw`
+    const inserted = await prisma.$queryRaw<{ id_booking: bigint }[]>`
       INSERT INTO booking_survei
-        (id_property, id_agent, id_klien, nama_klien, nomor_telepon, tanggal_survei, status, catatan, tanggal_dibuat)
+        (id_property, id_agent, id_klien, id_lead, nama_klien, nomor_telepon, tanggal_survei, status, catatan, tanggal_dibuat)
       VALUES
-        (${BigInt(id_property)}, ${String(id_agent)}, ${idKlien}, ${String(nama_klien).trim()},
+        (${BigInt(id_property)}, ${String(id_agent)}, ${idKlien}, ${idLead}, ${String(nama_klien).trim()},
          ${phone}, ${surveiDate}, 'PENDING',
          ${catatan ? String(catatan).trim() : null}, now())
+      RETURNING id_booking
     `;
 
     // Buat Acara SITE_VISIT → digunakan oleh /api/survei/availability untuk blok slot
@@ -66,6 +69,16 @@ export async function POST(req: NextRequest) {
         status_acara:    'SCHEDULED',
       },
     });
+
+    // Broadcast ke agent — bikin notif bell auto-update real-time
+    pusherServer
+      .trigger(`survei-agent-${String(id_agent)}`, 'survei:new', {
+        id_booking:     inserted[0]?.id_booking?.toString(),
+        nama_klien:     String(nama_klien).trim(),
+        judul:          listing.judul,
+        tanggal_survei: surveiDate.toISOString(),
+      })
+      .catch((e) => console.warn('pusher trigger survei:new failed:', e));
 
     return NextResponse.json({ success: true, message: 'Booking survei berhasil disimpan' });
   } catch (err) {

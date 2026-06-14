@@ -24,7 +24,14 @@ function getSessionId(): string {
 export interface TrackLeadClickInput {
   id_property: string | number | bigint;
   id_agent?: string;
-  source: "whatsapp" | "telepon" | "survei";
+  source: "whatsapp" | "telepon" | "survei" | "penawaran" | "cobroke";
+  client_name?: string;
+  client_phone?: string;
+  client_email?: string;
+  offer_amount?: number;
+  discount_pct?: number;
+  payment_method?: "cash" | "kpr";
+  notes?: string;
 }
 
 export interface TrackLeadClickResult {
@@ -32,6 +39,7 @@ export interface TrackLeadClickResult {
   id_lead?: string;
   deduped?: boolean;
   error?: string;
+  existing?: { id_lead: string; penawaran: number | null; created_at: string };
 }
 
 export async function trackLeadClick(
@@ -49,6 +57,13 @@ export async function trackLeadClick(
         id_property: input.id_property.toString(),
         id_agent: input.id_agent,
         source: input.source,
+        client_name: input.client_name,
+        client_phone: input.client_phone,
+        client_email: input.client_email,
+        offer_amount: input.offer_amount,
+        discount_pct: input.discount_pct,
+        payment_method: input.payment_method,
+        notes: input.notes,
         session_id: getSessionId(),
         referrer: typeof document !== "undefined" ? document.referrer : "",
       }),
@@ -56,7 +71,10 @@ export async function trackLeadClick(
       keepalive: true,
     });
 
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => null);
+      return { ok: false, error: errBody?.error || `HTTP ${res.status}`, existing: errBody?.existing };
+    }
     return (await res.json()) as TrackLeadClickResult;
   } catch (err) {
     console.error("trackLeadClick error:", err);

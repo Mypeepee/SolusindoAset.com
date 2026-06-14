@@ -17,9 +17,13 @@ type LeadSource =
   | "telepon"
   | "survei"
   | "titip_jual"
-  | "form_inquiry";
+  | "form_inquiry"
+  | "penawaran"
+  | "cobroke";
 
-const ACTIVE_STATUSES: LeadStatus[] = ["new", "contacted", "hot"];
+// "cold" ikut diambil supaya lead yang sudah diarsipkan tetap muncul
+// di pill "Arsip" pada Hot Leads card setelah refresh.
+const ACTIVE_STATUSES: LeadStatus[] = ["new", "contacted", "hot", "closing", "cold"];
 
 export async function GET(req: NextRequest) {
   try {
@@ -63,6 +67,22 @@ export async function GET(req: NextRequest) {
             jenis_transaksi: true,
           },
         },
+        bookingSurvei: {
+          select: { status: true },
+          take: 1,
+          orderBy: { tanggal_dibuat: "desc" },
+        },
+        pengguna: {
+          select: { wa_terverifikasi: true },
+        },
+        agentCobroke: {
+          select: {
+            id_agent: true,
+            nama_kantor: true,
+            nomor_whatsapp: true,
+            pengguna: { select: { nama_lengkap: true } },
+          },
+        },
       },
     });
 
@@ -76,9 +96,29 @@ export async function GET(req: NextRequest) {
         id_lead: l.id_lead.toString(),
         source: l.source,
         status: l.status,
-        client_name: l.client_name,
-        client_phone: l.client_phone,
-        client_email: l.client_email,
+        // Untuk lead co-broke, identitas klien adalah privat milik agent pengaju —
+        // tidak dibagikan ke agent pemilik listing. Koordinasi survei lewat agentCobroke.
+        client_name: l.source === "cobroke" ? null : l.client_name,
+        client_phone: l.source === "cobroke" ? null : l.client_phone,
+        client_email: l.source === "cobroke" ? null : l.client_email,
+        offer_amount: l.penawaran ? Number(l.penawaran) : null,
+        notes: l.catatan,
+        diskon: l.diskon ? Number(l.diskon) : null,
+        pembayaran: l.pembayaran,
+        status_penawaran: l.status_penawaran,
+        catatan_agent: l.catatan_agent,
+        tanggal_keputusan: l.tanggal_keputusan?.toISOString() || null,
+        id_pengguna: l.id_pengguna,
+        verified: l.pengguna?.wa_terverifikasi ?? false,
+        cobroke_agent: l.agentCobroke
+          ? {
+              id_agent: l.agentCobroke.id_agent,
+              nama: l.agentCobroke.pengguna.nama_lengkap,
+              kantor: l.agentCobroke.nama_kantor,
+              whatsapp: l.agentCobroke.nomor_whatsapp,
+            }
+          : null,
+        booking_survei_status: l.bookingSurvei[0]?.status || null,
         device_type: l.device_type,
         last_activity: l.last_activity?.toISOString() || null,
         created_at: l.created_at.toISOString(),

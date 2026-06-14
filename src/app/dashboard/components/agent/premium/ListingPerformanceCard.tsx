@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 interface ListingPerf {
   id_property: string;
   slug: string;
+  id_agent: string;
   judul: string;
   kota: string;
   kecamatan: string | null;
@@ -222,7 +223,12 @@ export function ListingPerformanceCard() {
   }, [data, tab]);
 
   const goToListing = (l: ListingPerf) => {
-    router.push(`/Jual/${l.slug}`);
+    const jenis = l.jenis_transaksi?.toUpperCase();
+    const slugId = `${l.slug}-${l.id_property}`;
+
+    if (jenis === "SEWA") router.push(`/Sewa/${l.id_property}`);
+    else if (jenis === "LELANG") router.push(`/Lelang/${slugId}/${l.id_agent}`);
+    else router.push(`/Jual/${slugId}/${l.id_agent}`);
   };
 
   const goToAll = () => {
@@ -230,7 +236,7 @@ export function ListingPerformanceCard() {
   };
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden rounded-3xl border border-white/[0.06] bg-gradient-to-b from-[#0a0f10] to-[#070a0b]">
+    <div className="relative flex min-h-[420px] flex-col overflow-hidden rounded-3xl border border-white/[0.06] bg-gradient-to-b from-[#0a0f10] to-[#070a0b] lg:h-full lg:min-h-0">
       {/* top hairline */}
       <div className="pointer-events-none absolute top-0 left-6 right-6 h-px bg-gradient-to-r from-transparent via-emerald-400/40 to-transparent" />
 

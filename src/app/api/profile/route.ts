@@ -32,10 +32,29 @@ export async function GET() {
       : "",
   };
 
+  let stats: Record<string, number> = {};
+
+  if (agent) {
+    const [listingAktif, transaksiBerhasil] = await Promise.all([
+      prisma.listing.count({
+        where: { id_agent: agent.id_agent, status_tayang: "TERSEDIA" },
+      }),
+      prisma.transaksi.count({
+        where: { mou: { id_agent: agent.id_agent } },
+      }),
+    ]);
+
+    stats = {
+      premierPoin: agent.poin,
+      listingAktif,
+      transaksiBerhasil,
+    };
+  }
+
   return NextResponse.json({
     pengguna,
     agent: agent ?? null,
-    stats: {},
+    stats,
   });
 }
 

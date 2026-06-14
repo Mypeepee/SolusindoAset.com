@@ -12,6 +12,9 @@ type Mode = "email" | "phone";
 interface SigninProps {
   closeModal?: () => void;
   openSignupModal?: () => void;
+  /** Jika true, setelah login sukses tidak melakukan router.push ke callbackUrl — cukup panggil onSuccess. */
+  skipRedirect?: boolean;
+  onSuccess?: () => void;
 }
 
 function EyeIcon({ open }: { open: boolean }) {
@@ -73,7 +76,7 @@ function normalizePhoneDigits(raw: string) {
   return digits;
 }
 
-const Signin = ({ closeModal, openSignupModal }: SigninProps) => {
+const Signin = ({ closeModal, openSignupModal, skipRedirect, onSuccess }: SigninProps) => {
   const router = useRouter();
   const pathname = usePathname(); // path saat ini
 
@@ -143,8 +146,12 @@ const Signin = ({ closeModal, openSignupModal }: SigninProps) => {
       if (typeof res === "string") {
         // asumsikan ini URL sukses
         toast.success("Berhasil masuk.");
-        if (closeModal) closeModal();
         setLoading(false);
+        if (skipRedirect) {
+          onSuccess?.();
+          return;
+        }
+        if (closeModal) closeModal();
         router.push(callbackUrl);
         return;
       }
@@ -157,16 +164,24 @@ const Signin = ({ closeModal, openSignupModal }: SigninProps) => {
 
       if (res?.ok) {
         toast.success("Berhasil masuk.");
-        if (closeModal) closeModal();
         setLoading(false);
+        if (skipRedirect) {
+          onSuccess?.();
+          return;
+        }
+        if (closeModal) closeModal();
         router.push(callbackUrl);
         return;
       }
 
       // fallback kalau format tidak sesuai ekspektasi
       toast.success("Berhasil masuk.");
-      if (closeModal) closeModal();
       setLoading(false);
+      if (skipRedirect) {
+        onSuccess?.();
+        return;
+      }
+      if (closeModal) closeModal();
       router.push(callbackUrl);
     } catch (err: any) {
       setLoading(false);

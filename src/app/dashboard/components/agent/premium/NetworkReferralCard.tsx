@@ -560,7 +560,7 @@ function ReferralCTACard({ agentId }: { agentId: string }) {
       ? `${window.location.origin}/gabung-jadi-agent?ref=${agentId}`
       : `/gabung-jadi-agent?ref=${agentId}`;
 
-  const shareText = `Gabung bareng aku jadi agent properti di KosKu! Pakai kode referral *${agentId}* saat daftar, atau langsung klik link ini:\n${shareUrl}`;
+  const shareText = `Gabung bareng aku jadi agent properti di Solusindo Premier Property! Pakai kode referral *${agentId}* saat daftar, atau langsung klik link ini:\n${shareUrl}`;
 
   const handleCopy = useCallback(async () => {
     try {
@@ -583,7 +583,7 @@ function ReferralCTACard({ agentId }: { agentId: string }) {
   const handleShare = useCallback(async () => {
     if (navigator.share) {
       try {
-        await navigator.share({ title: "Kode Referral KosKu", text: shareText, url: shareUrl });
+        await navigator.share({ title: "Kode Referral Solusindo Premier Property", text: shareText, url: shareUrl });
         return;
       } catch {
         /* user cancelled — fall through */

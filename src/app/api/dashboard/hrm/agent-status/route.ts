@@ -16,7 +16,7 @@ export async function PUT(req: Request) {
     const body = await req.json();
     const { id_agent, status_keanggotaan } = body as {
       id_agent?: string;
-      status_keanggotaan?: "AKTIF" | "NONAKTIF" | "PENDING";
+      status_keanggotaan?: "AKTIF" | "SUSPEND" | "PENDING";
     };
 
     if (!id_agent || !status_keanggotaan) {

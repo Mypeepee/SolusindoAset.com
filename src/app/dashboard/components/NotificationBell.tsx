@@ -12,6 +12,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@iconify/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter, usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
   countdownText,
   formatDateTimeID,
@@ -21,6 +22,69 @@ import {
   type TitipItem,
   type JenisProperti,
 } from "@/app/dashboard/components/agent/premium/titipLeads";
+
+/* ── Survei Lokasi — booking dari halaman properti ── */
+interface SurveiItem {
+  id_booking: string;
+  id_property: string;
+  id_lead: string | null;
+  judul: string;
+  slug: string;
+  nama_klien: string;
+  nomor_telepon: string;
+  tanggal_survei: string; // ISO
+  catatan: string | null;
+  tanggal_dibuat: string; // ISO
+}
+
+/* ── Penawaran Harga — dari halaman properti ── */
+interface PenawaranItem {
+  id_lead: string;
+  id_property: string;
+  judul: string | null;
+  slug: string | null;
+  gambar: string | null;
+  harga_listing: number | null;
+  client_name: string | null;
+  client_phone: string | null;
+  offer_amount: number | null;
+  notes: string | null;
+  verified: boolean;
+  created_at: string; // ISO
+}
+
+/* ── Notifikasi sistem (agent baru, referral, dll) ── */
+interface SysNotif {
+  id_notifikasi: string;
+  tipe: "AGENT_BARU" | "AGENT_REFERRAL" | "CO_BROKE_SUBMITTED" | "CO_BROKE_ACCEPTED" | "CO_BROKE_REJECTED";
+  judul: string;
+  pesan: string;
+  link: string | null;
+  id_agent_ref: string | null;
+  dibaca: boolean;
+  dibuat_pada: string; // ISO
+}
+
+function formatRupiah(n: number): string {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0,
+  }).format(n);
+}
+
+function formatSurveiDate(iso: string): string {
+  // tanggal_survei disimpan UTC → konversi ke WIB (UTC+7) sebelum ditampilkan
+  const wib = new Date(new Date(iso).getTime() + 7 * 3600 * 1000);
+  const days = ["Min","Sen","Sel","Rab","Kam","Jum","Sab"];
+  const months = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
+  const day  = days[wib.getUTCDay()];
+  const date = String(wib.getUTCDate()).padStart(2, "0");
+  const mon  = months[wib.getUTCMonth()];
+  const hh   = String(wib.getUTCHours()).padStart(2, "0");
+  const mm   = String(wib.getUTCMinutes()).padStart(2, "0");
+  return `${day}, ${date} ${mon} • ${hh}:${mm} WIB`;
+}
 
 /* Item dengan tambahan metadata "locked" — saat ada agent lain yang
    sudah klaim, item tidak langsung dihapus; dia ditandai locked supaya
@@ -72,10 +136,20 @@ function buildMissedNotifItem(m: {
 export default function NotificationBell() {
   const router = useRouter();
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const agentId = (session?.user as any)?.agentId as string | null | undefined;
+  const idPengguna = (session?.user as any)?.id as string | null | undefined;
   const [items, setItems] = useState<NotifItem[]>([]);
+  const [surveiItems, setSurveiItems] = useState<SurveiItem[]>([]);
+  const [penawaranItems, setPenawaranItems] = useState<PenawaranItem[]>([]);
+  const [sysNotifs, setSysNotifs] = useState<SysNotif[]>([]);
+  const [surveiActing, setSurveiActing] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const seenCountRef = useRef<number>(0);
+  const seenSurveiCountRef = useRef<number>(0);
+  const seenPenawaranCountRef = useRef<number>(0);
+  const seenSysCountRef = useRef<number>(0);
   const [pulse, setPulse] = useState(false);
   // Track timer per id supaya cleanup rapi dan tidak double-schedule
   const dismissTimersRef = useRef<Map<string, number>>(new Map());
@@ -220,10 +294,245 @@ export default function NotificationBell() {
     };
   }, []);
 
+  // Load + Pusher realtime — booking Survei Lokasi
+  useEffect(() => {
+    if (!agentId) return;
+    let active = true;
+
+    async function loadSurvei() {
+      try {
+        const res = await fetch("/api/survei/inbox", { cache: "no-store" });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!active || !json?.ok) return;
+
+        const list = (json.items as SurveiItem[]) || [];
+        if (
+          list.length > seenSurveiCountRef.current &&
+          seenSurveiCountRef.current > 0
+        ) {
+          setPulse(true);
+          window.setTimeout(() => setPulse(false), 2200);
+        }
+        seenSurveiCountRef.current = list.length;
+        setSurveiItems(list);
+      } catch {
+        // ignore
+      }
+    }
+
+    loadSurvei();
+    const onFocus = () => loadSurvei();
+    const onVis = () => {
+      if (!document.hidden) loadSurvei();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVis);
+    const intv = window.setInterval(loadSurvei, 90_000);
+
+    let cleanupPusher: (() => void) | null = null;
+    (async () => {
+      try {
+        const mod = await import("@/lib/pusher-client");
+        const pc = mod.pusherClient;
+        const ch = pc.subscribe(`survei-agent-${agentId}`);
+        const onNew = () => loadSurvei();
+        ch.bind("survei:new", onNew);
+        cleanupPusher = () => {
+          ch.unbind("survei:new", onNew);
+          pc.unsubscribe(`survei-agent-${agentId}`);
+        };
+      } catch {
+        /* fallback polling jalan */
+      }
+    })();
+
+    return () => {
+      active = false;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVis);
+      window.clearInterval(intv);
+      if (cleanupPusher) cleanupPusher();
+    };
+  }, [agentId]);
+
+  // Load + Pusher realtime — Penawaran harga dari halaman properti
+  useEffect(() => {
+    if (!agentId) return;
+    let active = true;
+
+    async function loadPenawaran() {
+      try {
+        const res = await fetch("/api/leads/penawaran/inbox", { cache: "no-store" });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!active || !json?.ok) return;
+
+        const list = (json.items as PenawaranItem[]) || [];
+        if (
+          list.length > seenPenawaranCountRef.current &&
+          seenPenawaranCountRef.current > 0
+        ) {
+          setPulse(true);
+          window.setTimeout(() => setPulse(false), 2200);
+        }
+        seenPenawaranCountRef.current = list.length;
+        setPenawaranItems(list);
+      } catch {
+        // ignore
+      }
+    }
+
+    loadPenawaran();
+    const onFocus = () => loadPenawaran();
+    const onVis = () => {
+      if (!document.hidden) loadPenawaran();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVis);
+    const intv = window.setInterval(loadPenawaran, 90_000);
+
+    let cleanupPusher: (() => void) | null = null;
+    (async () => {
+      try {
+        const mod = await import("@/lib/pusher-client");
+        const pc = mod.pusherClient;
+        const ch = pc.subscribe(`lead-agent-${agentId}`);
+        const onNew = () => loadPenawaran();
+        ch.bind("penawaran:new", onNew);
+        cleanupPusher = () => {
+          ch.unbind("penawaran:new", onNew);
+          pc.unsubscribe(`lead-agent-${agentId}`);
+        };
+      } catch {
+        /* fallback polling jalan */
+      }
+    })();
+
+    return () => {
+      active = false;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVis);
+      window.clearInterval(intv);
+      if (cleanupPusher) cleanupPusher();
+    };
+  }, [agentId]);
+
+  // Load + Pusher realtime — notifikasi sistem (agent baru, referral, dll)
+  useEffect(() => {
+    if (!idPengguna) return;
+    let active = true;
+
+    async function loadSysNotifs() {
+      try {
+        const res = await fetch("/api/notifications", { cache: "no-store" });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!active || !json?.ok) return;
+
+        const list = ((json.items as SysNotif[]) || []).filter((n) => !n.dibaca);
+        if (
+          list.length > seenSysCountRef.current &&
+          seenSysCountRef.current > 0
+        ) {
+          setPulse(true);
+          window.setTimeout(() => setPulse(false), 2200);
+        }
+        seenSysCountRef.current = list.length;
+        setSysNotifs(list);
+      } catch {
+        // ignore
+      }
+    }
+
+    loadSysNotifs();
+    const onFocus = () => loadSysNotifs();
+    const onVis = () => {
+      if (!document.hidden) loadSysNotifs();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVis);
+    const intv = window.setInterval(loadSysNotifs, 90_000);
+
+    let cleanupPusher: (() => void) | null = null;
+    (async () => {
+      try {
+        const mod = await import("@/lib/pusher-client");
+        const pc = mod.pusherClient;
+        const ch = pc.subscribe(`notif-pengguna-${idPengguna}`);
+        const onNew = () => loadSysNotifs();
+        ch.bind("notif:new", onNew);
+        cleanupPusher = () => {
+          ch.unbind("notif:new", onNew);
+          pc.unsubscribe(`notif-pengguna-${idPengguna}`);
+        };
+      } catch {
+        /* fallback polling jalan */
+      }
+    })();
+
+    return () => {
+      active = false;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVis);
+      window.clearInterval(intv);
+      if (cleanupPusher) cleanupPusher();
+    };
+  }, [idPengguna]);
+
+  // Klik notifikasi sistem: tandai dibaca, lalu arahkan ke link tujuan
+  const handleSysNotifClick = async (n: SysNotif) => {
+    setOpen(false);
+    setSysNotifs((prev) => prev.filter((x) => x.id_notifikasi !== n.id_notifikasi));
+    seenSysCountRef.current = Math.max(0, seenSysCountRef.current - 1);
+    fetch(`/api/notifications/${n.id_notifikasi}`, { method: "PATCH" }).catch(() => {});
+    if (!n.link) return;
+
+    // Notifikasi yang menuju Hot Leads (mis. pengajuan co-broke baru) —
+    // scroll otomatis ke card lalu highlight item lead-nya
+    const idLeadMatch = n.link.match(/id_lead=([^&#]+)/);
+    if (idLeadMatch) {
+      goToLead(idLeadMatch[1]);
+      return;
+    }
+
+    router.push(n.link);
+  };
+
+  // Acc / tolak booking survei
+  const handleSurveiAction = async (id_booking: string, status: "CONFIRMED" | "CANCELLED") => {
+    setSurveiActing((prev) => new Set(prev).add(id_booking));
+    try {
+      const res = await fetch(`/api/survei/booking/${id_booking}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (res.ok) {
+        setSurveiItems((prev) => prev.filter((it) => it.id_booking !== id_booking));
+        seenSurveiCountRef.current = Math.max(0, seenSurveiCountRef.current - 1);
+        // Sinkronkan Hot Leads di dashboard — status booking & lead barusan berubah
+        window.dispatchEvent(new CustomEvent("hot-leads:refresh"));
+      }
+    } catch {
+      // ignore
+    } finally {
+      setSurveiActing((prev) => {
+        const next = new Set(prev);
+        next.delete(id_booking);
+        return next;
+      });
+    }
+  };
+
   // Hanya item yang masih bisa di-klaim yang dihitung sebagai notif aktif.
   // Item locked tetap visible (untuk closure) tapi tidak menambah counter
   // merah, karena sudah tidak actionable.
-  const count = items.filter((x) => !x.locked).length;
+  const count =
+    items.filter((x) => !x.locked).length +
+    surveiItems.length +
+    penawaranItems.length +
+    sysNotifs.length;
 
   /** Dismiss notif locked. Kalau persistent (dari API missed_items),
    *  ID-nya disimpan ke localStorage supaya tidak muncul lagi
@@ -254,6 +563,23 @@ export default function NotificationBell() {
       el?.scrollIntoView({ behavior: "smooth", block: "start" });
       window.dispatchEvent(new CustomEvent("hot-leads:focus"));
     } else {
+      router.push("/dashboard#hot-leads-card");
+    }
+  };
+
+  // Buka Hot Leads lalu auto-scroll + highlight sampai ke item lead tertentu
+  const goToLead = (idLead?: string | null) => {
+    setOpen(false);
+    if (pathname === "/dashboard") {
+      const el = document.getElementById("hot-leads-card");
+      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+      window.setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent("hot-leads:focus-item", { detail: { id_lead: idLead } }),
+        );
+      }, 350);
+    } else {
+      sessionStorage.setItem("hot-leads:focus-item", idLead || "");
       router.push("/dashboard#hot-leads-card");
     }
   };
@@ -338,7 +664,7 @@ export default function NotificationBell() {
             </div>
 
             <div className="flex-1 overflow-y-auto">
-              {items.length === 0 ? (
+              {items.length === 0 && surveiItems.length === 0 && penawaranItems.length === 0 && sysNotifs.length === 0 ? (
                 <div className="px-6 py-10 text-center">
                   <div className="mx-auto h-12 w-12 rounded-2xl border border-white/10 bg-white/[0.025] flex items-center justify-center">
                     <Icon
@@ -350,12 +676,36 @@ export default function NotificationBell() {
                     Tidak ada notifikasi
                   </p>
                   <p className="mt-1 text-[11px] text-white/35">
-                    Notifikasi titip jual baru akan muncul di sini.
+                    Notifikasi titip jual, survei lokasi & penawaran baru akan muncul di sini.
                   </p>
                 </div>
               ) : (
                 <ul className="divide-y divide-white/[0.05]">
                   <AnimatePresence initial={false}>
+                    {sysNotifs.map((it) => (
+                      <SysNotifRow
+                        key={it.id_notifikasi}
+                        item={it}
+                        onClick={() => handleSysNotifClick(it)}
+                      />
+                    ))}
+                    {surveiItems.map((it) => (
+                      <SurveiRow
+                        key={it.id_booking}
+                        item={it}
+                        acting={surveiActing.has(it.id_booking)}
+                        onClick={() => goToLead(it.id_lead)}
+                        onAcc={() => handleSurveiAction(it.id_booking, "CONFIRMED")}
+                        onTolak={() => handleSurveiAction(it.id_booking, "CANCELLED")}
+                      />
+                    ))}
+                    {penawaranItems.map((it) => (
+                      <OfferRow
+                        key={it.id_lead}
+                        item={it}
+                        onClick={() => goToLead(it.id_lead)}
+                      />
+                    ))}
                     {items.map((it) => (
                       <NotifRow
                         key={it.id_titip}
@@ -368,6 +718,20 @@ export default function NotificationBell() {
                 </ul>
               )}
             </div>
+
+            {surveiItems.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  router.push("/dashboard/survei");
+                }}
+                className="border-t border-white/[0.06] px-4 py-2.5 text-[11.5px] font-bold text-amber-300 hover:bg-amber-500/[0.06] flex items-center justify-center gap-1.5 transition-colors"
+              >
+                Buka Jadwal Survei
+                <Icon icon="solar:arrow-right-bold" className="text-sm" />
+              </button>
+            )}
 
             {items.length > 0 && (
               <button
@@ -551,6 +915,222 @@ function NotifRow({
             </>
           )}
         </div>
+      </button>
+    </motion.li>
+  );
+}
+
+function SurveiRow({
+  item,
+  acting,
+  onClick,
+  onAcc,
+  onTolak,
+}: {
+  item: SurveiItem;
+  acting: boolean;
+  onClick: () => void;
+  onAcc: () => void;
+  onTolak: () => void;
+}) {
+  return (
+    <motion.li
+      layout
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, x: 12, height: 0, marginTop: 0, marginBottom: 0 }}
+      transition={{ duration: 0.25 }}
+      className="relative px-4 py-3"
+    >
+      {/* left accent */}
+      <span
+        aria-hidden
+        className="absolute inset-y-2 left-0 w-[2px] rounded-full bg-gradient-to-b from-amber-300 to-orange-500 shadow-[0_0_8px_rgba(251,191,36,0.5)]"
+      />
+
+      <div className="flex items-start gap-3">
+        {/* Icon */}
+        <div className="relative shrink-0">
+          <div className="absolute inset-0 rounded-xl blur-[6px] bg-gradient-to-br from-amber-400/30 to-orange-500/15 animate-pulse" />
+          <div className="relative h-10 w-10 rounded-xl border border-amber-400/35 bg-amber-500/[0.08] flex items-center justify-center">
+            <Icon icon="solar:map-point-wave-bold-duotone" className="text-xl text-amber-300" />
+          </div>
+        </div>
+
+        {/* Message */}
+        <div className="min-w-0 flex-1">
+          <button
+            type="button"
+            onClick={onClick}
+            className="block w-full text-left"
+          >
+            <p className="text-[13px] font-bold leading-tight text-amber-100 flex items-center gap-1">
+              <Icon icon="solar:fire-bold-duotone" className="text-amber-300 text-[14px]" />
+              Ada yang mau survei lokasi nih!
+            </p>
+            <p className="mt-0.5 text-[11.5px] font-semibold text-white truncate">
+              {item.nama_klien} · {item.nomor_telepon}
+            </p>
+            <p className="mt-0.5 text-[11.5px] text-white/55 truncate">
+              {item.judul}
+            </p>
+            <p className="mt-1 inline-flex items-center gap-1 text-[10.5px] font-bold text-amber-300/80">
+              <Icon icon="solar:calendar-bold-duotone" className="text-[12px]" />
+              {formatSurveiDate(item.tanggal_survei)}
+            </p>
+            {item.catatan && (
+              <p className="mt-1 text-[10.5px] italic text-white/40 truncate">
+                "{item.catatan}"
+              </p>
+            )}
+          </button>
+
+          {/* Actions */}
+          <div className="mt-2.5 flex items-center gap-2">
+            <button
+              type="button"
+              disabled={acting}
+              onClick={onAcc}
+              className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg border border-emerald-400/30 bg-emerald-500/15 px-3 py-1.5 text-[11px] font-extrabold text-emerald-200 transition hover:bg-emerald-500/25 disabled:opacity-50"
+            >
+              <Icon icon="solar:check-circle-bold" className="text-[13px]" />
+              Terima
+            </button>
+            <button
+              type="button"
+              disabled={acting}
+              onClick={onTolak}
+              className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] font-extrabold text-white/55 transition hover:bg-white/[0.08] hover:text-white/80 disabled:opacity-50"
+            >
+              <Icon icon="solar:close-circle-bold" className="text-[13px]" />
+              Tolak
+            </button>
+          </div>
+        </div>
+      </div>
+    </motion.li>
+  );
+}
+
+function OfferRow({ item, onClick }: { item: PenawaranItem; onClick: () => void }) {
+  const diffPct =
+    item.offer_amount && item.harga_listing
+      ? Math.round(((item.harga_listing - item.offer_amount) / item.harga_listing) * 100)
+      : null;
+
+  return (
+    <motion.li
+      layout
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, x: 12, height: 0, marginTop: 0, marginBottom: 0 }}
+      transition={{ duration: 0.25 }}
+      className="relative"
+    >
+      <span
+        aria-hidden
+        className="absolute inset-y-2 left-0 w-[2px] rounded-full bg-gradient-to-b from-emerald-300 to-teal-500 shadow-[0_0_8px_rgba(52,211,153,0.5)]"
+      />
+      <button type="button" onClick={onClick} className="group w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-emerald-500/[0.05] transition-colors">
+        <div className="relative shrink-0">
+          <div className="absolute inset-0 rounded-xl blur-[6px] bg-gradient-to-br from-emerald-400/30 to-teal-500/15 animate-pulse" />
+          <div className="relative h-10 w-10 rounded-xl border border-emerald-400/35 bg-emerald-500/[0.08] flex items-center justify-center">
+            <Icon icon="solar:tag-price-bold-duotone" className="text-xl text-emerald-300" />
+          </div>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-bold leading-tight text-emerald-100 flex items-center gap-1">
+            <Icon icon="solar:hand-money-bold-duotone" className="text-emerald-300 text-[14px]" />
+            Ada penawaran harga baru!
+          </p>
+          <p className="mt-0.5 text-[11.5px] font-semibold text-white truncate flex items-center gap-1.5">
+            {item.client_name || "Klien"}
+            {item.verified && (
+              <Icon icon="solar:verified-check-bold" className="text-emerald-400 text-[13px]" title="Akun terverifikasi" />
+            )}
+          </p>
+          <p className="mt-0.5 text-[11.5px] text-white/55 truncate">{item.judul}</p>
+          {item.offer_amount != null && (
+            <p className="mt-1 inline-flex items-center gap-1 text-[10.5px] font-bold text-emerald-300/80">
+              <Icon icon="solar:wallet-money-bold-duotone" className="text-[12px]" />
+              {formatRupiah(item.offer_amount)}
+              {diffPct !== null && diffPct !== 0 && (
+                <span className="text-white/35 font-medium">
+                  ({diffPct > 0 ? `${diffPct}% di bawah listing` : `${Math.abs(diffPct)}% di atas listing`})
+                </span>
+              )}
+            </p>
+          )}
+          {item.notes && (
+            <p className="mt-1 text-[10.5px] italic text-white/40 truncate">"{item.notes}"</p>
+          )}
+        </div>
+
+        <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-emerald-300 opacity-70 transition-opacity group-hover:opacity-100 shrink-0">
+          Lihat
+          <Icon icon="solar:arrow-right-linear" className="text-[12px] transition-transform group-hover:translate-x-0.5" />
+        </span>
+      </button>
+    </motion.li>
+  );
+}
+
+function formatRelativeTimeID(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diffMs / 60_000);
+  if (min < 1) return "Baru saja";
+  if (min < 60) return `${min} menit lalu`;
+  const hour = Math.floor(min / 60);
+  if (hour < 24) return `${hour} jam lalu`;
+  const day = Math.floor(hour / 24);
+  return `${day} hari lalu`;
+}
+
+function SysNotifRow({ item, onClick }: { item: SysNotif; onClick: () => void }) {
+  const isReferral = item.tipe === "AGENT_REFERRAL";
+
+  return (
+    <motion.li
+      layout
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, x: 12, height: 0, marginTop: 0, marginBottom: 0 }}
+      transition={{ duration: 0.25 }}
+      className="relative"
+    >
+      <span
+        aria-hidden
+        className="absolute inset-y-2 left-0 w-[2px] rounded-full bg-gradient-to-b from-sky-300 to-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]"
+      />
+      <button
+        type="button"
+        onClick={onClick}
+        className="group w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-sky-500/[0.05] transition-colors"
+      >
+        <div className="relative shrink-0">
+          <div className="absolute inset-0 rounded-xl blur-[6px] bg-gradient-to-br from-sky-400/30 to-indigo-500/15 animate-pulse" />
+          <div className="relative h-10 w-10 rounded-xl border border-sky-400/35 bg-sky-500/[0.08] flex items-center justify-center">
+            <Icon
+              icon={isReferral ? "solar:gift-bold-duotone" : "solar:user-plus-bold-duotone"}
+              className="text-xl text-sky-300"
+            />
+          </div>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-bold leading-tight text-sky-100">{item.judul}</p>
+          <p className="mt-0.5 text-[11.5px] text-white/55 truncate">{item.pesan}</p>
+          <p className="mt-1 inline-flex items-center gap-1 text-[10.5px] font-bold text-sky-300/70">
+            <Icon icon="solar:clock-circle-bold-duotone" className="text-[12px]" />
+            {formatRelativeTimeID(item.dibuat_pada)}
+          </p>
+        </div>
+
+        <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-sky-300 opacity-70 transition-opacity group-hover:opacity-100 shrink-0">
+          Lihat
+          <Icon icon="solar:arrow-right-linear" className="text-[12px] transition-transform group-hover:translate-x-0.5" />
+        </span>
       </button>
     </motion.li>
   );

@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import { Icon } from "@iconify/react";
+import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 
 // ===================
 // Helper: Google Drive photo
@@ -35,32 +36,70 @@ const buildDriveImageUrl = (idOrUrl?: string | null) => {
 };
 
 // ===================
+// Animated count-up number
+// ===================
+const CountUp = ({ value }: { value: number }) => {
+  const motionVal = useMotionValue(0);
+  const spring = useSpring(motionVal, { stiffness: 90, damping: 20 });
+  const rounded = useTransform(spring, (v) => Math.round(v).toLocaleString("id-ID"));
+  const [display, setDisplay] = useState("0");
+
+  useEffect(() => {
+    motionVal.set(value);
+  }, [value, motionVal]);
+
+  useEffect(() => {
+    const unsubscribe = rounded.on("change", (v) => setDisplay(v));
+    return unsubscribe;
+  }, [rounded]);
+
+  return <>{display}</>;
+};
+
+// ===================
 // Stat Card
 // ===================
-const StatCard = ({ icon, imageSrc, label, value, colorClass }: any) => (
-  <div className="flex items-center gap-4 p-5 rounded-2xl bg-[#181818] border border-white/5 hover:border-[#86efac]/30 transition-all group">
+const StatCard = ({ icon, imageSrc, label, value, colorClass, glowClass, index = 0 }: any) => (
+  <motion.div
+    initial={{ opacity: 0, y: 14 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.4, delay: 0.08 * index, ease: "easeOut" }}
+    whileHover={{ y: -3 }}
+    className="relative flex items-center gap-4 p-5 rounded-2xl bg-[#181818] border border-white/5 hover:border-[#86efac]/30 transition-colors group overflow-hidden"
+  >
+    {/* Ambient glow on hover */}
     <div
-      className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl bg-white/5 ${colorClass} group-hover:scale-110 transition-transform relative overflow-hidden`}
+      className={`pointer-events-none absolute -inset-px rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 ${glowClass}`}
+    />
+
+    <motion.div
+      whileHover={{ scale: 1.12, rotate: 4 }}
+      transition={{ type: "spring", stiffness: 300, damping: 15 }}
+      className={`relative z-10 w-12 h-12 rounded-full flex items-center justify-center text-2xl bg-white/5 ${colorClass} overflow-hidden`}
     >
+      {/* Pulse ring */}
+      <span className="absolute inset-0 rounded-full animate-ping bg-current opacity-10" />
       {imageSrc ? (
         <Image
           src={imageSrc}
           alt={label}
           width={32}
           height={32}
-          className="object-contain"
+          className="object-contain relative z-10"
         />
       ) : (
-        <Icon icon={icon} />
+        <Icon icon={icon} className="relative z-10" />
       )}
-    </div>
-    <div>
+    </motion.div>
+    <div className="relative z-10">
       <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">
         {label}
       </p>
-      <p className="text-xl font-bold text-white mt-1">{value}</p>
+      <p className="text-xl font-bold text-white mt-1 tabular-nums">
+        <CountUp value={Number(value) || 0} />
+      </p>
     </div>
-  </div>
+  </motion.div>
 );
 
 // ===================
@@ -247,22 +286,28 @@ const ProfileAvatar = ({
 const ProfileStatsUser = ({ stats }: any) => (
   <div className="grid grid-cols-3 gap-3 flex-[1.5]">
     <StatCard
+      index={0}
       icon="solar:heart-bold"
       label="Properti Favorit"
       value={stats?.totalWishlist ?? 0}
       colorClass="text-pink-400"
+      glowClass="bg-pink-500/[0.06] shadow-[0_0_30px_rgba(244,114,182,0.18)]"
     />
     <StatCard
+      index={1}
       icon="solar:bill-check-bold"
       label="Riwayat Transaksi"
       value={stats?.totalTransaksi ?? 0}
       colorClass="text-[#86efac]"
+      glowClass="bg-[#86efac]/[0.06] shadow-[0_0_30px_rgba(134,239,172,0.18)]"
     />
     <StatCard
+      index={2}
       icon="solar:user-plus-bold"
       label="Referral Aktif"
       value={stats?.totalReferral ?? 0}
       colorClass="text-sky-400"
+      glowClass="bg-sky-500/[0.06] shadow-[0_0_30px_rgba(56,189,248,0.18)]"
     />
   </div>
 );
@@ -270,22 +315,28 @@ const ProfileStatsUser = ({ stats }: any) => (
 const ProfileStatsAgent = ({ stats }: any) => (
   <div className="grid grid-cols-3 gap-3 flex-[1.5]">
     <StatCard
+      index={0}
       imageSrc="/images/logo/PremierPoints.png"
-      label="Premier Poin"
+      label="Solusindo Poin"
       value={stats?.premierPoin ?? 0}
       colorClass="text-yellow-400"
+      glowClass="bg-yellow-500/[0.06] shadow-[0_0_30px_rgba(250,204,21,0.18)]"
     />
     <StatCard
+      index={1}
       icon="solar:buildings-3-bold"
       label="Listing Aktif"
       value={stats?.listingAktif ?? 0}
       colorClass="text-sky-400"
+      glowClass="bg-sky-500/[0.06] shadow-[0_0_30px_rgba(56,189,248,0.18)]"
     />
     <StatCard
+      index={2}
       icon="solar:bill-check-bold"
       label="Transaksi Berhasil"
       value={stats?.transaksiBerhasil ?? 0}
       colorClass="text-[#86efac]"
+      glowClass="bg-[#86efac]/[0.06] shadow-[0_0_30px_rgba(134,239,172,0.18)]"
     />
   </div>
 );

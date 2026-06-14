@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { PrismaClient, status_agent_enum } from "@prisma/client";
+import { notifyNewAgentRegistration } from "@/lib/notifications";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -237,6 +238,12 @@ function publicDriveUrlFromId(fileId: string) {
   return `https://drive.google.com/uc?id=${fileId}`;
 }
 
+async function deleteDriveFile(accessToken: string, fileId: string) {
+  const url = new URL(`https://www.googleapis.com/drive/v3/files/${fileId}`);
+  url.searchParams.set("supportsAllDrives", "true");
+  await driveFetch(accessToken, url.toString(), { method: "DELETE" });
+}
+
 /* ---------------- Route ---------------- */
 
 export async function POST(req: Request) {
@@ -270,8 +277,6 @@ export async function POST(req: Request) {
     if (!email) return jsonError("email wajib.");
     if (!kota_area) return jsonError("kota_area wajib.");
     if (!nomor_whatsapp || nomor_whatsapp === "+62") return jsonError("nomor_whatsapp wajib.");
-    if (!foto_ktp) return jsonError("foto_ktp wajib.");
-    if (!foto_profil) return jsonError("foto_profil wajib.");
 
     // Pastikan pengguna ada + ambil nomor_telepon sekarang
     const pengguna = await prisma.pengguna.findUnique({
@@ -279,6 +284,16 @@ export async function POST(req: Request) {
       select: { id_pengguna: true, nomor_telepon: true },
     });
     if (!pengguna) return jsonError("Pengguna tidak ditemukan.", 404);
+
+    // ✅ Cek dokumen yang sudah pernah diupload sebelumnya (kalau reapply).
+    // File yang sudah ada dipertahankan kecuali pengguna mengganti dengan file baru.
+    const existingAgentFiles = await prisma.agent.findUnique({
+      where: { id_pengguna },
+      select: { foto_ktp_url: true, foto_npwp_url: true, foto_profil_url: true },
+    });
+
+    if (!foto_ktp && !existingAgentFiles?.foto_ktp_url) return jsonError("foto_ktp wajib.");
+    if (!foto_profil && !existingAgentFiles?.foto_profil_url) return jsonError("foto_profil wajib.");
 
     // ✅ Isi nomor_telepon di tabel pengguna hanya kalau masih kosong
     if (!pengguna.nomor_telepon || pengguna.nomor_telepon.trim() === "") {
@@ -312,44 +327,71 @@ export async function POST(req: Request) {
 
     if (!nama_kantor_final) return jsonError("nama_kantor wajib.");
 
-    // Upload to Google Drive
-    const parentFolderId = process.env.GDRIVE_PARENT_FOLDER_ID;
-    if (!parentFolderId) return jsonError("ENV GDRIVE_PARENT_FOLDER_ID belum di-set.", 500);
+    // ✅ default: pertahankan fileId dokumen lama (kalau reapply & tidak diganti)
+    let ktpFileId = existingAgentFiles?.foto_ktp_url ?? null;
+    let npwpFileId = existingAgentFiles?.foto_npwp_url ?? null;
+    let profilFileId = existingAgentFiles?.foto_profil_url ?? null;
 
-    const accessToken = await getGoogleAccessToken();
+    // fileId dokumen lama yang akan dihapus dari Drive setelah upsert sukses
+    // (hanya terisi kalau ada penggantian file)
+    const oldFileIdsToDelete: string[] = [];
+    let driveAccessToken: string | null = null;
 
-    // folder per user (biar rapi)
-    const folderName = slugify(nama_lengkap) || `user_${id_pengguna}`;
-    const targetFolderId = await getOrCreateFolder(accessToken, parentFolderId, folderName);
+    const hasNewFiles = Boolean(foto_ktp || foto_npwp || foto_profil);
 
-    // ✅ upload helper: return fileId saja (yang disimpan ke DB)
-    async function uploadOne(file: File, prefix: string, compressProfile = false) {
-      const raw = await fileToBuffer(file);
+    if (hasNewFiles) {
+      // Upload to Google Drive
+      const parentFolderId = process.env.GDRIVE_PARENT_FOLDER_ID;
+      if (!parentFolderId) return jsonError("ENV GDRIVE_PARENT_FOLDER_ID belum di-set.", 500);
 
-      const { buffer, contentType, ext } = await compressImageIfPossible(
-        raw,
-        file.type || "image/jpeg",
-        compressProfile ? { maxWidth: 1600, quality: 75 } : { maxWidth: 2000, quality: 80 }
-      );
+      const accessToken = await getGoogleAccessToken();
+      driveAccessToken = accessToken;
 
-      const filename = `${prefix}_${crypto.randomUUID()}.${ext}`;
+      // folder per user (biar rapi)
+      const folderName = slugify(nama_lengkap) || `user_${id_pengguna}`;
+      const targetFolderId = await getOrCreateFolder(accessToken, parentFolderId, folderName);
 
-      const fileId = await uploadFileMultipart({
-        accessToken,
-        parentFolderId: targetFolderId,
-        filename,
-        mimeType: contentType,
-        buffer,
-      });
+      // ✅ upload helper: return fileId saja (yang disimpan ke DB)
+      async function uploadOne(file: File, prefix: string, compressProfile = false) {
+        const raw = await fileToBuffer(file);
 
-      await makeFilePublic(accessToken, fileId);
+        const { buffer, contentType, ext } = await compressImageIfPossible(
+          raw,
+          file.type || "image/jpeg",
+          compressProfile ? { maxWidth: 1600, quality: 75 } : { maxWidth: 2000, quality: 80 }
+        );
 
-      return { fileId }; // ✅ hanya fileId
+        const filename = `${prefix}_${crypto.randomUUID()}.${ext}`;
+
+        const fileId = await uploadFileMultipart({
+          accessToken,
+          parentFolderId: targetFolderId,
+          filename,
+          mimeType: contentType,
+          buffer,
+        });
+
+        await makeFilePublic(accessToken, fileId);
+
+        return { fileId }; // ✅ hanya fileId
+      }
+
+      if (foto_ktp) {
+        const up = await uploadOne(foto_ktp, "ktp", false);
+        if (ktpFileId) oldFileIdsToDelete.push(ktpFileId);
+        ktpFileId = up.fileId;
+      }
+      if (foto_npwp) {
+        const up = await uploadOne(foto_npwp, "npwp", false);
+        if (npwpFileId) oldFileIdsToDelete.push(npwpFileId);
+        npwpFileId = up.fileId;
+      }
+      if (foto_profil) {
+        const up = await uploadOne(foto_profil, "profil", true);
+        if (profilFileId) oldFileIdsToDelete.push(profilFileId);
+        profilFileId = up.fileId;
+      }
     }
-
-    const ktpUp = await uploadOne(foto_ktp, "ktp", false);
-    const npwpUp = foto_npwp ? await uploadOne(foto_npwp, "npwp", false) : null;
-    const profilUp = await uploadOne(foto_profil, "profil", true);
 
     // Upsert Agent by id_pengguna
     // ✅ SIMPAN FILE ID ke kolom foto_ktp_url / foto_npwp_url / foto_profil_url (meski namanya url)
@@ -362,9 +404,9 @@ export async function POST(req: Request) {
         nomor_whatsapp,
         id_upline,
 
-        foto_ktp_url: ktpUp.fileId, // ✅ fileId saja
-        foto_npwp_url: npwpUp?.fileId ?? null, // ✅ fileId saja
-        foto_profil_url: profilUp.fileId, // ✅ fileId saja
+        foto_ktp_url: ktpFileId, // ✅ fileId saja
+        foto_npwp_url: npwpFileId, // ✅ fileId saja
+        foto_profil_url: profilFileId, // ✅ fileId saja
 
         link_instagram,
         link_tiktok,
@@ -377,9 +419,9 @@ export async function POST(req: Request) {
         nomor_whatsapp,
         id_upline,
 
-        foto_ktp_url: ktpUp.fileId, // ✅ fileId saja
-        foto_npwp_url: npwpUp ? npwpUp.fileId : undefined, // undefined biar tidak overwrite jadi null kalau tidak upload
-        foto_profil_url: profilUp.fileId, // ✅ fileId saja
+        foto_ktp_url: ktpFileId, // ✅ fileId saja (lama dipertahankan kalau tidak diganti)
+        foto_npwp_url: npwpFileId, // ✅ fileId saja
+        foto_profil_url: profilFileId, // ✅ fileId saja
 
         link_instagram,
         link_tiktok,
@@ -397,6 +439,27 @@ export async function POST(req: Request) {
         foto_profil_url: true,
       },
     });
+
+    // ✅ Bersihkan dokumen lama di Google Drive yang sudah diganti (best-effort,
+    // tidak boleh sampai menggagalkan response karena data DB sudah tersimpan).
+    if (driveAccessToken && oldFileIdsToDelete.length) {
+      const token = driveAccessToken;
+      await Promise.all(
+        oldFileIdsToDelete.map((fileId) =>
+          deleteDriveFile(token, fileId).catch((e) =>
+            console.warn(`Gagal menghapus file lama di Drive (${fileId}):`, e)
+          )
+        )
+      );
+    }
+
+    // Kirim notifikasi "agent baru bergabung" ke principal/owner & upline —
+    // dedup berdasarkan id_agent_ref dilakukan di dalam helper-nya.
+    notifyNewAgentRegistration({
+      id_agent: agent.id_agent,
+      nama_lengkap,
+      id_upline,
+    }).catch((e) => console.warn("notifyNewAgentRegistration failed:", e));
 
     // ✅ kalau frontend butuh preview url, kirim derived_url di response saja
     return NextResponse.json({

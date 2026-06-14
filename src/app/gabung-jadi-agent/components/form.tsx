@@ -96,6 +96,11 @@ function normalizeAgentCode(raw: string) {
   return s.toUpperCase();
 }
 
+// ✅ bangun URL preview dari Google Drive fileId via proxy /api/img (hindari CORS/hotlink)
+function driveProxyUrl(fileId: string) {
+  return `/api/img?url=${encodeURIComponent(`https://drive.google.com/uc?id=${fileId}`)}`;
+}
+
 function normalizeSocialSlug(raw: string) {
   let v = (raw || "").trim();
   if (!v) return "";
@@ -310,6 +315,11 @@ export default function AgentApplyForm({
   const [fotoNpwp, setFotoNpwp] = useState<File | null>(null);
   const [fotoProfil, setFotoProfil] = useState<File | null>(null);
 
+  // Dokumen yang sudah pernah diupload (fileId Google Drive dari pendaftaran sebelumnya)
+  const [existingFotoKtpId, setExistingFotoKtpId] = useState<string | null>(null);
+  const [existingFotoNpwpId, setExistingFotoNpwpId] = useState<string | null>(null);
+  const [existingFotoProfilId, setExistingFotoProfilId] = useState<string | null>(null);
+
   // Wizard
   const [step, setStep] = useState<Step>(0);
   const [submitting, setSubmitting] = useState(false);
@@ -410,6 +420,12 @@ export default function AgentApplyForm({
         // agent (kalau pernah submit)
         if (agent) {
           setExistingAgent(agent);
+
+          // ✅ dokumen yang sudah pernah diupload sebelumnya -> tampilkan sebagai preview,
+          // boleh dipakai lagi atau diganti (file lama dihapus dari Drive di backend)
+          setExistingFotoKtpId(agent.foto_ktp_url ?? null);
+          setExistingFotoNpwpId(agent.foto_npwp_url ?? null);
+          setExistingFotoProfilId(agent.foto_profil_url ?? null);
 
           // isi form dari DB (prefill) - tetap oke untuk SUSPEND (buat re-apply)
           setNamaKantor((v) => v || String(agent.nama_kantor ?? ""));
@@ -566,8 +582,8 @@ export default function AgentApplyForm({
     }
 
     if (s === 2) {
-      if (!fotoKtp) return "Foto KTP wajib diupload.";
-      if (!fotoProfil) return "Foto profil wajib diupload.";
+      if (!fotoKtp && !existingFotoKtpId) return "Foto KTP wajib diupload.";
+      if (!fotoProfil && !existingFotoProfilId) return "Foto profil wajib diupload.";
     }
 
     return null;
@@ -606,6 +622,13 @@ export default function AgentApplyForm({
         setUplineInfo(null);
 
         if (!code) {
+          setLockKantorFromReferral(false);
+          return;
+        }
+
+        // ✅ jangan tembak API kalau kode belum berbentuk valid (mis. "A", "AG"),
+        // ini cegah noise 404 saat user masih mengetik.
+        if (!/^AG\d+$/.test(code)) {
           setLockKantorFromReferral(false);
           return;
         }
@@ -679,9 +702,11 @@ export default function AgentApplyForm({
       const normalizedRef = normalizeAgentCode(refCode);
       if (normalizedRef) fd.append("kode_referral_upline", normalizedRef);
 
-      fd.append("foto_ktp", fotoKtp!);
+      // ✅ hanya kirim file kalau user upload baru / mengganti.
+      // Kalau kosong & dokumen lama masih ada, backend akan pertahankan yang lama.
+      if (fotoKtp) fd.append("foto_ktp", fotoKtp);
       if (fotoNpwp) fd.append("foto_npwp", fotoNpwp);
-      fd.append("foto_profil", fotoProfil!);
+      if (fotoProfil) fd.append("foto_profil", fotoProfil);
 
       const res = await fetch("/api/agent/daftar-agent", { method: "POST", body: fd });
       const data = await res.json().catch(() => ({}));
@@ -706,7 +731,12 @@ export default function AgentApplyForm({
       try {
         const r2 = await fetch("/api/agent/daftar-agent/prefill", { method: "GET", cache: "no-store" });
         const d2 = (await r2.json().catch(() => ({}))) as PrefillResponse;
-        if (r2.ok && d2?.ok && d2.agent) setExistingAgent(d2.agent);
+        if (r2.ok && d2?.ok && d2.agent) {
+          setExistingAgent(d2.agent);
+          setExistingFotoKtpId(d2.agent.foto_ktp_url ?? null);
+          setExistingFotoNpwpId(d2.agent.foto_npwp_url ?? null);
+          setExistingFotoProfilId(d2.agent.foto_profil_url ?? null);
+        }
       } catch {}
 
       setStep(2);
@@ -1107,9 +1137,29 @@ export default function AgentApplyForm({
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
-                    <UploadCard disabled={isFormLocked} label="Foto KTP" required file={fotoKtp} setFile={setFotoKtp} />
-                    <UploadCard disabled={isFormLocked} label="Foto NPWP" file={fotoNpwp} setFile={setFotoNpwp} />
-                    <UploadCard disabled={isFormLocked} label="Foto Profil" required file={fotoProfil} setFile={setFotoProfil} />
+                    <UploadCard
+                      disabled={isFormLocked}
+                      label="Foto KTP"
+                      required
+                      file={fotoKtp}
+                      setFile={setFotoKtp}
+                      existingPreviewUrl={existingFotoKtpId ? driveProxyUrl(existingFotoKtpId) : null}
+                    />
+                    <UploadCard
+                      disabled={isFormLocked}
+                      label="Foto NPWP"
+                      file={fotoNpwp}
+                      setFile={setFotoNpwp}
+                      existingPreviewUrl={existingFotoNpwpId ? driveProxyUrl(existingFotoNpwpId) : null}
+                    />
+                    <UploadCard
+                      disabled={isFormLocked}
+                      label="Foto Profil"
+                      required
+                      file={fotoProfil}
+                      setFile={setFotoProfil}
+                      existingPreviewUrl={existingFotoProfilId ? driveProxyUrl(existingFotoProfilId) : null}
+                    />
                   </div>
                 </div>
               ) : null}
@@ -1230,9 +1280,14 @@ function PendingScreen({
 
       <div className="mt-5 flex flex-wrap gap-2">
         <a
-          href="/support"
-          className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-white/80 hover:bg-white/5"
+          href={`https://wa.me/6281335716679?text=${encodeURIComponent(
+            `Halo Admin, saya sudah mendaftar sebagai agent dengan ID Pengguna ${userId || "-"} (ID Agent: ${agentId || "-"}). Mohon info status verifikasinya. Terima kasih.`,
+          )}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-white/80 hover:bg-white/5"
         >
+          <Icon icon="ic:baseline-whatsapp" className="text-lg text-emerald-400" />
           Hubungi Admin
         </a>
         <a
@@ -1479,7 +1534,7 @@ function ModalShell({ onClose, children }: { onClose: () => void; children: Reac
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
       <button onClick={onClose} className="absolute inset-0 bg-black/70 backdrop-blur-sm" aria-label="Tutup" />
-      <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-black/60 p-5 shadow-2xl backdrop-blur">
+      <div className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-white/10 bg-black/60 p-5 shadow-2xl backdrop-blur">
         {children}
       </div>
     </div>
@@ -1586,19 +1641,23 @@ function UploadCard({
   file,
   setFile,
   disabled,
+  existingPreviewUrl,
 }: {
   label: string;
   required?: boolean;
   file: File | null;
   setFile: (f: File | null) => void;
   disabled?: boolean;
+  existingPreviewUrl?: string | null;
 }) {
   const previewUrl = useObjectUrl(file);
   const isImage = Boolean(file?.type?.startsWith("image/"));
   const [compressing, setCompressing] = useState(false);
   const [compressInfo, setCompressInfo] = useState<string>("");
+  const [existingPreviewBroken, setExistingPreviewBroken] = useState(false);
 
   const isDoc = /ktp|npwp/i.test(label);
+  const showExistingPreview = !file && Boolean(existingPreviewUrl) && !existingPreviewBroken;
 
   return (
     <div
@@ -1625,6 +1684,26 @@ function UploadCard({
           <span className="text-[11px] text-white/45">{compressInfo}</span>
         ) : null}
       </div>
+
+      {showExistingPreview ? (
+        <div className="mb-3 overflow-hidden rounded-2xl border border-white/10 bg-black/30">
+          <div className="relative aspect-[16/10] w-full">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={existingPreviewUrl || ""}
+              alt={`${label} tersimpan`}
+              className="h-full w-full object-cover"
+              onError={() => setExistingPreviewBroken(true)}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+            <div className="flex min-w-0 items-center gap-1.5 text-emerald-200/90">
+              <Icon icon="solar:check-circle-bold" className="text-base" />
+              Dokumen tersimpan dari pendaftaran sebelumnya
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {file && isImage && previewUrl ? (
         <div className="mb-3 overflow-hidden rounded-2xl border border-white/10 bg-black/30">
@@ -1665,17 +1744,25 @@ function UploadCard({
                 <span className="text-white">{file.name}</span>{" "}
                 <span className="text-white/45">• {formatBytes(file.size)}</span>
               </>
+            ) : showExistingPreview ? (
+              "Pakai dokumen tersimpan, atau ganti dengan file baru"
             ) : (
               "Klik untuk pilih file (JPG/PNG)"
             )}
           </div>
           <div className="mt-1 text-xs text-white/45">
-            {file ? "Klik untuk ganti file." : isDoc ? "Pastikan teks dokumen jelas (tidak blur)." : "Foto wajah jelas (pencahayaan cukup)."}
+            {file
+              ? "Klik untuk ganti file."
+              : showExistingPreview
+                ? "File lama akan otomatis dihapus kalau diganti."
+                : isDoc
+                  ? "Pastikan teks dokumen jelas (tidak blur)."
+                  : "Foto wajah jelas (pencahayaan cukup)."}
           </div>
         </div>
 
         <span className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/70 group-hover:border-emerald-400/20 group-hover:bg-emerald-400/10">
-          {file ? "Ganti" : "Upload"}
+          {file || showExistingPreview ? "Ganti" : "Upload"}
         </span>
 
         <input

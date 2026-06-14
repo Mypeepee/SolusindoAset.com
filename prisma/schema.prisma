@@ -27,6 +27,8 @@ model Pengguna {
   mouKlien         Mou[]            @relation("MouKlien")
   klien            Klien[]
   bookingSurvei    BookingSurvei[]
+  leads            Lead[]
+  notifikasi       Notifikasi[]
 
   @@index([kode_referral], map: "idx_kode_referral")
   @@index([email], map: "idx_pengguna_email")
@@ -79,6 +81,7 @@ model Agent {
   riwayatPoin            RiwayatPoin[]
   mouAgent               Mou[]                    @relation("MouAgent")
   leads                  Lead[]
+  leadsCobroke           Lead[]                   @relation("LeadCobroke")
   klien                  Klien[]
   propertyTitipKlaim     PropertyTitip[]          @relation("PropertyTitipKlaim")
   propertyTitipDistribusi PropertyTitipDistribution[]
@@ -549,6 +552,7 @@ model BookingSurvei {
   id_property      BigInt
   id_agent         String    @db.VarChar(20)
   id_klien         String?   @db.VarChar(20)
+  id_lead          BigInt?
   nama_klien       String    @db.VarChar(255)
   nomor_telepon    String    @db.VarChar(20)
   tanggal_survei   DateTime  @db.Timestamptz(6)
@@ -559,10 +563,12 @@ model BookingSurvei {
   listing   Listing   @relation(fields: [id_property], references: [id_property], onDelete: Cascade)
   agent     Agent     @relation(fields: [id_agent], references: [id_agent], onDelete: Cascade)
   pengguna  Pengguna? @relation(fields: [id_klien], references: [id_pengguna], onDelete: SetNull)
+  lead      Lead?     @relation(fields: [id_lead], references: [id_lead], onDelete: SetNull)
 
   @@index([id_agent],    map: "idx_booking_survei_agent")
   @@index([id_property], map: "idx_booking_survei_property")
   @@index([id_klien],    map: "idx_booking_survei_klien")
+  @@index([id_lead],     map: "idx_booking_survei_id_lead")
   @@index([tanggal_survei], map: "idx_booking_survei_tanggal")
   @@map("booking_survei")
 }
@@ -731,21 +737,38 @@ model Lead {
   client_phone String? @db.VarChar(20)
   client_email String? @db.VarChar(150)
 
+  penawaran  BigInt?
+  diskon     Decimal?                @db.Decimal(5, 2)
+  pembayaran metode_pembayaran_enum?
+  catatan    String?                 @db.VarChar(1000)
+  id_pengguna String? @db.VarChar(20)
+
+  status_penawaran  status_penawaran_enum?
+  catatan_agent     String?                 @db.VarChar(500)
+  tanggal_keputusan DateTime?               @db.Timestamptz(6)
+
+  id_agent_cobroke String? @db.VarChar(20)
+
   last_activity DateTime? @db.Timestamptz(6)
 
   created_at DateTime @default(now()) @db.Timestamptz(6)
   updated_at DateTime @default(now()) @db.Timestamptz(6)
 
-  agent   Agent   @relation(fields: [id_agent], references: [id_agent], onDelete: Cascade, map: "leads_agent_fk")
-  listing Listing @relation(fields: [id_property], references: [id_property], onDelete: Cascade, map: "leads_property_fk")
+  agent       Agent     @relation(fields: [id_agent], references: [id_agent], onDelete: Cascade, map: "leads_agent_fk")
+  listing     Listing   @relation(fields: [id_property], references: [id_property], onDelete: Cascade, map: "leads_property_fk")
+  pengguna    Pengguna? @relation(fields: [id_pengguna], references: [id_pengguna], onDelete: SetNull, map: "leads_pengguna_fk")
+  agentCobroke Agent?   @relation("LeadCobroke", fields: [id_agent_cobroke], references: [id_agent], onDelete: SetNull, map: "leads_agent_cobroke_fk")
   klien   Klien?
   tugas   Tugas[]
+  bookingSurvei BookingSurvei[]
 
   @@index([id_agent, status], map: "idx_leads_agent_status")
   @@index([id_property], map: "idx_leads_property")
   @@index([created_at(sort: Desc)], map: "idx_leads_created")
   @@index([client_phone], map: "idx_leads_phone")
   @@index([session_id], map: "idx_leads_session")
+  @@index([id_pengguna], map: "idx_leads_pengguna")
+  @@index([id_agent_cobroke], map: "idx_leads_agent_cobroke")
   @@map("leads")
 }
 
@@ -933,6 +956,8 @@ enum lead_source_enum {
   survei
   titip_jual
   form_inquiry
+  penawaran
+  cobroke
 }
 
 enum peran_enum {
@@ -1145,6 +1170,12 @@ enum metode_pembayaran_enum {
   cash_bertahap
 }
 
+enum status_penawaran_enum {
+  pending
+  diterima
+  ditolak
+}
+
 enum tujuan_beli_enum {
   ditempati
   investasi
@@ -1222,6 +1253,33 @@ enum kategori_tugas_enum {
   PIPELINE
   NETWORKING
   UMUM
+}
+
+// ── Notifikasi sistem (bell di topbar dashboard) ────────────────────────────
+model Notifikasi {
+  id_notifikasi BigInt              @id @default(autoincrement())
+  id_pengguna   String              @db.VarChar(20)
+  tipe          tipe_notifikasi_enum
+  judul         String              @db.VarChar(255)
+  pesan         String              @db.VarChar(500)
+  link          String?             @db.VarChar(255)
+  id_agent_ref  String?             @db.VarChar(20)
+  dibaca        Boolean             @default(false)
+  dibuat_pada   DateTime            @default(now()) @db.Timestamptz(6)
+
+  pengguna Pengguna @relation(fields: [id_pengguna], references: [id_pengguna], onDelete: Cascade)
+
+  @@index([id_pengguna, dibaca], map: "idx_notifikasi_pengguna_dibaca")
+  @@index([dibuat_pada(sort: Desc)], map: "idx_notifikasi_tanggal")
+  @@map("notifikasi")
+}
+
+enum tipe_notifikasi_enum {
+  AGENT_BARU
+  AGENT_REFERRAL
+  CO_BROKE_SUBMITTED
+  CO_BROKE_ACCEPTED
+  CO_BROKE_REJECTED
 }
 
 enum status_tugas_enum {

@@ -9,7 +9,9 @@ type SourceRaw =
   | "telepon"
   | "survei"
   | "titip_jual"
-  | "form_inquiry";
+  | "form_inquiry"
+  | "penawaran"
+  | "cobroke";
 
 export interface LeadDetail {
   id: string;
@@ -25,6 +27,13 @@ export interface LeadDetail {
   ageMinutes: number;
   phone?: string | null;
   clientName?: string | null;
+  offerAmount?: string | null;
+  notes?: string | null;
+  verified?: boolean;
+  statusPenawaran?: "pending" | "diterima" | "ditolak" | null;
+  catatanAgent?: string | null;
+  tanggalKeputusan?: string | null;
+  cobrokeAgent?: { id_agent: string; nama: string; kantor: string; whatsapp: string } | null;
 }
 
 interface SavedUpdates {
@@ -116,6 +125,8 @@ const CHANNEL_GRADIENT: Record<SourceRaw, string> = {
   survei:       "bg-gradient-to-br from-violet-400 to-violet-600",
   titip_jual:   "bg-gradient-to-br from-amber-400 to-amber-600",
   form_inquiry: "bg-gradient-to-br from-slate-400 to-slate-600",
+  penawaran:    "bg-gradient-to-br from-teal-400 to-emerald-600",
+  cobroke:      "bg-gradient-to-br from-fuchsia-400 to-purple-600",
 };
 
 /* ─────────────────────────────────────────
@@ -174,6 +185,11 @@ export default function LeadDetailSheet({ lead, onClose, onSaved }: Props) {
   const [baseline, setBaseline] = useState<{ status: LeadStatus; name: string; phone: string } | null>(null);
   const [statusManuallyChanged, setStatusManuallyChanged] = useState(false);
   const [showAutoPromoteNotif, setShowAutoPromoteNotif] = useState(false);
+  const [decisionAction, setDecisionAction] = useState<"diterima" | "ditolak" | null>(null);
+  const [acceptNote, setAcceptNote] = useState("");
+  const [rejectNote, setRejectNote] = useState("");
+  const [decisionSaving, setDecisionSaving] = useState(false);
+  const [decisionError, setDecisionError] = useState<string | null>(null);
   const phoneRef = useRef<HTMLInputElement>(null);
 
   // mount animation
@@ -199,20 +215,28 @@ export default function LeadDetailSheet({ lead, onClose, onSaved }: Props) {
       setSavedSuccess(false);
       setStatusManuallyChanged(false);
       setShowAutoPromoteNotif(false);
+      setDecisionAction(null);
+      setAcceptNote("");
+      setRejectNote("");
+      setDecisionError(null);
     }
   }, [lead]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-promote "new" → "contacted" saat nomor WA valid
   // Logika: kalau ada nomor, berarti klien sudah confirm (chat masuk)
+  // Khusus lead "survei": punya nomor sejak awal (dari form booking) tapi
+  // itu BUKAN berarti agent sudah menghubungi — jadi auto-promote dilewati,
+  // status tetap "new" sampai agent menerima jadwal survei-nya.
   useEffect(() => {
     if (statusManuallyChanged) return;
+    if (lead?.sourceRaw === "survei") return;
     if (status === "new" && phoneDigits.length >= 8) {
       setStatus("contacted");
       setShowAutoPromoteNotif(true);
       const t = setTimeout(() => setShowAutoPromoteNotif(false), 4500);
       return () => clearTimeout(t);
     }
-  }, [phoneDigits, statusManuallyChanged, status]);
+  }, [phoneDigits, statusManuallyChanged, status, lead]);
 
   function handleStatusClick(s: LeadStatus) {
     setStatus(s);
@@ -307,6 +331,32 @@ export default function LeadDetailSheet({ lead, onClose, onSaved }: Props) {
       setErr(e instanceof Error ? e.message : "Gagal menyimpan");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function submitDecision(decision: "diterima" | "ditolak") {
+    setDecisionSaving(true);
+    setDecisionError(null);
+    try {
+      const note = decision === "diterima" ? acceptNote : rejectNote;
+      const res = await fetch(`/api/leads/${lead!.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision, catatan_agent: note.trim() || undefined }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || `HTTP ${res.status}`);
+      }
+      const newStatus: LeadStatus = decision === "diterima" ? "closing" : "cold";
+      setStatus(newStatus);
+      setSavedSuccess(true);
+      onSaved({ status: newStatus, clientName: name.trim() || null, phone: fullPhone || null });
+      setTimeout(() => handleClose(), 900);
+    } catch (e: unknown) {
+      setDecisionError(e instanceof Error ? e.message : "Gagal menyimpan keputusan");
+    } finally {
+      setDecisionSaving(false);
     }
   }
 
@@ -520,8 +570,10 @@ export default function LeadDetailSheet({ lead, onClose, onSaved }: Props) {
             <Icon icon="solar:close-circle-bold" className="text-lg" />
           </button>
 
+          {/* ─── SCROLLABLE CONTENT (header + body digabung agar area scroll maksimal) ─── */}
+          <div className="relative flex-1 overflow-y-auto">
           {/* ─── HEADER: konteks lead ─── */}
-          <header className="relative shrink-0 border-b border-white/[0.06] px-5 pb-5 pt-9 sm:pt-6">
+          <div className="border-b border-white/[0.06] px-5 pb-5 pt-9 sm:pt-6">
             <div className="flex gap-4">
               <div
                 className="relative shrink-0"
@@ -574,6 +626,18 @@ export default function LeadDetailSheet({ lead, onClose, onSaved }: Props) {
                       {lead.budget}
                     </span>
                   )}
+                  {lead.sourceRaw === "penawaran" && lead.offerAmount && (
+                    <span className="inline-flex items-center gap-1 text-base font-extrabold tabular-nums text-teal-300">
+                      <Icon icon="solar:tag-price-bold-duotone" className="text-sm" />
+                      {lead.offerAmount}
+                    </span>
+                  )}
+                  {lead.verified && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                      <Icon icon="solar:verified-check-bold" className="text-[11px]" />
+                      Akun terverifikasi
+                    </span>
+                  )}
                   <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
                     <Icon
                       icon="solar:clock-circle-linear"
@@ -582,11 +646,57 @@ export default function LeadDetailSheet({ lead, onClose, onSaved }: Props) {
                     {humanTime(lead.ageMinutes)} · via {lead.source}
                   </span>
                 </div>
+                {(lead.sourceRaw === "penawaran" || lead.sourceRaw === "cobroke") && lead.notes && (
+                  <p className="mt-2 rounded-xl border border-white/[0.06] bg-white/[0.03] p-2 text-[11px] leading-relaxed text-slate-300">
+                    "{lead.notes}"
+                  </p>
+                )}
               </div>
             </div>
 
+            {/* Info agent pengaju co-broke */}
+            {lead.sourceRaw === "cobroke" && lead.cobrokeAgent && (
+              <div
+                className="mt-4 flex items-start gap-2.5 rounded-2xl border border-fuchsia-400/15 bg-gradient-to-br from-fuchsia-500/[0.08] to-fuchsia-500/[0.02] p-3"
+                style={{
+                  animation: shown
+                    ? "lead-stagger 320ms cubic-bezier(0.16, 1, 0.3, 1) 140ms both"
+                    : undefined,
+                }}
+              >
+                <div className="grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-fuchsia-500/15">
+                  <Icon icon="solar:users-group-two-rounded-bold-duotone" className="text-base text-fuchsia-300" />
+                </div>
+                <p className="text-[11px] leading-relaxed text-fuchsia-100/85">
+                  <span className="font-bold">Diajukan oleh {lead.cobrokeAgent.nama}</span>{" "}
+                  ({lead.cobrokeAgent.kantor}) — {lead.cobrokeAgent.whatsapp}
+                </p>
+              </div>
+            )}
+
+            {/* Privasi klien co-broke — identitas tidak dibagikan ke agent pemilik */}
+            {lead.sourceRaw === "cobroke" && (
+              <div
+                className="mt-4 flex items-start gap-2.5 rounded-2xl border border-fuchsia-400/15 bg-gradient-to-br from-fuchsia-500/[0.08] to-fuchsia-500/[0.02] p-3"
+                style={{
+                  animation: shown
+                    ? "lead-stagger 320ms cubic-bezier(0.16, 1, 0.3, 1) 150ms both"
+                    : undefined,
+                }}
+              >
+                <div className="grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-fuchsia-500/15">
+                  <Icon icon="solar:shield-keyhole-bold-duotone" className="text-base text-fuchsia-300" />
+                </div>
+                <p className="text-[11px] leading-relaxed text-fuchsia-100/85">
+                  <span className="font-bold">Identitas klien dirahasiakan</span> — data klien adalah privat
+                  milik agent pengaju. Untuk koordinasi jadwal survei, hubungi agent pengaju via WhatsApp di atas;
+                  agent pengaju akan mendampingi kliennya saat survei.
+                </p>
+              </div>
+            )}
+
             {/* Hint untuk lead anonim */}
-            {!lead.phone && (
+            {!lead.phone && lead.sourceRaw !== "cobroke" && (
               <div
                 className="mt-4 flex items-start gap-2.5 rounded-2xl border border-amber-400/15 bg-gradient-to-br from-amber-500/[0.08] to-amber-500/[0.02] p-3"
                 style={{
@@ -611,10 +721,160 @@ export default function LeadDetailSheet({ lead, onClose, onSaved }: Props) {
                 </p>
               </div>
             )}
-          </header>
+          </div>
 
           {/* ─── BODY ─── */}
-          <div className="relative flex-1 overflow-y-auto px-5 py-4">
+          <div className="px-5 py-4">
+            {/* Keputusan Penawaran / Co-Broke — khusus lead source "penawaran" / "cobroke" */}
+            {(lead.sourceRaw === "penawaran" || lead.sourceRaw === "cobroke") && (
+              <section
+                className="mb-4"
+                style={{
+                  animation: shown
+                    ? "lead-stagger 320ms cubic-bezier(0.16, 1, 0.3, 1) 160ms both"
+                    : undefined,
+                }}
+              >
+                <SectionLabel
+                  icon={lead.sourceRaw === "cobroke" ? "solar:users-group-two-rounded-bold-duotone" : "solar:hand-money-bold-duotone"}
+                  title={lead.sourceRaw === "cobroke" ? "Keputusan Co-Broke" : "Keputusan Penawaran"}
+                />
+
+                {lead.statusPenawaran === "pending" ? (
+                  <div className="rounded-2xl border border-teal-400/20 bg-gradient-to-br from-teal-500/[0.08] to-transparent p-3">
+                    <p className="text-[11px] leading-relaxed text-slate-400">
+                      {lead.sourceRaw === "cobroke"
+                        ? "Agent lain mengajukan kerja sama co-broke untuk listing ini. Terima untuk mulai koordinasi pembagian komisi, atau tolak jika tidak sesuai."
+                        : "Penawaran ini menunggu keputusan Anda. Klien tidak bisa mengajukan penawaran baru untuk properti ini sampai diproses."}
+                    </p>
+
+                    {decisionAction === "ditolak" ? (
+                      <div className="mt-3 space-y-2">
+                        <textarea
+                          value={rejectNote}
+                          onChange={(e) => setRejectNote(e.target.value)}
+                          placeholder="Alasan penolakan untuk klien (wajib diisi)..."
+                          rows={2}
+                          className="w-full resize-none rounded-xl border border-rose-400/20 bg-white/[0.03] px-3 py-2 text-[12px] text-white outline-none transition-colors placeholder:text-slate-500 focus:border-rose-400/40"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => { setDecisionAction(null); setRejectNote(""); }}
+                            disabled={decisionSaving}
+                            className="flex-1 rounded-xl border border-white/[0.08] bg-white/[0.02] py-2.5 text-[12px] font-semibold text-slate-300 transition-all hover:bg-white/[0.06] active:scale-[0.98] disabled:opacity-60"
+                          >
+                            Batal
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => submitDecision("ditolak")}
+                            disabled={!rejectNote.trim() || decisionSaving}
+                            className="flex-[2] rounded-xl bg-gradient-to-r from-rose-500 to-rose-600 py-2.5 text-[12px] font-extrabold text-white transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {decisionSaving ? "Menyimpan…" : "Konfirmasi Tolak"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : decisionAction === "diterima" ? (
+                      <div className="mt-3 space-y-2">
+                        <textarea
+                          value={acceptNote}
+                          onChange={(e) => setAcceptNote(e.target.value)}
+                          placeholder="Catatan untuk klien (opsional)..."
+                          rows={2}
+                          className="w-full resize-none rounded-xl border border-emerald-400/20 bg-white/[0.03] px-3 py-2 text-[12px] text-white outline-none transition-colors placeholder:text-slate-500 focus:border-emerald-400/40"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => { setDecisionAction(null); setAcceptNote(""); }}
+                            disabled={decisionSaving}
+                            className="flex-1 rounded-xl border border-white/[0.08] bg-white/[0.02] py-2.5 text-[12px] font-semibold text-slate-300 transition-all hover:bg-white/[0.06] active:scale-[0.98] disabled:opacity-60"
+                          >
+                            Batal
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => submitDecision("diterima")}
+                            disabled={decisionSaving}
+                            className="flex-[2] rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 py-2.5 text-[12px] font-extrabold text-white transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {decisionSaving ? "Menyimpan…" : "Konfirmasi Terima"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDecisionAction("diterima")}
+                          className="flex items-center justify-center gap-1.5 rounded-xl border border-emerald-400/25 bg-emerald-500/[0.08] py-2.5 text-[12px] font-bold text-emerald-300 transition-all hover:bg-emerald-500/[0.14] active:scale-[0.98]"
+                        >
+                          <Icon icon="solar:check-circle-bold-duotone" className="text-base" />
+                          {lead.sourceRaw === "cobroke" ? "Terima Co-Broke" : "Terima"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDecisionAction("ditolak")}
+                          className="flex items-center justify-center gap-1.5 rounded-xl border border-rose-400/25 bg-rose-500/[0.08] py-2.5 text-[12px] font-bold text-rose-300 transition-all hover:bg-rose-500/[0.14] active:scale-[0.98]"
+                        >
+                          <Icon icon="solar:close-circle-bold-duotone" className="text-base" />
+                          Tolak
+                        </button>
+                      </div>
+                    )}
+
+                    {decisionError && (
+                      <p className="mt-2 text-[10px] font-medium text-rose-400">{decisionError}</p>
+                    )}
+                  </div>
+                ) : (
+                  <div
+                    className={`rounded-2xl border p-3 ${
+                      lead.statusPenawaran === "diterima"
+                        ? "border-emerald-400/20 bg-emerald-500/[0.06]"
+                        : "border-rose-400/20 bg-rose-500/[0.06]"
+                    }`}
+                  >
+                    <p
+                      className={`flex items-center gap-1.5 text-[12px] font-bold ${
+                        lead.statusPenawaran === "diterima" ? "text-emerald-300" : "text-rose-300"
+                      }`}
+                    >
+                      <Icon
+                        icon={
+                          lead.statusPenawaran === "diterima"
+                            ? "solar:check-circle-bold"
+                            : "solar:close-circle-bold"
+                        }
+                        className="text-sm"
+                      />
+                      {lead.sourceRaw === "cobroke"
+                        ? (lead.statusPenawaran === "diterima" ? "Co-Broke Diterima" : "Co-Broke Ditolak")
+                        : (lead.statusPenawaran === "diterima" ? "Penawaran Diterima" : "Penawaran Ditolak")}
+                    </p>
+                    {lead.catatanAgent && (
+                      <p className="mt-1.5 text-[11px] italic leading-relaxed text-slate-300">
+                        "{lead.catatanAgent}"
+                      </p>
+                    )}
+                    {lead.tanggalKeputusan && (
+                      <p className="mt-1.5 text-[10px] text-slate-500">
+                        {new Date(lead.tanggalKeputusan).toLocaleString("id-ID", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
+
             {/* Status segmented */}
             <section
               style={{
@@ -737,7 +997,8 @@ export default function LeadDetailSheet({ lead, onClose, onSaved }: Props) {
                 {/* Divider */}
                 <div className="my-4 h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
 
-                {/* Kontak — Nama & WA */}
+                {/* Kontak — Nama & WA (disembunyikan untuk lead co-broke, identitas klien privat) */}
+                {lead.sourceRaw === "cobroke" ? null : (
                 <section
                   style={{
                     animation: shown
@@ -824,6 +1085,7 @@ export default function LeadDetailSheet({ lead, onClose, onSaved }: Props) {
                     )}
                   </div>
                 </section>
+                )}
               </>
             )}
 
@@ -837,6 +1099,7 @@ export default function LeadDetailSheet({ lead, onClose, onSaved }: Props) {
               </div>
             )}
           </div>
+          </div>
 
           {/* ─── FOOTER ─── */}
           <footer
@@ -847,7 +1110,20 @@ export default function LeadDetailSheet({ lead, onClose, onSaved }: Props) {
                 : undefined,
             }}
           >
-            {phoneValid && (
+            {lead.sourceRaw === "cobroke" && lead.cobrokeAgent?.whatsapp ? (
+              <a
+                href={`https://wa.me/${lead.cobrokeAgent.whatsapp.replace(/^0/, "62").replace(/\D/g, "")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group flex w-full items-center justify-center gap-2 rounded-xl border border-fuchsia-400/30 bg-gradient-to-r from-fuchsia-500/10 to-purple-600/10 py-3 text-sm font-bold text-fuchsia-100 transition-all hover:border-fuchsia-400/50 hover:from-fuchsia-500/20 hover:to-purple-600/20 active:scale-[0.99]"
+              >
+                <Icon
+                  icon="ic:baseline-whatsapp"
+                  className="text-base transition-transform group-hover:scale-110"
+                />
+                Hubungi {lead.cobrokeAgent.nama} (Agent Pengaju)
+              </a>
+            ) : phoneValid && (
               <a
                 href={`https://wa.me/${fullPhone}`}
                 target="_blank"

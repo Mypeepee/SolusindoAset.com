@@ -415,7 +415,7 @@ export default function RiwayatLelang({
               className="absolute inset-0 bg-black/80 backdrop-blur-md"
               onClick={() => setIsSignInOpen(false)}
             />
-            <div className="relative w-full max-w-md bg-[#181818] border border-white/10 rounded-2xl p-8 shadow-2xl">
+            <div className="relative w-full max-w-md max-h-[90vh] overflow-y-auto bg-[#181818] border border-white/10 rounded-2xl p-8 shadow-2xl">
               <button
                 onClick={() => setIsSignInOpen(false)}
                 className="absolute top-4 right-4 text-gray-400 hover:text-white"
@@ -438,7 +438,7 @@ export default function RiwayatLelang({
               className="absolute inset-0 bg-black/80 backdrop-blur-md"
               onClick={() => setIsSignUpOpen(false)}
             />
-            <div className="relative w-full max-w-md bg-[#181818] border border-white/10 rounded-2xl p-8 shadow-2xl">
+            <div className="relative w-full max-w-md max-h-[90vh] overflow-y-auto bg-[#181818] border border-white/10 rounded-2xl p-8 shadow-2xl">
               <button
                 onClick={() => setIsSignUpOpen(false)}
                 className="absolute top-4 right-4 text-gray-400 hover:text-white"

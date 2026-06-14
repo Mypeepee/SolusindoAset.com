@@ -591,6 +591,12 @@ const Header: React.FC = () => {
       String(it?.href || "").startsWith("/gabung-jadi-agent") ||
       String(it?.label || "").toLowerCase().includes("gabung jadi agent");
 
+    // ✅ "Titip Jual" hanya untuk USER (belum jadi agent).
+    // Agent sudah punya akses listing lewat dashboard, jadi menu ini disembunyikan.
+    const isTitipJualItem = (it: any) =>
+      String(it?.href || "").startsWith("/titip-jual") ||
+      String(it?.label || "").toLowerCase().includes("titip jual");
+
     const deepFilter = (items: any[]): any[] =>
       (items || [])
         .map((it) => {
@@ -601,6 +607,7 @@ const Header: React.FC = () => {
         })
         .filter((it) => {
           if (!canJoinAgent && isJoinAgentItem(it)) return false;
+          if (isAgent && isTitipJualItem(it)) return false;
           if (it?.submenu && Array.isArray(it.submenu) && it.submenu.length === 0) return false;
           return true;
         });
@@ -780,7 +787,7 @@ const Header: React.FC = () => {
             className="absolute inset-0 bg-black/80 backdrop-blur-md"
             onClick={() => setIsSignInOpen(false)}
           />
-          <div className="relative w-full max-w-md bg-[#181818] border border-white/10 rounded-2xl p-8 shadow-2xl">
+          <div className="relative w-full max-w-md max-h-[90vh] overflow-y-auto bg-[#181818] border border-white/10 rounded-2xl p-8 shadow-2xl">
             <button
               onClick={() => setIsSignInOpen(false)}
               className="absolute top-4 right-4 text-gray-400 hover:text-white"
@@ -807,7 +814,7 @@ const Header: React.FC = () => {
             className="absolute inset-0 bg-black/80 backdrop-blur-md"
             onClick={() => setIsSignUpOpen(false)}
           />
-          <div className="relative w-full max-w-md bg-[#181818] border border-white/10 rounded-2xl p-8 shadow-2xl">
+          <div className="relative w-full max-w-md max-h-[90vh] overflow-y-auto bg-[#181818] border border-white/10 rounded-2xl p-8 shadow-2xl">
             <button
               onClick={() => setIsSignUpOpen(false)}
               className="absolute top-4 right-4 text-gray-400 hover:text-white"
