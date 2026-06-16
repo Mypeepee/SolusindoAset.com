@@ -391,10 +391,24 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
 
   const [searching, setSearching] = useState(false);
 
+  // ✅ Reset state "searching" setiap kali URL/searchParams berubah (navigasi
+  //    selesai → server selesai render hasil baru). Tanpa ini, tombol akan
+  //    terkunci "muter" selamanya setelah pencarian pertama, karena route
+  //    /properti/[slug] tidak remount saat hanya query yang berubah.
+  useEffect(() => {
+    setSearching(false);
+  }, [sp]);
+
+  // ✅ Failsafe: kalau karena suatu hal navigasi gagal/menggantung dan sp tak
+  //    pernah berubah, tombol tetap pulih sendiri setelah beberapa detik.
+  useEffect(() => {
+    if (!searching) return;
+    const t = setTimeout(() => setSearching(false), 8000);
+    return () => clearTimeout(t);
+  }, [searching]);
+
   const handleSearch = () => {
     if (searching) return;
-    setSearching(true);
-    window.dispatchEvent(new CustomEvent("navigate-start"));
 
     const targetSlug = formData.type
       ? KATEGORI_LIST.find(k => k.label === formData.type)?.slug ?? slug
@@ -405,6 +419,11 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
       if (keywordMode === "id") params.set("idProperty", keywordTrimmed);
       else params.set("q", keywordTrimmed);
     }
+    // Pertahankan tab aktif (Semua/Jual/Lelang/Sewa) saat pencarian alamat,
+    // supaya hasil tetap relevan dengan tab yang sedang dibuka.
+    // Untuk pencarian by ID, server akan otomatis arahkan ke tab yang sesuai.
+    const currentTipe = sp.get("tipe");
+    if (currentTipe && keywordMode !== "id") params.set("tipe", currentTipe);
     if (formData.locations.length) params.set("kota", formData.locations.map(l => l.name).join(","));
     if (formData.minPrice) params.set("minHarga", raw(formData.minPrice));
     if (formData.maxPrice) params.set("maxHarga", raw(formData.maxPrice));
@@ -412,8 +431,22 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
     if (formData.maxLt)    params.set("maxLT",    raw(formData.maxLt));
     if (formData.minLb)    params.set("minLB",    raw(formData.minLb));
     if (formData.maxLb)    params.set("maxLB",    raw(formData.maxLb));
-    router.push(`/properti/${targetSlug}?${params.toString()}`, { scroll: false });
+
     setOpenDropdown(null);
+
+    // Bandingkan tujuan dgn URL saat ini secara order-independent. Kalau tidak
+    // ada perubahan, tak perlu navigasi/spinner (mencegah tombol nyangkut saat
+    // user menekan "Cari" dengan kriteria yang sama persis).
+    params.sort();
+    const nextQuery = params.toString();
+    const curParams = new URLSearchParams(sp.toString());
+    curParams.sort();
+    const noChange = targetSlug === slug && nextQuery === curParams.toString();
+    if (noChange) return;
+
+    setSearching(true);
+    window.dispatchEvent(new CustomEvent("navigate-start"));
+    router.push(`/properti/${targetSlug}?${nextQuery}`, { scroll: false });
   };
 
   // shared dark input style

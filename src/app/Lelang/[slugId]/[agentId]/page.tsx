@@ -270,8 +270,22 @@ export default async function DetailPage({ params }: Props) {
   const session = await getServerSession(authOptions);
   const loggedInAgentId = (session?.user as any)?.agentId || null;
   const role = (session?.user as any)?.role || null;
+  const jabatan = (session?.user as any)?.jabatan || null;
 
   const currentAgentId = loggedInAgentId;
+
+  // ✅ Nomor stoker (untuk tujuan "Tanyakan Stok" dari agent/role lain).
+  // agent (jabatan = STOKER) -> join pengguna -> nomor_telepon
+  const stoker = await prisma.agent.findFirst({
+    where: { jabatan: "STOKER", status_keanggotaan: "AKTIF" },
+    orderBy: { tanggal_gabung: "asc" },
+    select: {
+      nomor_whatsapp: true,
+      pengguna: { select: { nomor_telepon: true } },
+    },
+  });
+  const stokerPhone =
+    stoker?.pengguna?.nomor_telepon || stoker?.nomor_whatsapp || null;
 
   const rawGambar = product.gambar || "";
   const fotoArray =
@@ -327,6 +341,8 @@ export default async function DetailPage({ params }: Props) {
         similarProperties={similarForClient}
         currentAgentId={currentAgentId}
         currentRole={role}
+        currentJabatan={jabatan}
+        stokerPhone={stokerPhone}
       />
     </main>
   );

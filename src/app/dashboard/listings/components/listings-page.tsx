@@ -3,6 +3,7 @@
 
 import type { ListingHeaderStats } from "../lib/property-stats";
 import { MetricCard } from "./metric-card";
+import { AddListingCard } from "./AddListingCard";
 import ListingCardGrid from "./ListingCardGrid";
 import type { Listing } from "./listings-table";
 import type { ListingFilterState } from "@/app/dashboard/transaksi/components/ListingFilters";
@@ -51,7 +52,7 @@ export default function ListingsPage({
       </div>
 
       {/* GRID CARD */}
-      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-6">
+      <div className="mx-auto grid max-w-6xl grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-4">
         <MetricCard
           label="Total Listings"
           icon="solar:buildings-3-bold-duotone"
@@ -78,6 +79,8 @@ export default function ListingsPage({
           description="Total semua listing dibuka."
           variant="soft"
         />
+
+        <AddListingCard />
       </div>
 
       {/* CARD GRID */}

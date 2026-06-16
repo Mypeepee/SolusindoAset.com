@@ -21,6 +21,31 @@
   100% { transform: translateX(220%) skewX(-18deg); }
 }
 
+/* ── Overdue task "minta tolong" attention animation ── */
+@keyframes task-wobble {
+  /* idle most of the cycle, brief wobble near the end */
+  0%, 86%, 100% { transform: translateX(0) rotate(0deg); }
+  88%  { transform: translateX(-2.5px) rotate(-1.1deg); }
+  90%  { transform: translateX(2.5px)  rotate(1.1deg); }
+  92%  { transform: translateX(-2px)   rotate(-0.8deg); }
+  94%  { transform: translateX(2px)    rotate(0.8deg); }
+  96%  { transform: translateX(-1px)   rotate(-0.4deg); }
+  98%  { transform: translateX(0)      rotate(0deg); }
+}
+@keyframes task-overdue-glow {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(244,63,94,0.30), 0 0 22px -8px rgba(244,63,94,0.45); }
+  50%      { box-shadow: 0 0 0 1px rgba(244,63,94,0.55), 0 0 30px -4px rgba(244,63,94,0.75); }
+}
+.task-overdue {
+  animation: task-wobble 6.5s ease-in-out infinite,
+             task-overdue-glow 2.4s ease-in-out infinite;
+  transform-origin: center bottom;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* keep the calm glow, drop the motion */
+  .task-overdue { animation: task-overdue-glow 2.4s ease-in-out infinite; }
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -735,3 +760,31 @@ section {
   from { transform: translateX(-20px); opacity: 0; }
   to   { transform: translateX(0);     opacity: 1; }
 }
+
+/* ── CRM header: living aurora + CTA sheen ── */
+@keyframes crm-aurora {
+  0%   { transform: translate3d(0, 0, 0) scale(1);        opacity: 0.85; }
+  50%  { transform: translate3d(4%, -3%, 0) scale(1.12);  opacity: 1; }
+  100% { transform: translate3d(0, 0, 0) scale(1);        opacity: 0.85; }
+}
+.crm-aurora-1 { animation: crm-aurora 14s ease-in-out infinite; }
+.crm-aurora-2 { animation: crm-aurora 18s ease-in-out infinite reverse; }
+.crm-aurora-3 { animation: crm-aurora 22s ease-in-out infinite; }
+
+@keyframes crm-sheen {
+  0%   { transform: translateX(-160%) skewX(-20deg); }
+  100% { transform: translateX(260%)  skewX(-20deg); }
+}
+.crm-sheen { animation: crm-sheen 3.6s ease-in-out infinite; }
+
+@keyframes crm-line {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 1; }
+}
+.crm-line { animation: crm-line 4s ease-in-out infinite; }
+
+@keyframes crm-pop {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.crm-pop { animation: crm-pop 0.16s cubic-bezier(0.16, 1, 0.3, 1); }

@@ -83,6 +83,8 @@ interface PropertyData {
   kondisi_interior: string | null;
   legalitas: string | null;
   nomor_legalitas?: string | null;
+  vendor?: string | null;
+  lampiran?: string | null;
 
   deskripsi: string | null;
 
@@ -103,6 +105,7 @@ interface DetailInfoProps {
   setSelectedRoom: (room: any) => void;
   currentAgentId?: string | null;
   currentRole?: string | null;
+  currentJabatan?: string | null;
 }
 
 const formatRupiah = (val: number | null | undefined) => {
@@ -211,12 +214,27 @@ export default function DetailInfo({
   setSelectedRoom,
   currentAgentId: _currentAgentId,
   currentRole,
+  currentJabatan,
 }: DetailInfoProps) {
   const canSeeNomorLegalitas =
     currentRole === "AGENT" || currentRole === "OWNER";
+
+  // ✅ Section PIC/Vendor & Lampiran hanya untuk tim internal (Stoker & manajemen)
+  const canSeePicInfo =
+    currentJabatan === "STOKER" ||
+    currentJabatan === "ADMIN" ||
+    currentJabatan === "OWNER" ||
+    currentJabatan === "PRINCIPAL";
+
+  const lampiranList = (data?.lampiran || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
   const transactionBadge = getTransactionBadge(data?.jenis_transaksi || "JUAL");
 
   const [shared, setShared] = useState(false);
+  const [vendorCopied, setVendorCopied] = useState(false);
 
   const handleShare = async () => {
     if (typeof window === "undefined") return;
@@ -360,6 +378,148 @@ export default function DetailInfo({
           </div>
         </div>
       </div>
+
+      {/* 1.5. PIC / VENDOR & LAMPIRAN — KHUSUS STOKER & MANAJEMEN */}
+      {canSeePicInfo && (
+        <div className="relative rounded-2xl p-px bg-gradient-to-br from-amber-300/60 via-amber-500/20 to-white/5 shadow-[0_20px_60px_-15px_rgba(245,158,11,0.25)]">
+          {/* Animated shimmer sweep along the border */}
+          <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none">
+            <div className="absolute -inset-y-10 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-amber-200/50 to-transparent rotate-12 animate-shimmer" />
+          </div>
+
+          <div className="relative overflow-hidden rounded-2xl bg-[#080706] p-5 sm:p-6 ring-1 ring-inset ring-white/[0.04]">
+            {/* Ambient glow */}
+            <div className="pointer-events-none absolute -top-24 -right-20 w-64 h-64 bg-amber-400/[0.08] rounded-full blur-[80px]" />
+            <div className="pointer-events-none absolute -bottom-24 -left-20 w-56 h-56 bg-yellow-500/[0.05] rounded-full blur-[80px]" />
+            {/* Fine diagonal texture */}
+            <div
+              className="pointer-events-none absolute inset-0 opacity-[0.03] mix-blend-screen"
+              style={{
+                backgroundImage:
+                  "repeating-linear-gradient(135deg, rgba(245,158,11,0.6) 0px, rgba(245,158,11,0.6) 1px, transparent 1px, transparent 14px)",
+              }}
+            />
+
+            {/* Header */}
+            <div className="relative flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2.5">
+                <div className="relative flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-br from-amber-300 to-yellow-600 shadow-[0_0_16px_rgba(245,158,11,0.4)]">
+                  <Icon icon="solar:shield-keyhole-bold" className="text-[#1a1206] text-sm" />
+                </div>
+                <span className="text-[11px] sm:text-xs font-extrabold uppercase tracking-[0.28em] bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-300 bg-clip-text text-transparent">
+                  Info Stok Internal
+                </span>
+              </div>
+              <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-200/90 bg-white/[0.03] border border-amber-400/25 rounded-full px-3 py-1.5 backdrop-blur-sm">
+                <Icon icon="solar:lock-keyhole-bold" className="text-amber-400 text-xs" />
+                Akses Stoker
+              </span>
+            </div>
+
+            <div className="relative space-y-px rounded-xl overflow-hidden border border-amber-400/15 bg-white/[0.015]">
+              {/* PIC / VENDOR — full width, nama tidak terpotong */}
+              <div className="relative p-4 sm:p-5 flex items-start gap-4 hover:bg-amber-400/[0.04] transition-colors">
+                <div className="relative w-12 h-12 rounded-xl bg-gradient-to-br from-amber-300/20 to-amber-600/10 border border-amber-400/30 flex items-center justify-center flex-shrink-0">
+                  <div className="absolute inset-0 rounded-xl bg-amber-400/10 blur-md" />
+                  <Icon
+                    icon="solar:user-id-bold-duotone"
+                    className="relative text-amber-300 text-2xl"
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300/60 mb-1.5">
+                    PIC / Vendor
+                  </p>
+                  <p className="text-base sm:text-lg font-extrabold text-white leading-snug break-words tracking-tight">
+                    {data?.vendor || "Belum diisi"}
+                  </p>
+                </div>
+                {data?.vendor && (
+                  <button
+                    onClick={() => {
+                      navigator.clipboard?.writeText(data.vendor || "");
+                      setVendorCopied(true);
+                      setTimeout(() => setVendorCopied(false), 1500);
+                    }}
+                    title="Salin nama vendor"
+                    className="flex-shrink-0 w-9 h-9 rounded-lg bg-white/[0.03] border border-amber-400/20 flex items-center justify-center text-amber-300/80 hover:bg-amber-400/10 hover:border-amber-300/50 hover:text-amber-200 transition-all active:scale-95"
+                  >
+                    <Icon
+                      icon={
+                        vendorCopied
+                          ? "solar:check-circle-bold"
+                          : "solar:copy-bold"
+                      }
+                      className="text-sm"
+                    />
+                  </button>
+                )}
+              </div>
+
+              {/* Divider */}
+              <div className="h-px bg-gradient-to-r from-transparent via-amber-400/20 to-transparent" />
+
+              {/* LAMPIRAN — hingga 3 dokumen */}
+              <div className="relative p-4 sm:p-5">
+                <div className="flex items-center gap-4 mb-3.5">
+                  <div className="relative w-12 h-12 rounded-xl bg-gradient-to-br from-amber-300/20 to-amber-600/10 border border-amber-400/30 flex items-center justify-center flex-shrink-0">
+                    <div className="absolute inset-0 rounded-xl bg-amber-400/10 blur-md" />
+                    <Icon
+                      icon="solar:folder-with-files-bold-duotone"
+                      className="relative text-amber-300 text-2xl"
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300/60 mb-1.5">
+                      Lampiran Dokumen
+                    </p>
+                    <p className="text-sm font-extrabold text-white">
+                      {lampiranList.length > 0
+                        ? `${lampiranList.length} Dokumen Tersedia`
+                        : "Belum ada lampiran"}
+                    </p>
+                  </div>
+                </div>
+
+                {lampiranList.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    {lampiranList.slice(0, 3).map((url, i) => (
+                      <a
+                        key={i}
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group relative flex items-center gap-3 px-3.5 py-3 rounded-xl bg-gradient-to-br from-amber-400/[0.07] to-transparent border border-amber-400/20 text-amber-50 hover:border-amber-300/50 hover:from-amber-400/[0.14] transition-all active:scale-[0.98] overflow-hidden"
+                      >
+                        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-amber-300/25 to-amber-600/10 border border-amber-400/30 flex items-center justify-center flex-shrink-0">
+                          <Icon icon="solar:paperclip-bold" className="text-amber-300 text-sm" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="block text-xs font-bold truncate">
+                            Dokumen {i + 1}
+                          </span>
+                          <span className="block text-[10px] text-amber-200/50 truncate">
+                            Buka lampiran
+                          </span>
+                        </div>
+                        <Icon
+                          icon="solar:arrow-right-up-linear"
+                          className="text-sm opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all flex-shrink-0"
+                        />
+                      </a>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 px-3.5 py-3 rounded-xl bg-white/[0.02] border border-white/5 text-slate-500 text-xs">
+                    <Icon icon="solar:file-corrupted-linear" className="text-base" />
+                    Tidak ada dokumen yang diunggah untuk listing ini.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 2. RINGKASAN LELANG */}
       <div>

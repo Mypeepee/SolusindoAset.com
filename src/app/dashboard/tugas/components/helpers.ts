@@ -8,6 +8,15 @@ export function fIDR(n: number) {
   return `Rp ${n.toLocaleString("id-ID")}`;
 }
 
+/** Persist lightweight per-task UI state (done, channels, split, …) keyed by stable task id. Fire-and-forget. */
+export function saveTaskMeta(taskKey: string, meta: Record<string, unknown>) {
+  fetch("/api/dashboard/tugas/meta", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ task_key: taskKey, meta }),
+  }).catch(() => { /* best-effort */ });
+}
+
 export function openWA(phone: string, name: string, msg?: string) {
   const n = phone.replace(/\D/g, "").replace(/^0/, "62");
   const m = msg ?? `Halo ${name}, saya dari Solusindo Aset. Ada info properti menarik yang ingin saya sampaikan 🏡`;

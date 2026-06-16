@@ -214,7 +214,8 @@ export default async function SearchPage({ searchParams }: Props) {
   const priceFilter = buildPriceFilter();
 
   // B. BUILD FILTER QUERY (WHERE)
-  // Jika idProperty ada → exact match (paling spesifik, abaikan filter q)
+  // Jika idProperty ada → exact match (paling spesifik, abaikan filter q dan
+  // filter sekunder lainnya supaya properti yang dicari pasti tampil).
   // Jika q ada → cari di alamat_lengkap (case-insensitive contains)
   const whereClause: Prisma.ListingWhereInput = {
     jenis_transaksi: { in: ["PRIMARY", "SECONDARY"] },
@@ -226,41 +227,41 @@ export default async function SearchPage({ searchParams }: Props) {
       alamat_lengkap: { contains: q, mode: "insensitive" },
     }),
 
-    ...(kota && {
+    ...(!idPropertyRaw && kota && {
       kota: { contains: kota, mode: "insensitive" },
     }),
 
-    ...(tipe &&
+    ...(!idPropertyRaw && tipe &&
       allowedKategori.includes(tipe.toUpperCase() as any) && {
         kategori: tipe.toUpperCase() as any,
       }),
 
-    ...(priceFilter && priceFilter),
+    ...(!idPropertyRaw && priceFilter && priceFilter),
 
-    ...(minKT !== undefined && {
+    ...(!idPropertyRaw && minKT !== undefined && {
       kamar_tidur: { gte: minKT },
     }),
 
-    ...(minKM !== undefined && {
+    ...(!idPropertyRaw && minKM !== undefined && {
       kamar_mandi: { gte: minKM },
     }),
 
-    ...(lantai !== undefined && {
+    ...(!idPropertyRaw && lantai !== undefined && {
       jumlah_lantai: { gte: lantai },
     }),
 
-    ...(hadap && {
+    ...(!idPropertyRaw && hadap && {
       hadap_bangunan: { contains: hadap, mode: "insensitive" },
     }),
 
-    ...(kondisi && {
+    ...(!idPropertyRaw && kondisi && {
       kondisi_interior: {
         contains: kondisi,
         mode: "insensitive",
       },
     }),
 
-    ...(legalitas && {
+    ...(!idPropertyRaw && legalitas && {
       legalitas: { equals: legalitas as any },
     }),
   };

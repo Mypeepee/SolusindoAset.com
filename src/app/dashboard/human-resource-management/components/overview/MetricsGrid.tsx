@@ -6,9 +6,10 @@ import { StatCard } from "../shared/StatCard";
 
 interface MetricsGridProps {
   metrics: AgentMetrics;
+  onPendingClick?: () => void;
 }
 
-export function MetricsGrid({ metrics }: MetricsGridProps) {
+export function MetricsGrid({ metrics, onPendingClick }: MetricsGridProps) {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       <StatCard
@@ -42,6 +43,7 @@ export function MetricsGrid({ metrics }: MetricsGridProps) {
         value={metrics.pendingAgents}
         subtitle="Perlu verifikasi"
         colorScheme="amber"
+        onClick={onPendingClick}
       />
 
       <StatCard

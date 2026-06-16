@@ -1245,6 +1245,19 @@ model Tugas {
   @@map("tugas")
 }
 
+// ── Meta ringan per-tugas (termasuk tugas auto yang tak punya baris di `tugas`).
+//    Disimpan per (agent, task_key) — key stabil seperti "cobroke-123", "listing-9".
+model TugasMeta {
+  id_agent   String   @db.VarChar(20)
+  task_key   String   @db.VarChar(120)
+  meta       Json     @default("{}")
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@id([id_agent, task_key])
+  @@index([id_agent])
+  @@map("tugas_meta")
+}
+
 enum kategori_tugas_enum {
   URGENT
   KONTEN

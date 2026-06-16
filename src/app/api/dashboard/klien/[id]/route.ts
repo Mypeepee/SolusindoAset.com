@@ -8,6 +8,16 @@ export const dynamic = "force-dynamic";
 
 type Ctx = { params: { id: string } };
 
+// CRM status → lead status (kebalikan LEAD_TO_KLIEN_STATUS di from-lead).
+// Dipakai untuk sinkron dua-arah: ubah status di CRM Pipeline → lead Hot Leads ikut.
+const KLIEN_TO_LEAD_STATUS: Record<string, string> = {
+  lead_baru:      "new",
+  sudah_dikontak: "contacted",
+  hot_buyer:      "hot",
+  closing:        "closing",
+  lost_iseng:     "cold",
+};
+
 export async function GET(_req: Request, { params }: Ctx) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ ok: false }, { status: 401 });
@@ -16,7 +26,10 @@ export async function GET(_req: Request, { params }: Ctx) {
 
   const klien = await prisma.klien.findFirst({
     where: { id_klien: params.id, id_agent: agentId },
-    include: { preferensi: { orderBy: { dibuat_pada: "asc" } } },
+    include: {
+      preferensi: { orderBy: { dibuat_pada: "asc" } },
+      propertiAsal: { select: { id_property: true, judul: true, slug: true, kota: true, kategori: true, alamat_lengkap: true, jenis_transaksi: true } },
+    },
   });
 
   if (!klien) return NextResponse.json({ ok: false }, { status: 404 });
@@ -60,8 +73,36 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const updated = await prisma.klien.update({
     where: { id_klien: params.id },
     data,
-    include: { preferensi: { orderBy: { dibuat_pada: "asc" } } },
+    include: {
+      preferensi: { orderBy: { dibuat_pada: "asc" } },
+      propertiAsal: { select: { id_property: true, judul: true, slug: true, kota: true, kategori: true, alamat_lengkap: true, jenis_transaksi: true } },
+    },
   });
+
+  // Sinkron dua-arah: kalau klien ini berasal dari lead, perbarui status,
+  // nama & nomor lead-nya juga supaya kartu Hot Leads tetap konsisten.
+  if (existing.id_lead_asal) {
+    const leadData: any = {};
+    if (body.status !== undefined) {
+      const leadStatus = KLIEN_TO_LEAD_STATUS[body.status as string];
+      if (leadStatus) leadData.status = leadStatus;
+    }
+    if (body.nama !== undefined)           leadData.client_name  = body.nama.trim() || null;
+    if (body.nomor_whatsapp !== undefined) leadData.client_phone = body.nomor_whatsapp || null;
+
+    if (Object.keys(leadData).length > 0) {
+      leadData.last_activity = new Date();
+      try {
+        await prisma.lead.updateMany({
+          where: { id_lead: existing.id_lead_asal, id_agent: agentId },
+          data: leadData,
+        });
+      } catch (e) {
+        // Jangan gagalkan update klien hanya karena sinkron lead bermasalah.
+        console.warn("[klien PATCH] gagal sinkron ke lead:", e);
+      }
+    }
+  }
 
   return NextResponse.json({ ok: true, data: serializeKlien(updated) });
 }
@@ -86,6 +127,9 @@ function serializeKlien(k: any) {
     ...k,
     id_lead_asal:     k.id_lead_asal     ? String(k.id_lead_asal)     : null,
     id_properti_asal: k.id_properti_asal ? String(k.id_properti_asal) : null,
+    propertiAsal: k.propertiAsal
+      ? { ...k.propertiAsal, id_property: String(k.propertiAsal.id_property) }
+      : null,
     preferensi: (k.preferensi || []).map((p: any) => ({
       ...p,
       id_preferensi: String(p.id_preferensi),

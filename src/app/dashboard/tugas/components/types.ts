@@ -9,6 +9,15 @@ export type DailyTask = {
   why: string;
   done: boolean;
   overdue?: boolean;
+  source?: "lead" | "titip" | "listing" | "acara" | "manual" | "penawaran" | "cobroke";
+  sourceId?: string;
+  titipStep?: number;
+  offerAmount?: number;
+  offerStatus?: "pending" | "diterima" | "ditolak";
+  cobrokeAgentName?: string;
+  cobrokeAgentOffice?: string;
+  cobrokeAgentPhone?: string;
+  meta?: Record<string, any>;
   target?: number;
   current?: number;
   leadName?: string;
@@ -18,6 +27,7 @@ export type DailyTask = {
   commissionValue?: number;
   propertyTitle?: string;
   scheduledAt?: string;
+  deadline?: string; // ISO — batas SLA tugas
   openCatalog?: boolean;
   actions: ActionDef[];
 };

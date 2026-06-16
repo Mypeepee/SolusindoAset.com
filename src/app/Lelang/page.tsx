@@ -163,6 +163,9 @@ export default async function SearchPage({ searchParams }: Props) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  // Pencarian by ID bersifat eksak — filter sekunder (kategori, lokasi,
+  // harga, dimensi, dll) tidak ikut membatasi supaya properti yang dicari
+  // pasti tampil selama jenis_transaksi-nya memang LELANG.
   const whereClause: Prisma.ListingWhereInput = {
     jenis_transaksi: "LELANG",
     status_tayang: "TERSEDIA",
@@ -173,40 +176,40 @@ export default async function SearchPage({ searchParams }: Props) {
       alamat_lengkap: { contains: q, mode: "insensitive" },
     }),
 
-    ...(kota && {
+    ...(!idPropertyRaw && kota && {
       kota: { contains: kota, mode: "insensitive" },
     }),
 
-    ...(mappedKategori && {
+    ...(!idPropertyRaw && mappedKategori && {
       kategori: { equals: mappedKategori },
     }),
 
-    ...(minKT && {
+    ...(!idPropertyRaw && minKT && {
       kamar_tidur: { gte: minKT },
     }),
 
-    ...(minKM && {
+    ...(!idPropertyRaw && minKM && {
       kamar_mandi: { gte: minKM },
     }),
 
-    ...(lantai && {
+    ...(!idPropertyRaw && lantai && {
       jumlah_lantai: { gte: lantai },
     }),
 
-    ...(hadap && {
+    ...(!idPropertyRaw && hadap && {
       hadap_bangunan: { contains: hadap, mode: "insensitive" },
     }),
 
-    ...(kondisi && {
+    ...(!idPropertyRaw && kondisi && {
       kondisi_interior: { contains: kondisi, mode: "insensitive" },
     }),
 
-    ...(legalitas && {
+    ...(!idPropertyRaw && legalitas && {
       legalitas: { equals: legalitas as any },
     }),
 
     // ✅ Filter HARGA pakai nilai_limit_lelang (BUKAN harga)
-    ...((minHarga !== undefined || maxHarga !== undefined) && {
+    ...(!idPropertyRaw && (minHarga !== undefined || maxHarga !== undefined) && {
       nilai_limit_lelang: {
         ...(minHarga !== undefined && { gte: minHarga }),
         ...(maxHarga !== undefined && { lte: maxHarga }),
@@ -214,7 +217,7 @@ export default async function SearchPage({ searchParams }: Props) {
     }),
 
     // ✅ Filter LUAS TANAH
-    ...((minLT !== undefined || maxLT !== undefined) && {
+    ...(!idPropertyRaw && (minLT !== undefined || maxLT !== undefined) && {
       luas_tanah: {
         ...(minLT !== undefined && { gte: minLT }),
         ...(maxLT !== undefined && { lte: maxLT }),
@@ -222,7 +225,7 @@ export default async function SearchPage({ searchParams }: Props) {
     }),
 
     // ✅ Filter LUAS BANGUNAN
-    ...((minLB !== undefined || maxLB !== undefined) && {
+    ...(!idPropertyRaw && (minLB !== undefined || maxLB !== undefined) && {
       luas_bangunan: {
         ...(minLB !== undefined && { gte: minLB }),
         ...(maxLB !== undefined && { lte: maxLB }),
@@ -230,13 +233,13 @@ export default async function SearchPage({ searchParams }: Props) {
     }),
 
     // ✅ FILTER berdasarkan waktu lelang
-    ...(sortRaw === "lelang-terdekat" && {
+    ...(!idPropertyRaw && sortRaw === "lelang-terdekat" && {
       tanggal_lelang: { gte: today }, // Lelang yang akan datang
     }),
-    ...(sortRaw === "lelang-terjauh" && {
+    ...(!idPropertyRaw && sortRaw === "lelang-terjauh" && {
       tanggal_lelang: { gte: today }, // Lelang yang akan datang
     }),
-    ...(sortRaw === "lelang-berlalu" && {
+    ...(!idPropertyRaw && sortRaw === "lelang-berlalu" && {
       tanggal_lelang: { lt: today }, // Lelang yang sudah lewat
     }),
   };

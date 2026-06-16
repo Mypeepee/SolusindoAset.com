@@ -56,7 +56,7 @@ const RedeemPoints = ({ userPoints = 0 }: { userPoints: number }) => {
             <Icon icon="solar:crown-star-bold" className="text-3xl" />
           </div>
           <div>
-            <p className="text-sm text-gray-400">Saldo Poin Anda</p>
+            <p className="text-sm text-gray-400">Saldo SiPoin Anda</p>
             <h2 className="text-3xl font-black text-white">{userPoints.toLocaleString()} <span className="text-base font-normal text-yellow-500">XP</span></h2>
           </div>
         </div>
@@ -91,13 +91,13 @@ const RedeemPoints = ({ userPoints = 0 }: { userPoints: number }) => {
               <div className="p-4 flex flex-col flex-1 justify-between">
                 <div>
                    <h4 className="font-bold text-white mb-1 group-hover:text-[#86efac] transition-colors">{item.title}</h4>
-                   <p className="text-xs text-gray-500 mb-4">Tukarkan poin Anda untuk item ini.</p>
+                   <p className="text-xs text-gray-500 mb-4">Tukarkan SiPoin Anda untuk item ini.</p>
                 </div>
 
                 <div className="flex items-center justify-between mt-auto">
                   <div className="text-[#86efac] font-bold flex items-center gap-1">
                     <Icon icon="solar:ticket-star-bold" />
-                    {item.points} Poin
+                    {item.points} SiPoin
                   </div>
                   
                   <button 

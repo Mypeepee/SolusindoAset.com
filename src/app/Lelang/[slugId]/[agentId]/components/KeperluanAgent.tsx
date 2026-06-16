@@ -8,6 +8,8 @@ import { downloadPropertyImages } from "@/lib/downloadPropertyImages";
 interface KeperluanAgentProps {
   data: any;
   currentAgentId?: string | null;
+  currentJabatan?: string | null;
+  stokerPhone?: string | null;
 }
 
 const formatMoney = (value: number): string => {
@@ -43,7 +45,18 @@ const calcPengosongan = (limit: number): number => {
   return 1_250_000_000 + 50_000_000;
 };
 
-export default function KeperluanAgent({ data, currentAgentId }: KeperluanAgentProps) {
+const formatTanggalLelang = (val?: string | null): string => {
+  if (!val) return "-";
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return "-";
+  return d.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+};
+
+export default function KeperluanAgent({ data, currentAgentId, currentJabatan, stokerPhone }: KeperluanAgentProps) {
   const rawLimit =
     data?.nilai_limit_lelang || data?.harga || data?.priceRates?.monthly || 0;
 
@@ -64,6 +77,10 @@ export default function KeperluanAgent({ data, currentAgentId }: KeperluanAgentP
 
   const [isDownloadingImages, setIsDownloadingImages] = useState(false);
   const [isDownloadingVideo, setIsDownloadingVideo] = useState(false);
+
+  // ✅ STOKER sendiri -> pilih kontak PIC manual (nomor PIC rahasia, tak ada di DB).
+  //    Role lain (Owner, Agent, Admin, Principal, dst) -> pesan dikirim ke nomor STOKER.
+  const isStoker = currentJabatan === "STOKER";
 
   const handleDownloadImages = async () => {
     const urls: string[] = data?.foto_list || [];
@@ -113,23 +130,33 @@ export default function KeperluanAgent({ data, currentAgentId }: KeperluanAgentP
   };
 
   const handleAskStock = () => {
-    const rawPhone =
-      data?.agent?.whatsapp ||
-      data?.owner?.phone ||
-      data?.agent?.telepon ||
-      "";
-    const phone = rawPhone.replace(/^0/, "62").replace(/\D/g, "");
-    if (!phone) return;
+    const kodeProperti =
+      data?.kode_properti && data.kode_properti !== "-"
+        ? data.kode_properti
+        : data?.id_property || "-";
+    const alamat = data?.alamat_lengkap || data?.address || "-";
+    const tanggalLelang = formatTanggalLelang(data?.tanggal_lelang);
+    const vendor = data?.vendor || "-";
+    const agentName = data?.agent?.nama || "-";
 
-    const text = encodeURIComponent(
-      `Halo, saya ingin mengkonfirmasi stok / status terbaru untuk properti dengan detail berikut:\n\n` +
-        `• Harga Limit: *${formatMoney(limit)}*\n` +
-        `• Perkiraan Biaya Dokumen: *${formatMoney(biayaDokumen)}*\n` +
-        `• Perkiraan Biaya Pengosongan: *${formatMoney(biayaPengosongan)}*\n\n` +
-        `Mohon update: masih tersedia, sudah booking, atau sudah terjual?`
-    );
+    const text =
+      `\u{1F50E} *Konfirmasi Stok Properti*\n\n` +
+      `\u{1F194} *ID:* ${kodeProperti}\n` +
+      `\u{1F4CD} *Lokasi:* ${alamat}\n` +
+      `\u{1F4C5} *Tanggal Lelang:* ${tanggalLelang}\n` +
+      `\u{1F3E6} *Vendor:* ${vendor}\n` +
+      `\u{1F464} *Agent:* ${agentName}\n\n` +
+      `Apakah aset ini masih tersedia atau sudah terjual? Ada respon dari klien kami yang menanyakan. \u{1F64F}`;
 
-    window.open(`https://wa.me/${phone}?text=${text}`, "_blank");
+    // Stoker/Owner -> pilih kontak PIC manual (nomor PIC rahasia, tak ada di DB).
+    // Role lain -> langsung ke nomor stoker dari DB.
+    const stokerNum = (stokerPhone || "").replace(/^0/, "62").replace(/\D/g, "");
+    const waUrl =
+      !isStoker && stokerNum
+        ? `https://wa.me/${stokerNum}?text=${encodeURIComponent(text)}`
+        : `https://wa.me/?text=${encodeURIComponent(text)}`;
+
+    window.open(waUrl, "_blank");
   };
 
   return (
@@ -343,16 +370,18 @@ export default function KeperluanAgent({ data, currentAgentId }: KeperluanAgentP
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-emerald-500/25 border border-emerald-100/70 flex items-center justify-center">
                   <Icon
-                    icon="solar:clipboard-list-bold-duotone"
+                    icon="ic:baseline-whatsapp"
                     className="text-emerald-50 text-lg"
                   />
                 </div>
                 <div className="text-left">
                   <p className="text-[11px] font-semibold text-emerald-50">
-                    Tanyakan Stok
+                    {isStoker ? "Tanya PIC" : "Tanyakan Stok"}
                   </p>
                   <p className="text-[10px] text-emerald-100/80">
-                    Kirim estimasi ini ke admin / tim.
+                    {isStoker
+                      ? "Buka WA, pilih kontak PIC, lalu kirim."
+                      : "Kirim detail aset ke stoker via WA."}
                   </p>
                 </div>
               </div>
@@ -458,11 +487,8 @@ export default function KeperluanAgent({ data, currentAgentId }: KeperluanAgentP
             onClick={handleAskStock}
             className="flex-1 bg-emerald-500 text-black font-semibold text-[11px] py-2.5 rounded-xl hover:bg-emerald-400 transition-all active:scale-[0.97] flex justify-center items-center gap-1.5"
           >
-            <Icon
-              icon="solar:clipboard-list-bold-duotone"
-              className="text-base"
-            />
-            Stok
+            <Icon icon="ic:baseline-whatsapp" className="text-base" />
+            {isStoker ? "Tanya PIC" : "Tanya Stok"}
           </button>
         </div>
       </div>

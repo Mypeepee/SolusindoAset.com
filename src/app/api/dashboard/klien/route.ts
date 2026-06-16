@@ -30,7 +30,10 @@ export async function GET(req: Request) {
   const [items, total] = await Promise.all([
     prisma.klien.findMany({
       where,
-      include: { preferensi: { orderBy: { dibuat_pada: "asc" } } },
+      include: {
+        preferensi: { orderBy: { dibuat_pada: "asc" } },
+        propertiAsal: { select: { id_property: true, judul: true, slug: true, kota: true, kategori: true, alamat_lengkap: true, jenis_transaksi: true } },
+      },
       orderBy: { dibuat_pada: "desc" },
       skip,
       take: limit,
@@ -111,6 +114,9 @@ function serializeKlien(k: any) {
     ...k,
     id_lead_asal:     k.id_lead_asal     ? String(k.id_lead_asal)     : null,
     id_properti_asal: k.id_properti_asal ? String(k.id_properti_asal) : null,
+    propertiAsal: k.propertiAsal
+      ? { ...k.propertiAsal, id_property: String(k.propertiAsal.id_property) }
+      : null,
     preferensi: (k.preferensi || []).map((p: any) => ({
       ...p,
       id_preferensi: String(p.id_preferensi),

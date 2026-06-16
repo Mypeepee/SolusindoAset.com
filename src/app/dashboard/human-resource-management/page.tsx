@@ -36,6 +36,21 @@ function HRMContent() {
     if (!isXlUp()) setDrawerOpen(true);
   };
 
+  const handlePendingClick = () => {
+    // Toggle: jika sudah memfilter PENDING, kembalikan ke semua agent.
+    setFilters({
+      search: "",
+      status: filters.status === "PENDING" ? "" : "PENDING",
+      jabatan: "",
+      kota: "",
+    });
+    setTimeout(() => {
+      document
+        .getElementById("agent-list-section")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  };
+
   // Sinkronkan selectedAgent dengan data terbaru setiap kali daftar agent berubah
   // (misal setelah update status), supaya panel/drawer detail real-time.
   useEffect(() => {
@@ -123,10 +138,13 @@ function HRMContent() {
         </p>
       </div>
 
-      <MetricsGrid metrics={metrics} />
+      <MetricsGrid metrics={metrics} onPendingClick={handlePendingClick} />
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-5">
-        <div className="bg-[#05060A] border border-white/5 rounded-2xl p-5 space-y-4">
+        <div
+          id="agent-list-section"
+          className="bg-[#05060A] border border-white/5 rounded-2xl p-5 space-y-4 scroll-mt-6"
+        >
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold text-white">Daftar Agent</h3>

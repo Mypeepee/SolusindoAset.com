@@ -39,6 +39,8 @@ interface ProductData {
   kondisi_interior?: string | null;
   legalitas?: string | null;
   nomor_legalitas?: string | null;
+  vendor?: string | null;
+  lampiran?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   kategori: string;
@@ -75,6 +77,8 @@ interface DetailClientProps {
   similarProperties?: ProductData[];
   currentAgentId?: string | null;
   currentRole?: "AGENT" | "OWNER" | "USER" | string | null;
+  currentJabatan?: string | null;
+  stokerPhone?: string | null;
 }
 
 export default function DetailClient({
@@ -83,6 +87,8 @@ export default function DetailClient({
   similarProperties = [],
   currentAgentId,
   currentRole,
+  currentJabatan,
+  stokerPhone,
 }: DetailClientProps) {
   useEffect(() => {
     if (!product?.id_property) return;
@@ -157,6 +163,8 @@ export default function DetailClient({
     kondisi_interior: product.kondisi_interior ?? null,
     legalitas: product.legalitas ?? null,
     nomor_legalitas: product.nomor_legalitas ?? null,
+    vendor: product.vendor ?? null,
+    lampiran: product.lampiran ?? null,
 
     deskripsi: product.deskripsi ?? null,
 
@@ -312,12 +320,15 @@ export default function DetailClient({
             setSelectedRoom={setSelectedRoom}
             currentAgentId={currentAgentId}
             currentRole={currentRole}
+            currentJabatan={currentJabatan}
           />
 
           {isAgent ? (
             <KeperluanAgent
               data={propertyData as any}
               currentAgentId={currentAgentId}
+              currentJabatan={currentJabatan}
+              stokerPhone={stokerPhone}
               canEdit={canEdit}
             />
           ) : (

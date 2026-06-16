@@ -7,6 +7,36 @@ import {
   TipeProperti, JenisTransaksi, TujuanBeli,
   EMPTY_PREFERENSI, JENIS_TRANSAKSI_LABEL, TIPE_PROPERTI_LABEL,
 } from "./types";
+import { PremiumSelect, PremiumDateTimePicker, type PremiumOption } from "./CrmFormControls";
+
+/* Opsi dropdown — dipakai PremiumSelect */
+const SUMBER_OPTIONS: PremiumOption[] = [
+  { value: "wa_organik", label: "WA Organik", icon: "ic:baseline-whatsapp" },
+  { value: "iklan",      label: "Iklan",      icon: "solar:tag-price-bold-duotone" },
+  { value: "referral",   label: "Referral",   icon: "solar:users-group-rounded-bold-duotone" },
+  { value: "website",    label: "Website",    icon: "solar:global-bold-duotone" },
+  { value: "walk_in",    label: "Walk In",    icon: "solar:walking-bold-duotone" },
+  { value: "titip_jual", label: "Titip Jual", icon: "solar:home-add-bold-duotone" },
+  { value: "lainnya",    label: "Lainnya",    icon: "solar:inbox-line-bold-duotone" },
+];
+const STATUS_OPTIONS: PremiumOption[] = [
+  { value: "lead_baru",      label: "Lead Baru",      dot: "bg-rose-400" },
+  { value: "sudah_dikontak", label: "Sudah Dikontak", dot: "bg-sky-400" },
+  { value: "hot_buyer",      label: "Hot Buyer",      dot: "bg-amber-400" },
+  { value: "closing",        label: "Closing",        dot: "bg-emerald-400" },
+  { value: "lost_iseng",     label: "Lost / Iseng",   dot: "bg-slate-500" },
+];
+const METODE_OPTIONS: PremiumOption[] = [
+  { value: "",     label: "Belum ditentukan", icon: "solar:minus-circle-line-duotone" },
+  { value: "cash", label: "Cash",             icon: "solar:wallet-money-bold-duotone" },
+  { value: "kpr",  label: "KPR",              icon: "solar:card-bold-duotone" },
+];
+const TUJUAN_OPTIONS: PremiumOption[] = [
+  { value: "",          label: "Belum tahu" },
+  { value: "ditempati", label: "Ditempati" },
+  { value: "investasi", label: "Investasi" },
+  { value: "disewakan", label: "Disewakan" },
+];
 
 interface Props {
   open: boolean;
@@ -32,6 +62,12 @@ function formatRupiah(raw: string) {
 
 function unformatRupiah(formatted: string) {
   return formatted.replace(/\./g, "").replace(/,/g, "");
+}
+
+/** Nomor WA → tampil per 4 digit dengan tanda "-" (mis. 8812-3456-7890) */
+function formatPhone(digits: string) {
+  const d = digits.replace(/\D/g, "");
+  return d.match(/.{1,4}/g)?.join("-") ?? "";
 }
 
 export default function KlienFormModal({ open, onClose, onSaved, initialData, editTarget }: Props) {
@@ -284,9 +320,9 @@ export default function KlienFormModal({ open, onClose, onSaved, initialData, ed
                 <input
                   type="tel"
                   inputMode="numeric"
-                  value={form.nomor_whatsapp}
-                  onChange={e => setField("nomor_whatsapp", e.target.value.replace(/^0+/, ""))}
-                  placeholder="8810-2675-7313"
+                  value={formatPhone(form.nomor_whatsapp)}
+                  onChange={e => setField("nomor_whatsapp", e.target.value.replace(/\D/g, "").replace(/^0+/, ""))}
+                  placeholder="8812-3456-7890"
                   className="flex-1 bg-transparent px-3.5 py-2.5 text-sm text-white placeholder-slate-600 outline-none"
                 />
               </div>
@@ -305,25 +341,19 @@ export default function KlienFormModal({ open, onClose, onSaved, initialData, ed
 
             <div className="grid grid-cols-2 gap-3">
               <Field label="Sumber Lead">
-                <select value={form.sumber} onChange={e => setField("sumber", e.target.value as SumberKlien)} className={selectCls}>
-                  <option value="wa_organik">WA Organik</option>
-                  <option value="iklan">Iklan</option>
-                  <option value="referral">Referral</option>
-                  <option value="website">Website</option>
-                  <option value="walk_in">Walk In</option>
-                  <option value="titip_jual">Titip Jual</option>
-                  <option value="lainnya">Lainnya</option>
-                </select>
+                <PremiumSelect
+                  value={form.sumber}
+                  onChange={v => setField("sumber", v as SumberKlien)}
+                  options={SUMBER_OPTIONS}
+                />
               </Field>
 
               <Field label="Status">
-                <select value={form.status} onChange={e => setField("status", e.target.value as KlienStatus)} className={selectCls}>
-                  <option value="lead_baru">Lead Baru</option>
-                  <option value="sudah_dikontak">Sudah Dikontak</option>
-                  <option value="hot_buyer">Hot Buyer</option>
-                  <option value="closing">Closing</option>
-                  <option value="lost_iseng">Lost / Iseng</option>
-                </select>
+                <PremiumSelect
+                  value={form.status}
+                  onChange={v => setField("status", v as KlienStatus)}
+                  options={STATUS_OPTIONS}
+                />
               </Field>
             </div>
           </Section>
@@ -331,12 +361,11 @@ export default function KlienFormModal({ open, onClose, onSaved, initialData, ed
           {/* ── BAGIAN 2: PEMBAYARAN ── */}
           <Section icon="solar:card-bold-duotone" title="Pembayaran">
             <Field label="Metode Pembayaran">
-              <select value={form.metode_pembayaran} onChange={e => setField("metode_pembayaran", e.target.value as MetodePembayaran | "")} className={selectCls}>
-                <option value="">-- Belum tahu --</option>
-                <option value="cash">Cash</option>
-                <option value="cash_bertahap">Cash Bertahap</option>
-                <option value="kpr">KPR</option>
-              </select>
+              <PremiumSelect
+                value={form.metode_pembayaran}
+                onChange={v => setField("metode_pembayaran", v as MetodePembayaran | "")}
+                options={METODE_OPTIONS}
+              />
             </Field>
 
             {form.metode_pembayaran === "kpr" && (
@@ -395,11 +424,9 @@ export default function KlienFormModal({ open, onClose, onSaved, initialData, ed
           {/* ── BAGIAN 4: CATATAN & FOLLOW UP ── */}
           <Section icon="solar:clipboard-text-bold-duotone" title="Catatan & Follow Up">
             <Field label="Jadwal Follow Up">
-              <input
-                type="datetime-local"
+              <PremiumDateTimePicker
                 value={form.tanggal_follow_up}
-                onChange={e => setField("tanggal_follow_up", e.target.value)}
-                className={inputCls}
+                onChange={v => setField("tanggal_follow_up", v)}
               />
             </Field>
 
@@ -493,21 +520,27 @@ function PreferensiCard({
 
       <div className="grid grid-cols-2 gap-3">
         <Field label="Tipe Properti" required>
-          <select value={pref.tipe_properti} onChange={e => onChange("tipe_properti", e.target.value as TipeProperti)} className={selectCls}>
-            <option value="">-- Pilih --</option>
-            {(Object.entries(TIPE_PROPERTI_LABEL) as [TipeProperti, string][]).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </select>
+          <PremiumSelect
+            value={pref.tipe_properti}
+            onChange={v => onChange("tipe_properti", v as TipeProperti)}
+            placeholder="-- Pilih --"
+            options={[
+              { value: "", label: "-- Pilih --" },
+              ...(Object.entries(TIPE_PROPERTI_LABEL) as [TipeProperti, string][]).map(([k, v]) => ({ value: k, label: v })),
+            ]}
+          />
         </Field>
 
         <Field label="Jenis Transaksi">
-          <select value={pref.jenis_transaksi} onChange={e => onChange("jenis_transaksi", e.target.value as JenisTransaksi)} className={selectCls}>
-            <option value="">-- Semua --</option>
-            {(Object.entries(JENIS_TRANSAKSI_LABEL) as [JenisTransaksi, string][]).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </select>
+          <PremiumSelect
+            value={pref.jenis_transaksi}
+            onChange={v => onChange("jenis_transaksi", v as JenisTransaksi)}
+            placeholder="-- Semua --"
+            options={[
+              { value: "", label: "-- Semua --" },
+              ...(Object.entries(JENIS_TRANSAKSI_LABEL) as [JenisTransaksi, string][]).map(([k, v]) => ({ value: k, label: v })),
+            ]}
+          />
         </Field>
       </div>
 
@@ -567,12 +600,12 @@ function PreferensiCard({
 
       <div className="grid grid-cols-2 gap-3">
         <Field label="Tujuan Beli">
-          <select value={pref.tujuan_beli} onChange={e => onChange("tujuan_beli", e.target.value as TujuanBeli)} className={selectCls}>
-            <option value="">-- Belum tahu --</option>
-            <option value="ditempati">Ditempati</option>
-            <option value="investasi">Investasi</option>
-            <option value="disewakan">Disewakan</option>
-          </select>
+          <PremiumSelect
+            value={pref.tujuan_beli}
+            onChange={v => onChange("tujuan_beli", v as TujuanBeli)}
+            placeholder="-- Belum tahu --"
+            options={TUJUAN_OPTIONS}
+          />
         </Field>
         <Field label="Catatan Preferensi">
           <input
@@ -614,4 +647,3 @@ function Field({ label, required, children }: { label: string; required?: boolea
 }
 
 const inputCls  = "w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm text-white placeholder-slate-600 outline-none transition-all focus:border-emerald-400/50 focus:bg-white/[0.05]";
-const selectCls = "w-full rounded-xl border border-white/[0.08] bg-[#0d0d10] px-3.5 py-2.5 text-sm text-white outline-none transition-all focus:border-emerald-400/50 appearance-none";

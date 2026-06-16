@@ -1,6 +1,6 @@
 import React from "react";
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import KategoriPageClient from "./KategoriPageClient";
@@ -26,6 +26,17 @@ const KATEGORI_LABEL: Record<string, string> = {
   "hotel-dan-villa":"Hotel & Villa",
   "toko":           "Kios / Toko",
   "pabrik":         "Pabrik",
+};
+
+const KATEGORI_TO_SLUG: Record<string, string> = Object.fromEntries(
+  Object.entries(SLUG_TO_KATEGORI).map(([slugKey, kat]) => [kat, slugKey])
+);
+
+const TIPE_FOR_JENIS: Record<string, string> = {
+  PRIMARY:   "jual",
+  SECONDARY: "jual",
+  LELANG:    "lelang",
+  SEWA:      "sewa",
 };
 
 const KATEGORI_DESC: Record<string, string> = {
@@ -129,6 +140,32 @@ export default async function KategoriPage({ params, searchParams }: Props) {
     typeof searchParams.idProperty === "string" && /^\d+$/.test(searchParams.idProperty.trim())
       ? searchParams.idProperty.trim()
       : undefined;
+
+  // Pencarian by ID: cari listing-nya dulu (tanpa filter kategori/tipe) lalu
+  // arahkan ke tab & kategori yang sesuai dengan data aslinya, supaya hasil
+  // pencarian selalu ketemu di tab yang benar (mis. Lelang) dari manapun
+  // pencarian dilakukan (Home, Semua, Primary/Secondary, dll).
+  if (idPropertyRaw) {
+    const found = await prisma.listing.findFirst({
+      where: { id_property: BigInt(idPropertyRaw), status_tayang: "TERSEDIA" },
+      select: { kategori: true, jenis_transaksi: true },
+    });
+    if (found) {
+      const canonicalTipe = TIPE_FOR_JENIS[found.jenis_transaksi] ?? "semua";
+      const canonicalSlug =
+        slug !== "semua" && SLUG_TO_KATEGORI[slug] === found.kategori
+          ? slug
+          : KATEGORI_TO_SLUG[found.kategori] ?? "semua";
+
+      if (slug !== canonicalSlug || tipe !== canonicalTipe) {
+        const redirectParams = new URLSearchParams();
+        redirectParams.set("idProperty", idPropertyRaw);
+        redirectParams.set("tipe", canonicalTipe);
+        redirect(`/properti/${canonicalSlug}?${redirectParams.toString()}`);
+      }
+    }
+  }
+
   // rawSort: hanya ada nilai jika user memang memilih sort (untuk highlight pill)
   // sort: selalu punya nilai fallback untuk query DB
   const rawSort = typeof searchParams.sort === "string" ? searchParams.sort : "";
@@ -144,33 +181,54 @@ export default async function KategoriPage({ params, searchParams }: Props) {
     return { in: ["PRIMARY", "SECONDARY", "LELANG", "SEWA"] };
   };
 
-  const whereClause: Prisma.ListingWhereInput = {
+  // Pencarian by ID bersifat eksak & sudah diarahkan ke tab/kategori yang
+  // benar di atas, jadi filter sekunder (lokasi, harga, dimensi) tidak perlu
+  // ikut membatasi — supaya properti yang dicari pasti tampil.
+  //
+  // `baseWhere` = semua filter pencarian KECUALI jenis_transaksi (tab). Dipakai
+  // bersama oleh daftar listing & perhitungan tab count, supaya angka di pill
+  // tab ikut menyesuaikan filter user (kota, harga, dll), bukan total semua.
+  const baseWhere: Prisma.ListingWhereInput = {
     ...(kategori && { kategori }),
     status_tayang: "TERSEDIA",
-    jenis_transaksi: transaksiFilter(),
     ...(idPropertyRaw && { id_property: BigInt(idPropertyRaw) }),
+    // Keyword dicari lintas kolom (alamat, kota, area administratif, judul),
+    // bukan cuma alamat_lengkap — supaya mis. "surabaya" tetap ketemu walau
+    // kata itu hanya ada di kolom `kota`/`judul`, bukan di alamat.
     ...(!idPropertyRaw && q && {
-      alamat_lengkap: { contains: q, mode: "insensitive" },
+      OR: [
+        { alamat_lengkap: { contains: q, mode: "insensitive" } },
+        { kota:           { contains: q, mode: "insensitive" } },
+        { kecamatan:      { contains: q, mode: "insensitive" } },
+        { kelurahan:      { contains: q, mode: "insensitive" } },
+        { provinsi:       { contains: q, mode: "insensitive" } },
+        { judul:          { contains: q, mode: "insensitive" } },
+      ],
     }),
-    ...(kota && { kota: { contains: kota, mode: "insensitive" } }),
-    ...((minHarga !== undefined || maxHarga !== undefined) && {
+    ...(!idPropertyRaw && kota && { kota: { contains: kota, mode: "insensitive" } }),
+    ...(!idPropertyRaw && (minHarga !== undefined || maxHarga !== undefined) && {
       harga: {
         ...(minHarga !== undefined && { gte: minHarga }),
         ...(maxHarga !== undefined && { lte: maxHarga }),
       },
     }),
-    ...((minLT !== undefined || maxLT !== undefined) && {
+    ...(!idPropertyRaw && (minLT !== undefined || maxLT !== undefined) && {
       luas_tanah: {
         ...(minLT !== undefined && { gte: minLT }),
         ...(maxLT !== undefined && { lte: maxLT }),
       },
     }),
-    ...((minLB !== undefined || maxLB !== undefined) && {
+    ...(!idPropertyRaw && (minLB !== undefined || maxLB !== undefined) && {
       luas_bangunan: {
         ...(minLB !== undefined && { gte: minLB }),
         ...(maxLB !== undefined && { lte: maxLB }),
       },
     }),
+  };
+
+  const whereClause: Prisma.ListingWhereInput = {
+    ...baseWhere,
+    jenis_transaksi: transaksiFilter(),
   };
 
   // Sorting — is_hot_deal always floats to top, then secondary sort
@@ -233,10 +291,11 @@ export default async function KategoriPage({ params, searchParams }: Props) {
     };
   });
 
-  // Hitung tab counts
+  // Hitung tab counts — pakai baseWhere (semua filter user kecuali tab),
+  // supaya angka pill menyesuaikan hasil pencarian, bukan total keseluruhan.
   const tabCounts = await prisma.listing.groupBy({
     by: ["jenis_transaksi"],
-    where: { ...(kategori && { kategori }), status_tayang: "TERSEDIA" },
+    where: baseWhere,
     _count: { jenis_transaksi: true },
   });
 

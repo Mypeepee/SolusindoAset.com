@@ -71,6 +71,15 @@ export interface Klien {
   dibuat_pada: string;
   diperbarui_pada: string;
   preferensi: PreferensiKlien[];
+  propertiAsal?: {
+    id_property: string;
+    judul: string;
+    slug: string;
+    kota: string;
+    kategori: string;
+    alamat_lengkap: string | null;
+    jenis_transaksi: string;
+  } | null;
 }
 
 export interface PreferensiForm {

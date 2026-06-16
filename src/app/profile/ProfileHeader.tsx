@@ -317,7 +317,7 @@ const ProfileStatsAgent = ({ stats }: any) => (
     <StatCard
       index={0}
       imageSrc="/images/logo/PremierPoints.png"
-      label="Solusindo Poin"
+      label="SiPoin"
       value={stats?.premierPoin ?? 0}
       colorClass="text-yellow-400"
       glowClass="bg-yellow-500/[0.06] shadow-[0_0_30px_rgba(250,204,21,0.18)]"

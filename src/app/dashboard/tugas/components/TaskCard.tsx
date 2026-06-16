@@ -5,30 +5,53 @@ import { Icon } from "@iconify/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CAT_DESIGN, ACTION_CLS, LEAD_TEMP_CFG } from "./constants";
 import { fIDR } from "./helpers";
+import { SlaBadge } from "./SlaBadge";
 import type { DailyTask } from "./types";
 
-export function TaskCard({ task, onToggle }: { task: DailyTask; onToggle: () => void }) {
+export function TaskCard({ task, onToggle, onOpen, domId }: { task: DailyTask; onToggle: () => void; onOpen?: () => void; domId?: string }) {
   const [expanded, setExpanded] = useState(false);
   const D       = CAT_DESIGN[task.category];
   const isBatch = task.target !== undefined;
   const isDone  = task.done || (isBatch && (task.current ?? 0) >= (task.target ?? 1));
   const pct     = isDone ? 100 : isBatch ? Math.min(100, ((task.current ?? 0) / (task.target ?? 1)) * 100) : 0;
+  const isOverdue = !!task.overdue && !isDone;
+
+  // helper: run a card action without bubbling up to the card's onOpen
+  const stop = (fn?: () => void) => (e: React.MouseEvent) => { e.stopPropagation(); fn?.(); };
 
   return (
     <motion.div
       layout
+      id={domId}
       initial={{ opacity: 0, y: 10, scale: 0.98 }}
       animate={{ opacity: isDone ? 0.4 : 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95, height: 0 }}
       transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-      className={[
-        "group relative flex flex-col overflow-hidden rounded-2xl border transition-all duration-300 cursor-default",
-        isDone
-          ? "border-white/[0.05] bg-white/[0.015]"
-          : "border-white/[0.09] hover:border-white/[0.18] hover:shadow-[0_12px_40px_-16px_rgba(0,0,0,.7)]",
-      ].join(" ")}
-      style={{ background: isDone ? undefined : D.grad }}
+      className="group relative z-10 hover:z-50"
     >
+      {/* Overdue "minta tolong" speech bubble (hover) */}
+      {isOverdue && (
+        <div className="pointer-events-none absolute -top-2 left-1/2 z-20 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-lg border border-rose-400/30 bg-rose-950/90 px-2.5 py-1 text-[10px] font-bold text-rose-200 opacity-0 shadow-lg backdrop-blur-sm transition-all duration-200 group-hover:opacity-100">
+          Lewat tenggat — tangani sekarang 🙏
+          <span className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1 rotate-45 border-b border-r border-rose-400/30 bg-rose-950/90" />
+        </div>
+      )}
+
+      <div
+        onClick={onOpen ? () => onOpen() : undefined}
+        role={onOpen ? "button" : undefined}
+        tabIndex={onOpen ? 0 : undefined}
+        onKeyDown={onOpen ? (e) => { if (e.key === "Enter") onOpen(); } : undefined}
+        className={[
+          "relative flex flex-col overflow-hidden rounded-2xl border transition-all duration-300",
+          onOpen ? "cursor-pointer" : "cursor-default",
+          isOverdue ? "task-overdue border-rose-400/30" : "",
+          isDone
+            ? "border-white/[0.05] bg-white/[0.015]"
+            : "border-white/[0.09] hover:border-white/[0.18] hover:shadow-[0_12px_40px_-16px_rgba(0,0,0,.7)] hover:-translate-y-0.5",
+        ].join(" ")}
+        style={{ background: isDone ? undefined : D.grad }}
+      >
       {/* ── decorative ── */}
       {!isDone && <>
         <div className={`pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent ${D.hairline} to-transparent`} />
@@ -50,10 +73,14 @@ export function TaskCard({ task, onToggle }: { task: DailyTask; onToggle: () => 
             >
               <Icon icon={D.icon} className="text-xs text-white" />
             </div>
-            {/* Date / scheduled */}
-            <span className="text-[10px] font-semibold text-slate-500">
-              {task.scheduledAt ? `Hari ini · ${task.scheduledAt}` : "Hari ini"}
-            </span>
+            {/* Date / scheduled or live SLA countdown */}
+            {task.deadline && !isDone ? (
+              <SlaBadge deadline={task.deadline} />
+            ) : (
+              <span className="text-[10px] font-semibold text-slate-500">
+                {task.scheduledAt ? `Hari ini · ${task.scheduledAt}` : "Hari ini"}
+              </span>
+            )}
           </div>
 
           {/* Status badge */}
@@ -144,7 +171,7 @@ export function TaskCard({ task, onToggle }: { task: DailyTask; onToggle: () => 
                   <button
                     key={a.label}
                     type="button"
-                    onClick={a.onClick}
+                    onClick={stop(a.onClick)}
                     title={a.label}
                     className={`flex h-7 w-7 items-center justify-center rounded-xl border transition-all duration-150 ${ACTION_CLS[a.variant] ?? ACTION_CLS.ghost}`}
                   >
@@ -154,7 +181,7 @@ export function TaskCard({ task, onToggle }: { task: DailyTask; onToggle: () => 
                 {task.actions.length > 3 && (
                   <button
                     type="button"
-                    onClick={() => setExpanded((p) => !p)}
+                    onClick={stop(() => setExpanded((p) => !p))}
                     className="flex h-7 w-7 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-slate-500 hover:text-white hover:bg-white/[0.07] transition-all duration-150"
                     title={expanded ? "Tutup" : "Lihat semua aksi"}
                   >
@@ -166,7 +193,7 @@ export function TaskCard({ task, onToggle }: { task: DailyTask; onToggle: () => 
               {/* Checkbox / mark done */}
               <button
                 type="button"
-                onClick={onToggle}
+                onClick={stop(onToggle)}
                 className={[
                   "flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[10px] font-bold transition-all duration-200",
                   task.overdue
@@ -198,7 +225,7 @@ export function TaskCard({ task, onToggle }: { task: DailyTask; onToggle: () => 
                         <button
                           key={a.label}
                           type="button"
-                          onClick={a.onClick}
+                          onClick={stop(a.onClick)}
                           className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[10.5px] font-bold transition-all duration-150 ${ACTION_CLS[a.variant] ?? ACTION_CLS.ghost}`}
                         >
                           <Icon icon={a.icon} className="text-sm" />
@@ -217,12 +244,13 @@ export function TaskCard({ task, onToggle }: { task: DailyTask; onToggle: () => 
         {isDone && (
           <button
             type="button"
-            onClick={onToggle}
+            onClick={stop(onToggle)}
             className="mt-auto flex items-center gap-1.5 text-[10px] font-semibold text-slate-600 hover:text-slate-400 transition-colors pt-2 border-t border-white/[0.04]"
           >
             <Icon icon="solar:restart-bold" className="text-xs" /> Buka kembali
           </button>
         )}
+        </div>
       </div>
     </motion.div>
   );

@@ -3,6 +3,24 @@
 
 import { Icon } from "@iconify/react";
 import { AgentFilters } from "../../types/agent.types";
+import { PremiumSelect } from "../shared/PremiumSelect";
+
+const STATUS_OPTIONS = [
+  { value: "", label: "Semua", icon: "solar:layers-minimalistic-bold" },
+  { value: "AKTIF", label: "Aktif", dot: "bg-emerald-400" },
+  { value: "PENDING", label: "Pending", dot: "bg-amber-400" },
+  { value: "SUSPEND", label: "Suspend", dot: "bg-rose-400" },
+];
+
+const JABATAN_OPTIONS = [
+  { value: "", label: "Semua", icon: "solar:users-group-rounded-bold" },
+  { value: "PRINCIPAL", label: "Principal", icon: "solar:crown-bold" },
+  { value: "STOKER", label: "Stoker", icon: "solar:box-bold" },
+  { value: "ADMIN", label: "Admin", icon: "solar:shield-user-bold" },
+  { value: "OWNER", label: "Owner", icon: "solar:key-bold" },
+  { value: "AGENT", label: "Agent", icon: "solar:user-bold" },
+  { value: "TEAMLEADER", label: "Team Leader", icon: "solar:users-group-two-rounded-bold" },
+];
 
 interface AgentFiltersProps {
   filters: AgentFilters;
@@ -32,35 +50,26 @@ export function AgentFiltersComponent({
       </div>
 
       {/* Status akun */}
-      <select
+      <PremiumSelect
         value={filters.status}
-        onChange={(e) =>
-          onFilterChange({ ...filters, status: e.target.value as any })
+        options={STATUS_OPTIONS}
+        onChange={(v) =>
+          onFilterChange({ ...filters, status: v as AgentFilters["status"] })
         }
-        className="bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400/50 min-w-[160px]"
-      >
-        <option value="">Status: Semua</option>
-        <option value="AKTIF">Aktif</option>
-        <option value="PENDING">Pending</option>
-        <option value="SUSPEND">Suspend</option>
-      </select>
+        prefix="Status:"
+        minWidthClass="min-w-[160px]"
+      />
 
       {/* Jabatan agent */}
-      <select
+      <PremiumSelect
         value={filters.jabatan}
-        onChange={(e) =>
-          onFilterChange({ ...filters, jabatan: e.target.value as any })
+        options={JABATAN_OPTIONS}
+        onChange={(v) =>
+          onFilterChange({ ...filters, jabatan: v as AgentFilters["jabatan"] })
         }
-        className="bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400/50 min-w-[180px]"
-      >
-        <option value="">Jabatan: Semua</option>
-        <option value="PRINCIPAL">Principal</option>
-        <option value="STOKER">Stoker</option>
-        <option value="ADMIN">Admin</option>
-        <option value="OWNER">Owner</option>
-        <option value="AGENT">Agent</option>
-        <option value="TEAMLEADER">Team Leader</option>
-      </select>
+        prefix="Jabatan:"
+        minWidthClass="min-w-[180px]"
+      />
     </div>
   );
 }

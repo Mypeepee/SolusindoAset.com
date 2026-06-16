@@ -3,6 +3,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { Icon } from "@iconify/react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { homepageMenu, appsMenu, type MenuItem } from "./list-menu";
@@ -53,9 +54,16 @@ export default function MobileSidebar({ open, onClose }: MobileSidebarProps) {
               {/* Header */}
               <div className="mb-6 flex items-center justify-between">
                 <Link href="/" onClick={onClose} className="flex items-center gap-2 group">
-                  <Icon icon="solar:home-smile-angle-bold-duotone" className="text-emerald-400 text-xl group-hover:text-emerald-300 transition-colors" />
-                  <span className="text-lg font-bold text-white group-hover:text-emerald-200 transition-colors">
-                    Premier <span className="text-emerald-400">Asset</span>
+                  <Image
+                    src="/images/logo/LogoSolusindoPremier.png"
+                    alt="Logo Solusindo Aset"
+                    width={32}
+                    height={32}
+                    className="h-8 w-8 object-contain transition-transform duration-300 group-hover:scale-105"
+                  />
+                  <span className="text-lg font-bold tracking-tight transition-colors duration-300 group-hover:text-white">
+                    <span className="text-white">Solusindo</span>
+                    <span className="ml-1 text-emerald-400 group-hover:text-emerald-300">Aset</span>
                   </span>
                 </Link>
                 <button
