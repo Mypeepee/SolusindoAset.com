@@ -4,10 +4,12 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Icon } from "@iconify/react";
+import { toast } from "sonner";
 import PropertyCard from "@/app/properti/[slug]/components/PropertyCard";
 import ListingFilters, {
   ListingFilterState,
 } from "@/app/dashboard/transaksi/components/ListingFilters";
+import MarkSoldDialog from "./MarkSoldDialog";
 import type { Listing } from "./listings-table";
 import type { PropertyItem } from "@/app/properti/[slug]/types";
 import { getPaginationPages, smoothScrollToElement } from "@/lib/pagination";
@@ -77,6 +79,8 @@ export default function ListingCardGrid({
 
   const [filters, setFilters] = useState<ListingFilterState>(initialFilters);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [marking, setMarking] = useState(false);
 
   const gridRef = useRef<HTMLDivElement>(null);
   const prevPageRef = useRef<number>(currentPage);
@@ -169,11 +173,45 @@ export default function ListingCardGrid({
     }
   };
 
-  const handleBulkDelete = async () => {
-    if (!selectedIds.length) return;
-    if (!window.confirm(`Hapus ${selectedIds.length} listing?`)) return;
-    setSelectedIds([]);
-    router.refresh();
+  // Preview untuk dialog: ambil judul listing yang sedang terlihat di halaman ini.
+  const selectedPreview = useMemo(
+    () =>
+      listings
+        .filter((l) => selectedIds.includes(l.id))
+        .slice(0, 6)
+        .map((l) => ({ id: l.id, title: l.title })),
+    [listings, selectedIds]
+  );
+
+  const handleConfirmSold = async () => {
+    if (!selectedIds.length || marking) return;
+    setMarking(true);
+    try {
+      const res = await fetch("/api/listings/status", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedIds, status: "TERJUAL" }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Gagal memperbarui status listing.");
+      }
+
+      const count = data?.count ?? selectedIds.length;
+      toast.success(`${count} properti ditandai Terjual 🎉`, {
+        description: "Listing dipindahkan dari daftar aktif. Data tetap tersimpan.",
+      });
+      setSelectedIds([]);
+      setConfirmOpen(false);
+      router.refresh();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Terjadi kesalahan, coba lagi."
+      );
+    } finally {
+      setMarking(false);
+    }
   };
 
   // Scroll to the first card row whenever the page actually changes.
@@ -233,12 +271,12 @@ export default function ListingCardGrid({
 
         <div className="flex items-center gap-2">
           <button
-            onClick={handleBulkDelete}
+            onClick={() => selectedIds.length > 0 && setConfirmOpen(true)}
             disabled={selectedIds.length === 0}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-[11px] font-semibold text-red-300 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            className="group inline-flex items-center gap-1.5 rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-semibold text-emerald-200 transition-all hover:border-emerald-300/70 hover:bg-emerald-500/20 hover:shadow-[0_0_16px_rgba(16,185,129,0.35)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:shadow-none"
           >
-            <Icon icon="solar:trash-bin-minimalistic-linear" className="text-xs" />
-            Hapus terpilih ({selectedIds.length})
+            <Icon icon="solar:verified-check-bold-duotone" className="text-sm text-emerald-300" />
+            Tandai Terjual ({selectedIds.length})
           </button>
 
           <Link
@@ -402,6 +440,16 @@ export default function ListingCardGrid({
           </div>
         </nav>
       )}
+
+      {/* ── Premium confirm: tandai Terjual ── */}
+      <MarkSoldDialog
+        open={confirmOpen}
+        count={selectedIds.length}
+        preview={selectedPreview}
+        loading={marking}
+        onConfirm={handleConfirmSold}
+        onCancel={() => !marking && setConfirmOpen(false)}
+      />
     </div>
   );
 }
