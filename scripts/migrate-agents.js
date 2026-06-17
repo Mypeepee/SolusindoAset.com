@@ -99,19 +99,33 @@ async function migrateAgents() {
       } = row;
 
       try {
-        // 1) Ambil id_pengguna baru dari mapping_pengguna (bukan cari by email)
-        const mapUserRes = await client.query(
-          `SELECT id_pengguna_baru FROM public.mapping_pengguna WHERE id_account_lama = $1`,
-          [id_account],
-        );
-        if (mapUserRes.rowCount === 0) {
-          skippedNoUser++;
-          console.warn(
-            `SKIP (tidak ada mapping pengguna): ${id_account} (${email})`,
+        // 1) Resolve pengguna berdasarkan EMAIL agent (agent_tampungan.email) lebih dulu.
+        //    Email agent = identitas agent yang sebenarnya. account.email kadang BEDA
+        //    dengan email agent (mis. AG001 Jason: account=solusindosinergi,
+        //    agent_tampungan=jasoncliendo) sehingga properti nyasar ke pengguna salah.
+        //    Fallback ke mapping_pengguna by id_account jika email tidak ketemu.
+        let idPenggunaBaru = null;
+        if (email) {
+          const byEmail = await client.query(
+            `SELECT id_pengguna FROM public.pengguna WHERE LOWER(TRIM(email)) = LOWER(TRIM($1)) LIMIT 1`,
+            [email],
           );
-          continue;
+          if (byEmail.rowCount > 0) idPenggunaBaru = byEmail.rows[0].id_pengguna;
         }
-        const idPenggunaBaru = mapUserRes.rows[0].id_pengguna_baru;
+        if (!idPenggunaBaru) {
+          const mapUserRes = await client.query(
+            `SELECT id_pengguna_baru FROM public.mapping_pengguna WHERE id_account_lama = $1`,
+            [id_account],
+          );
+          if (mapUserRes.rowCount === 0) {
+            skippedNoUser++;
+            console.warn(
+              `SKIP (tidak ada mapping pengguna): ${id_account} (${email})`,
+            );
+            continue;
+          }
+          idPenggunaBaru = mapUserRes.rows[0].id_pengguna_baru;
+        }
 
         // 2) ambil roles dari account untuk jabatan
         const accRes = await client.query(
