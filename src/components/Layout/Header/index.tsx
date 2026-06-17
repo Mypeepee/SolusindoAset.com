@@ -11,6 +11,8 @@ import Image from "next/image";
 import Logo from "./Logo";
 import Signin from "@/components/Auth/SignIn";
 import SignUp from "@/components/Auth/SignUp";
+import AuthModal from "@/components/Auth/AuthModal";
+import ForgotPasswordFlow from "@/components/Auth/ForgotPassword/ForgotPasswordFlow";
 import { headerData } from "./Navigation/menuData";
 
 const matchesPath = (subHref: string, currentPath: string) => {
@@ -555,6 +557,7 @@ const Header: React.FC = () => {
 
   const [isSignInOpen, setIsSignInOpen] = useState(false);
   const [isSignUpOpen, setIsSignUpOpen] = useState(false);
+  const [isForgotOpen, setIsForgotOpen] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => setSticky(window.scrollY >= 40);
@@ -564,8 +567,8 @@ const Header: React.FC = () => {
 
   useEffect(() => {
     document.body.style.overflow =
-      isSignInOpen || isSignUpOpen ? "hidden" : "";
-  }, [isSignInOpen, isSignUpOpen]);
+      isSignInOpen || isSignUpOpen || isForgotOpen ? "hidden" : "";
+  }, [isSignInOpen, isSignUpOpen, isForgotOpen]);
 
   const handleLogout = () => {
     signOut({ callbackUrl: "/" });
@@ -781,59 +784,55 @@ const Header: React.FC = () => {
       </header>
 
       {/* MODALS */}
-      {isSignInOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-          <div
-            className="absolute inset-0 bg-black/80 backdrop-blur-md"
-            onClick={() => setIsSignInOpen(false)}
-          />
-          <div className="relative w-full max-w-md max-h-[90vh] overflow-y-auto bg-[#181818] border border-white/10 rounded-2xl p-8 shadow-2xl">
-            <button
-              onClick={() => setIsSignInOpen(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-white"
-            >
-              <Icon icon="solar:close-circle-bold" className="text-2xl" />
-            </button>
-            <h3 className="text-2xl font-bold text-white mb-6 text-center">
-              Selamat Datang Kembali
-            </h3>
-            <Signin
-              closeModal={() => setIsSignInOpen(false)}
-              openSignupModal={() => {
-                setIsSignInOpen(false);
-                setIsSignUpOpen(true);
-              }}
-            />
-          </div>
-        </div>
-      )}
+      <AuthModal
+        open={isSignInOpen}
+        onClose={() => setIsSignInOpen(false)}
+        variant="signin"
+      >
+        <Signin
+          hideBrand
+          closeModal={() => setIsSignInOpen(false)}
+          openSignupModal={() => {
+            setIsSignInOpen(false);
+            setIsSignUpOpen(true);
+          }}
+          openForgotModal={() => {
+            setIsSignInOpen(false);
+            setIsForgotOpen(true);
+          }}
+        />
+      </AuthModal>
 
-      {isSignUpOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-          <div
-            className="absolute inset-0 bg-black/80 backdrop-blur-md"
-            onClick={() => setIsSignUpOpen(false)}
-          />
-          <div className="relative w-full max-w-md max-h-[90vh] overflow-y-auto bg-[#181818] border border-white/10 rounded-2xl p-8 shadow-2xl">
-            <button
-              onClick={() => setIsSignUpOpen(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-white"
-            >
-              <Icon icon="solar:close-circle-bold" className="text-2xl" />
-            </button>
-            <h3 className="text-2xl font-bold text-white mb-6 text-center">
-              Buat Akun Baru
-            </h3>
-            <SignUp
-              closeModal={() => setIsSignUpOpen(false)}
-              openSigninModal={() => {
-                setIsSignUpOpen(false);
-                setIsSignInOpen(true);
-              }}
-            />
-          </div>
-        </div>
-      )}
+      <AuthModal
+        open={isSignUpOpen}
+        onClose={() => setIsSignUpOpen(false)}
+        variant="signup"
+      >
+        <SignUp
+          hideBrand
+          closeModal={() => setIsSignUpOpen(false)}
+          openSigninModal={() => {
+            setIsSignUpOpen(false);
+            setIsSignInOpen(true);
+          }}
+        />
+      </AuthModal>
+
+      {/* FORGOT PASSWORD MODAL */}
+      <AuthModal
+        open={isForgotOpen}
+        onClose={() => setIsForgotOpen(false)}
+        variant="forgot"
+      >
+        <ForgotPasswordFlow
+          hideBrand
+          onClose={() => setIsForgotOpen(false)}
+          onBackToSignin={() => {
+            setIsForgotOpen(false);
+            setIsSignInOpen(true);
+          }}
+        />
+      </AuthModal>
     </>
   );
 };

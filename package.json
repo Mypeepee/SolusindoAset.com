@@ -9,6 +9,7 @@
     "lint": "next lint",
     "predeploy": "npm run build",
     "deploy": "touch out/.nojekyll && gh-pages -d out --dotfiles",
+    "db:reset": "prisma db execute --file prisma/sql/_reset_db.sql --schema prisma/schema.prisma && prisma db push",
     "migrate:users": "node scripts/migrate-users.js",
     "migrate:agents": "node scripts/migrate-agents.js"
   },
@@ -44,6 +45,7 @@
     "next-auth": "^4.24.7",
     "next-themes": "^0.3.0",
     "node-cron": "^4.2.1",
+    "nodemailer": "^7.0.13",
     "openai": "^6.33.0",
     "opencv-ts": "^1.3.6",
     "pdf-lib": "^1.17.1",
@@ -82,6 +84,7 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^20",
+    "@types/nodemailer": "^8.0.1",
     "@types/react": "^18",
     "@types/react-datepicker": "^6.2.0",
     "@types/react-dom": "^18",

@@ -26,6 +26,17 @@ export async function middleware(req: NextRequest) {
       url.searchParams.set("reason", "not-agent");
       return NextResponse.redirect(url);
     }
+
+    // ✅ Halaman Agents (HRM) hanya untuk PRINCIPAL & OWNER
+    if (pathname.startsWith("/dashboard/human-resource-management")) {
+      const jabatan = String((token as any).jabatan || "").toUpperCase();
+      if (jabatan !== "PRINCIPAL" && jabatan !== "OWNER") {
+        const url = req.nextUrl.clone();
+        url.pathname = "/dashboard";
+        url.searchParams.set("reason", "forbidden");
+        return NextResponse.redirect(url);
+      }
+    }
   }
 
   // ✅ Optional: larang agent buka gabung-jadi-agent

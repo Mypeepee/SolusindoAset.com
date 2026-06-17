@@ -6,7 +6,8 @@ import { Icon } from "@iconify/react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { homepageMenu, appsMenu, type MenuItem } from "./list-menu";
+import { useSession } from "next-auth/react";
+import { getDashboardMenu, type MenuItem } from "./list-menu";
 
 type MobileSidebarProps = {
   open: boolean;
@@ -21,6 +22,9 @@ function isActive(pathname: string, href?: string) {
 
 export default function MobileSidebar({ open, onClose }: MobileSidebarProps) {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const jabatan = (session?.user as any)?.jabatan ?? null;
+  const { homepage: homepageMenu, apps: appsMenu } = getDashboardMenu(jabatan);
 
   return (
     <AnimatePresence>
@@ -87,20 +91,23 @@ export default function MobileSidebar({ open, onClose }: MobileSidebarProps) {
                 ))}
               </nav>
 
-              <div className="my-3 h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-
-              {/* Apps Section */}
-              <SectionLabel>Apps</SectionLabel>
-              <nav className="space-y-1.5">
-                {appsMenu.map((item) => (
-                  <MobileSidebarItem
-                    key={item.label}
-                    item={item}
-                    active={isActive(pathname, item.href)}
-                    onClose={onClose}
-                  />
-                ))}
-              </nav>
+              {/* Apps Section — hanya untuk jabatan yang punya akses (mis. OWNER) */}
+              {appsMenu.length > 0 && (
+                <>
+                  <div className="my-3 h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+                  <SectionLabel>Apps</SectionLabel>
+                  <nav className="space-y-1.5">
+                    {appsMenu.map((item) => (
+                      <MobileSidebarItem
+                        key={item.label}
+                        item={item}
+                        active={isActive(pathname, item.href)}
+                        onClose={onClose}
+                      />
+                    ))}
+                  </nav>
+                </>
+              )}
 
               {/* ── STICKY EXIT — tight after last item, sticks when scrolling ── */}
               <div className="sticky bottom-0 pt-3 pb-6 bg-[#040608]">

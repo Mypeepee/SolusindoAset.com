@@ -17,7 +17,7 @@ const INFO_LINKS = [
   { label: "Profil Perusahaan", href: "/about/company-profile" },
   { label: "Gabung Jadi Agent", href: "/gabung-jadi-agent" },
   { label: "Titip Jual Properti", href: "/titip-jual" },
-  { label: "Privacy Policy", href: "#" },
+  { label: "Privacy Policy", href: "/privacy" },
   { label: "Terms of Service", href: "#" },
 ];
 

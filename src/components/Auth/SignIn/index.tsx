@@ -6,15 +6,21 @@ import { useState } from "react";
 import { toast } from "sonner";
 import Loader from "@/components/Common/Loader";
 import Image from "next/image";
+import { Icon } from "@iconify/react";
+import { motion, AnimatePresence } from "framer-motion";
 
 type Mode = "email" | "phone";
 
 interface SigninProps {
   closeModal?: () => void;
   openSignupModal?: () => void;
+  /** Buka modal "Lupa kata sandi". Jika tidak diberikan, fallback ke halaman /forgot-password. */
+  openForgotModal?: () => void;
   /** Jika true, setelah login sukses tidak melakukan router.push ke callbackUrl — cukup panggil onSuccess. */
   skipRedirect?: boolean;
   onSuccess?: () => void;
+  /** Sembunyikan header brand (logo + judul). Dipakai saat shell modal sudah menampilkan brand sendiri. */
+  hideBrand?: boolean;
 }
 
 function EyeIcon({ open }: { open: boolean }) {
@@ -73,10 +79,18 @@ function normalizePhoneDigits(raw: string) {
   let digits = (raw || "").replace(/\D/g, "");
   if (digits.startsWith("62")) digits = digits.slice(2);
   digits = digits.replace(/^0+/, "");
-  return digits;
+  digits = digits.slice(0, 12);
+  // Format: tambahkan "-" setiap 4 digit => 8812-3456-7890
+  return digits.replace(/(\d{4})(?=\d)/g, "$1-");
 }
 
-const Signin = ({ closeModal, openSignupModal, skipRedirect, onSuccess }: SigninProps) => {
+/* ── shared premium field style ───────────────────────────────────────────── */
+const fieldBase =
+  "w-full rounded-xl border border-white/10 bg-white/[0.03] py-3.5 text-[15px] text-white " +
+  "placeholder:text-white/30 outline-none transition-all duration-300 " +
+  "focus:border-primary/50 focus:bg-white/[0.05] focus:shadow-[0_0_0_4px_rgba(153,227,158,0.10)]";
+
+const Signin = ({ closeModal, openSignupModal, openForgotModal, skipRedirect, onSuccess, hideBrand }: SigninProps) => {
   const router = useRouter();
   const pathname = usePathname(); // path saat ini
 
@@ -126,7 +140,7 @@ const Signin = ({ closeModal, openSignupModal, skipRedirect, onSuccess }: Signin
       const payload: any =
         mode === "email"
           ? { email: email.trim(), password, redirect: false, callbackUrl }
-          : { phone: `+62${phoneDigits}`, password, redirect: false, callbackUrl };
+          : { phone: `+62${phoneDigits.replace(/-/g, "")}`, password, redirect: false, callbackUrl };
 
       if (mode === "email" && !payload.email) {
         throw new Error("Email wajib diisi.");
@@ -189,148 +203,174 @@ const Signin = ({ closeModal, openSignupModal, skipRedirect, onSuccess }: Signin
     }
   };
 
-  const inputClass =
-    "w-full rounded-md border border-dark_border/60 bg-transparent px-5 py-3 text-base outline-none transition " +
-    "text-white placeholder:text-white/35 " +
-    "focus:border-primary focus:bg-white/5 focus-visible:shadow-none";
-
   return (
-    <>
-      {/* Header */}
-      <div className="mb-6 w-full flex items-center justify-center">
-        <div className="flex items-center gap-3">
-          <div className="relative h-12 w-12 shrink-0">
-            <Image
-              src="/images/logo/LogoSolusindoPremier.png"
-              alt="Premier"
-              fill
-              priority
-              className="object-contain"
-            />
-          </div>
-
-          <div className="leading-tight text-left">
-            <div className="text-white font-semibold text-xl">
-              Solusindo<span className="text-primary"> Aset</span>
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+    >
+      {/* Header brand */}
+      {!hideBrand && (
+        <div className="mb-7 flex flex-col items-center text-center">
+          <div className="relative mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.08] to-transparent">
+            <div className="absolute inset-0 rounded-2xl bg-primary/15 blur-xl" />
+            <div className="relative h-9 w-9">
+              <Image
+                src="/images/logo/LogoSolusindoPremier.png"
+                alt="Premier"
+                fill
+                priority
+                className="object-contain"
+              />
             </div>
-            <div className="text-white/60 text-xs">Masuk akun</div>
           </div>
+          <h2 className="text-[1.6rem] font-bold leading-tight tracking-tight text-white">
+            Selamat datang kembali
+          </h2>
+          <p className="mt-1.5 text-sm text-white/45">
+            Masuk ke akun{" "}
+            <span className="font-semibold text-white/70">
+              Solusindo<span className="text-primary"> Aset</span>
+            </span>
+          </p>
         </div>
-      </div>
+      )}
 
-      {/* Google only */}
+      {/* Google */}
       <button
         type="button"
         onClick={handleGoogle}
         disabled={loading}
         className="
-          flex w-full items-center justify-center gap-3
-          rounded-md border border-dark_border/60
-          bg-transparent px-5 py-3
-          text-base font-medium text-white
-          transition hover:bg-white/5 hover:border-primary/60
+          group flex w-full items-center justify-center gap-3
+          rounded-xl border border-white/10 bg-white/[0.03]
+          px-5 py-3.5 text-[15px] font-semibold text-white
+          transition-all duration-300
+          hover:border-white/20 hover:bg-white/[0.06]
           disabled:opacity-50 disabled:cursor-not-allowed
         "
       >
-        <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+        <svg width="19" height="19" viewBox="0 0 48 48" aria-hidden="true" className="transition-transform duration-300 group-hover:scale-110">
           <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303C33.659 32.659 29.197 36 24 36c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/>
           <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 16.108 19.001 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/>
           <path fill="#4CAF50" d="M24 44c5.092 0 9.797-1.953 13.333-5.127l-6.153-5.207C29.125 35.091 26.7 36 24 36c-5.176 0-9.627-3.317-11.297-7.946l-6.522 5.025C9.49 39.556 16.227 44 24 44z"/>
           <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.246-2.23 4.148-4.123 5.46l.003-.002 6.153 5.207C36.9 39.018 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/>
         </svg>
-        Masuk dengan Google
+        Lanjut dengan Google
       </button>
 
       {/* Divider */}
-      <span className="z-1 relative my-6 block text-center before:content-[''] before:absolute before:h-px before:w-[40%] before:bg-dark_border before:bg-opacity-60 before:left-0 before:top-3 after:content-[''] after:absolute after:h-px after:w-[40%] after:bg-dark_border after:bg-opacity-60 after:top-3 after:right-0">
-        <span className="text-body-secondary relative z-10 inline-block px-3 text-sm text-white/70">
-          ATAU
-        </span>
-      </span>
+      <div className="my-6 flex items-center gap-4">
+        <span className="h-px flex-1 bg-gradient-to-r from-transparent to-white/15" />
+        <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-white/35">atau</span>
+        <span className="h-px flex-1 bg-gradient-to-l from-transparent to-white/15" />
+      </div>
 
-      {/* Mode switch */}
-      <div className="mb-4">
-        <div className="inline-flex w-full rounded-md border border-dark_border/60 bg-white/5 p-1">
-          <button
-            type="button"
-            onClick={() => setMode("email")}
-            className={[
-              "flex-1 rounded-md px-3 py-2 text-sm font-medium transition",
-              mode === "email"
-                ? "bg-primary text-darkmode"
-                : "text-white/80 hover:bg-white/5",
-            ].join(" ")}
-          >
-            Email
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("phone")}
-            className={[
-              "flex-1 rounded-md px-3 py-2 text-sm font-medium transition",
-              mode === "phone"
-                ? "bg-primary text-darkmode"
-                : "text-white/80 hover:bg-white/5",
-            ].join(" ")}
-          >
-            No. HP
-          </button>
-        </div>
+      {/* Mode switch — segmented control beranimasi */}
+      <div className="mb-5 flex rounded-xl border border-white/10 bg-white/[0.03] p-1">
+        {(["email", "phone"] as Mode[]).map((m) => {
+          const active = mode === m;
+          return (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              className="relative flex-1 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors"
+            >
+              {active && (
+                <motion.span
+                  layoutId="signin-seg-pill"
+                  transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                  className="absolute inset-0 rounded-lg bg-gradient-to-r from-primary to-secondary shadow-[0_4px_14px_-2px_rgba(153,227,158,0.45)]"
+                />
+              )}
+              <span
+                className={`relative z-10 flex items-center justify-center gap-1.5 ${
+                  active ? "text-darkmode" : "text-white/55 hover:text-white"
+                }`}
+              >
+                <Icon icon={m === "email" ? "solar:letter-linear" : "solar:smartphone-linear"} className="text-base" />
+                {m === "email" ? "Email" : "No. HP"}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       <form onSubmit={loginUser}>
         {/* Email / Phone */}
-        {mode === "email" ? (
-          <div className="mb-[18px]">
-            <input
-              type="email"
-              placeholder="Email (contoh: nama@email.com)"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-              className={inputClass}
-            />
-          </div>
-        ) : (
-          <div className="mb-[18px]">
-            <div className="flex">
-              <span className="inline-flex items-center rounded-l-md border border-dark_border/60 bg-white/5 px-4 text-white/80 text-sm">
-                +62
-              </span>
-              <input
-                type="tel"
-                required
-                inputMode="numeric"
-                autoComplete="tel-national"
-                placeholder="81234567890"
-                value={phoneDigits}
-                onChange={(e) => setPhoneDigits(normalizePhoneDigits(e.target.value))}
-                onKeyDown={(e) => {
-                  if (phoneDigits.length === 0 && e.key === "0") {
-                    e.preventDefault();
-                  }
-                }}
-                className={[inputClass, "rounded-l-none border-l-0"].join(" ")}
-              />
-            </div>
-          </div>
-        )}
+        <AnimatePresence mode="wait" initial={false}>
+          {mode === "email" ? (
+            <motion.div
+              key="email"
+              initial={{ opacity: 0, x: -12 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 12 }}
+              transition={{ duration: 0.22 }}
+              className="mb-4"
+            >
+              <div className="relative">
+                <Icon icon="solar:letter-linear" className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg text-white/30" />
+                <input
+                  type="email"
+                  placeholder="nama@email.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  className={`${fieldBase} pl-11 pr-4`}
+                />
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="phone"
+              initial={{ opacity: 0, x: -12 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 12 }}
+              transition={{ duration: 0.22 }}
+              className="mb-4"
+            >
+              <div className="flex items-stretch overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] transition-all duration-300 focus-within:border-primary/50 focus-within:bg-white/[0.05] focus-within:shadow-[0_0_0_4px_rgba(153,227,158,0.10)]">
+                <span className="flex items-center gap-1.5 border-r border-white/10 px-4 text-sm font-semibold text-white/60">
+                  <Icon icon="solar:smartphone-linear" className="text-base text-white/40" />
+                  +62
+                </span>
+                <input
+                  type="tel"
+                  required
+                  inputMode="numeric"
+                  autoComplete="tel-national"
+                  placeholder="8812-3456-7890"
+                  value={phoneDigits}
+                  onChange={(e) => setPhoneDigits(normalizePhoneDigits(e.target.value))}
+                  onKeyDown={(e) => {
+                    if (phoneDigits.length === 0 && e.key === "0") {
+                      e.preventDefault();
+                    }
+                  }}
+                  className="flex-1 bg-transparent px-4 py-3.5 text-[15px] tracking-wide text-white placeholder:text-white/30 outline-none"
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Password */}
-        <div className="mb-[22px]">
+        <div className="mb-2">
           <div className="relative">
+            <Icon icon="solar:lock-password-linear" className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg text-white/30" />
             <input
               type={showPassword ? "text" : "password"}
               placeholder="Kata sandi"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
-              className={[inputClass, "pr-12"].join(" ")}
+              className={`${fieldBase} pl-11 pr-12`}
             />
             <button
               type="button"
               onClick={() => setShowPassword((s) => !s)}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-white/45 hover:text-white/90 transition"
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 transition hover:text-white/90"
               aria-label={showPassword ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"}
               title={showPassword ? "Sembunyikan" : "Tampilkan"}
             >
@@ -339,46 +379,66 @@ const Signin = ({ closeModal, openSignupModal, skipRedirect, onSuccess }: Signin
           </div>
         </div>
 
-        <div className="mb-7">
-          <button
-            type="submit"
-            disabled={loading}
-            className="
-              flex w-full items-center justify-center gap-2
-              text-18 font-medium rounded-md
-              bg-primary px-5 py-3 text-darkmode
-              transition duration-300 ease-in-out
-              hover:bg-transparent hover:text-primary
-              border-primary border
-              disabled:opacity-60 disabled:cursor-not-allowed
-            "
-          >
-            Masuk {loading && <Loader />}
-          </button>
+        {/* Lupa kata sandi */}
+        <div className="mb-5 flex justify-end">
+          {openForgotModal ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (closeModal) closeModal();
+                openForgotModal();
+              }}
+              className="text-sm font-medium text-white/55 transition-colors hover:text-primary"
+            >
+              Lupa kata sandi?
+            </button>
+          ) : (
+            <a
+              href="/forgot-password"
+              className="text-sm font-medium text-white/55 transition-colors hover:text-primary"
+            >
+              Lupa kata sandi?
+            </a>
+          )}
         </div>
+
+        {/* Submit */}
+        <button
+          type="submit"
+          disabled={loading}
+          className="
+            group relative mb-6 flex w-full items-center justify-center gap-2
+            overflow-hidden rounded-xl bg-gradient-to-r from-primary to-secondary
+            px-5 py-3.5 text-[15px] font-bold text-darkmode
+            shadow-[0_10px_30px_-10px_rgba(153,227,158,0.6)]
+            transition-all duration-300
+            hover:-translate-y-0.5 hover:shadow-[0_16px_40px_-10px_rgba(153,227,158,0.7)]
+            active:translate-y-0
+            disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0
+          "
+        >
+          <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
+          <span className="relative flex items-center gap-2">
+            Masuk
+            {loading ? <Loader /> : <Icon icon="solar:arrow-right-linear" className="text-lg transition-transform duration-300 group-hover:translate-x-1" />}
+          </span>
+        </button>
       </form>
 
-      <a
-        href="/forgot-password"
-        className="mb-2 inline-block text-sm text-white/80 hover:text-primary"
-      >
-        Lupa kata sandi?
-      </a>
-
-      <p className="text-body-secondary text-white text-sm">
+      <p className="text-center text-sm text-white/50">
         Belum punya akun?{" "}
         <button
           type="button"
-          className="text-primary hover:underline"
+          className="font-semibold text-primary transition-colors hover:text-secondary"
           onClick={() => {
             if (closeModal) closeModal();
             if (openSignupModal) openSignupModal();
           }}
         >
-          Daftar
+          Daftar sekarang
         </button>
       </p>
-    </>
+    </motion.div>
   );
 };
 

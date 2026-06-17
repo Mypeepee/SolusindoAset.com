@@ -75,8 +75,11 @@ export const authOptions: AuthOptions = {
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
       authorization: {
         params: {
-          prompt: "consent",
-          access_type: "offline",
+          // "select_account" membiarkan user memilih/ganti akun Google tanpa
+          // memaksa consent ulang tiap login. Sebelumnya "consent" + "offline"
+          // memicu Google mengirim email "info yang kamu bagikan" setiap login,
+          // padahal app ini hanya butuh identitas (tidak memakai token Google).
+          prompt: "select_account",
           response_type: "code",
         },
       },

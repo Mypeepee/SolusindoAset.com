@@ -6,6 +6,11 @@ import ChatWidget from "./ChatWidget";
 export default function ChatWidgetWrapper() {
   const pathname = usePathname();
 
+  // ⛔ Sementara di-hide di SEMUA halaman.
+  // Untuk mengaktifkan lagi, hapus baris di bawah ini.
+  const HIDE_EVERYWHERE = true;
+  if (HIDE_EVERYWHERE) return null;
+
   // Hide chat widget di route tertentu
   const hideChat =
     pathname.startsWith("/dashboard") ||

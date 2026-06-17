@@ -50,6 +50,62 @@ export interface MenuItem {
     },
   ];
 
+  // ── Menu per-jabatan ────────────────────────────────────────────
+  // Item dasar dipakai untuk membangun menu sesuai jabatan agent.
+  const MENU: Record<string, MenuItem> = {
+    dashboard: { label: "Dashboard", icon: "solar:widget-5-linear", href: "/dashboard" },
+    tugas: { label: "Tugas", icon: "solar:clipboard-check-linear", href: "/dashboard/tugas" },
+    listings: { label: "Listings", icon: "solar:buildings-3-linear", href: "/dashboard/listings" },
+    agents: { label: "Agents", icon: "solar:user-id-linear", href: "/dashboard/human-resource-management" },
+    transaksi: { label: "Transaksi", icon: "solar:hand-money-linear", href: "/dashboard/transaksi" },
+    crm: { label: "CRM", icon: "solar:users-group-rounded-linear", href: "/dashboard/crm" },
+    project: { label: "Project", icon: "solar:presentation-graph-linear", href: "/dashboard/project" },
+  };
+
+  export type DashboardMenu = { homepage: MenuItem[]; apps: MenuItem[] };
+
+  /**
+   * Menu sidebar sesuai jabatan agent.
+   * - OWNER          : lihat semuanya (homepage + apps lengkap)
+   * - PRINCIPAL      : + menu Agents (dibatasi kantor sendiri di halaman HRM)
+   * - AGENT/STOKER/ADMIN/TEAMLEADER : tanpa menu Agents
+   */
+  export function getDashboardMenu(jabatan?: string | null): DashboardMenu {
+    const j = (jabatan || "").toUpperCase();
+
+    if (j === "OWNER") {
+      return { homepage: homepageMenu, apps: appsMenu };
+    }
+
+    if (j === "PRINCIPAL") {
+      return {
+        homepage: [
+          MENU.dashboard,
+          MENU.tugas,
+          MENU.listings,
+          MENU.agents,
+          MENU.transaksi,
+          MENU.crm,
+          MENU.project,
+        ],
+        apps: [],
+      };
+    }
+
+    // AGENT, STOKER, ADMIN, TEAMLEADER (default)
+    return {
+      homepage: [
+        MENU.dashboard,
+        MENU.tugas,
+        MENU.listings,
+        MENU.transaksi,
+        MENU.crm,
+        MENU.project,
+      ],
+      apps: [],
+    };
+  }
+
   export const appsMenu: MenuItem[] = [
     {
       label: "Jadwal & Acara",

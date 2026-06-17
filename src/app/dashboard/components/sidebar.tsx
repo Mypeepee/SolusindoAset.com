@@ -5,7 +5,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { Icon } from "@iconify/react";
 import { usePathname } from "next/navigation";
-import { homepageMenu, appsMenu, type MenuItem } from "./list-menu";
+import { useSession } from "next-auth/react";
+import { getDashboardMenu, type MenuItem } from "./list-menu";
 
 function isActive(pathname: string, href?: string) {
   if (!href) return false;
@@ -15,6 +16,9 @@ function isActive(pathname: string, href?: string) {
 
 export function OwnerSidebar() {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const jabatan = (session?.user as any)?.jabatan ?? null;
+  const { homepage: homepageMenu, apps: appsMenu } = getDashboardMenu(jabatan);
 
   return (
     <aside className="hidden md:flex w-72 flex-col border-r border-white/5 bg-[#040608]">
@@ -54,15 +58,18 @@ export function OwnerSidebar() {
           ))}
         </nav>
 
-        <div className="my-3 h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-
-        {/* APPS SECTION */}
-        <SectionLabel>Apps</SectionLabel>
-        <nav className="space-y-1.5">
-          {appsMenu.map((item) => (
-            <SidebarItem key={item.label} item={item} active={isActive(pathname, item.href)} />
-          ))}
-        </nav>
+        {/* APPS SECTION — hanya untuk jabatan yang punya akses (mis. OWNER) */}
+        {appsMenu.length > 0 && (
+          <>
+            <div className="my-3 h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+            <SectionLabel>Apps</SectionLabel>
+            <nav className="space-y-1.5">
+              {appsMenu.map((item) => (
+                <SidebarItem key={item.label} item={item} active={isActive(pathname, item.href)} />
+              ))}
+            </nav>
+          </>
+        )}
 
         {/* ── STICKY EXIT — tight after last item, sticks when scrolling ── */}
         <div className="sticky bottom-0 pt-3 pb-5 bg-[#040608]">

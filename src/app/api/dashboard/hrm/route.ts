@@ -12,10 +12,29 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // TODO: kalau mau batasi hanya OWNER/Admin, cek role di sini
+  // Tentukan scope akses berdasarkan jabatan agent si pemohon.
+  // - OWNER     : lihat semua agent (lintas kantor)
+  // - PRINCIPAL : hanya agent di kantor yang sama
+  // - lainnya   : tidak boleh mengakses data HRM
+  const requesterAgentId = (session.user as any)?.agentId ?? null;
+  const me = requesterAgentId
+    ? await prisma.agent.findUnique({
+        where: { id_agent: String(requesterAgentId) },
+        select: { jabatan: true, nama_kantor: true },
+      })
+    : null;
+
+  if (!me || (me.jabatan !== "OWNER" && me.jabatan !== "PRINCIPAL")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // OWNER lihat semua; PRINCIPAL dibatasi ke kantornya sendiri.
+  const where: { nama_kantor?: string } =
+    me.jabatan === "OWNER" ? {} : { nama_kantor: me.nama_kantor };
 
   try {
     const agents = await prisma.agent.findMany({
+      where,
       orderBy: { dibuat_pada: "desc" },
       include: {
         pengguna: {
