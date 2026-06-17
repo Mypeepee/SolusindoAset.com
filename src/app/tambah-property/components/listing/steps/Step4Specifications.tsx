@@ -7,7 +7,6 @@ import { FormField } from '../FormField';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   HADAP_OPTIONS,
-  SUMBER_AIR_OPTIONS,
   KONDISI_INTERIOR_OPTIONS as RAW_KONDISI_INTERIOR_OPTIONS,
 } from '@/app/tambah-property/types/listing';
 import {
@@ -18,6 +17,9 @@ import {
   Layers,
   Zap,
   Droplets,
+  Droplet,
+  Waves,
+  Gauge,
   Compass,
   Sofa,
   FileText,
@@ -27,26 +29,52 @@ import {
   Shield,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { PremiumSelect, type PremiumSelectOption } from '../PremiumSelect';
+
+// Opsi Sumber Air dengan ikon + deskripsi untuk dropdown premium
+const SUMBER_AIR_SELECT_OPTIONS: PremiumSelectOption[] = [
+  { value: 'PDAM', label: 'PDAM', desc: 'Jaringan air ledeng kota', icon: <Droplets className="h-4 w-4" /> },
+  { value: 'Sumur Bor', label: 'Sumur Bor', desc: 'Pompa sumur dalam', icon: <Gauge className="h-4 w-4" /> },
+  { value: 'Sumur Gali', label: 'Sumur Gali', desc: 'Sumur galian dangkal', icon: <Droplet className="h-4 w-4" /> },
+  { value: 'Air Tanah', label: 'Air Tanah', desc: 'Sumber air alami', icon: <Waves className="h-4 w-4" /> },
+];
 
 interface Step4Props {
   form: UseFormReturn<ListingFormData>;
 }
 
-// Sertifikat enum sesuai DB
-const SERTIFIKAT_ENUM = [
-  { value: 'SHM', label: 'SHM (Sertifikat Hak Milik)' },
-  { value: 'HGB', label: 'HGB (Hak Guna Bangunan)' },
-  { value: 'HGU', label: 'HGU (Hak Guna Usaha)' },
-  { value: 'HP', label: 'HP (Hak Pakai)' },
-  { value: 'STRATA_TITLE', label: 'Strata Title' },
-  { value: 'PPJB', label: 'PPJB' },
-  { value: 'AJB', label: 'AJB' },
-  { value: 'LAINNYA', label: 'Lainnya' },
-];
+// Sertifikat enum sesuai DB (label singkat + deskripsi untuk dropdown premium)
+const SERTIFIKAT_SELECT_OPTIONS: PremiumSelectOption[] = [
+  { value: 'SHM', label: 'SHM', desc: 'Sertifikat Hak Milik' },
+  { value: 'HGB', label: 'HGB', desc: 'Hak Guna Bangunan' },
+  { value: 'HGU', label: 'HGU', desc: 'Hak Guna Usaha' },
+  { value: 'HP', label: 'HP', desc: 'Hak Pakai' },
+  { value: 'STRATA_TITLE', label: 'Strata Title', desc: 'Hak satuan rumah susun' },
+  { value: 'PPJB', label: 'PPJB', desc: 'Perjanjian Pengikatan Jual Beli' },
+  { value: 'AJB', label: 'AJB', desc: 'Akta Jual Beli' },
+  { value: 'LAINNYA', label: 'Lainnya', desc: 'Dokumen lainnya' },
+].map((o) => ({ ...o, icon: <FileText className="h-4 w-4" /> }));
 
 // Ganti label "Bare" => "Kosongan"
 const KONDISI_INTERIOR_OPTIONS = RAW_KONDISI_INTERIOR_OPTIONS.map((k) =>
   k.toLowerCase() === 'bare' ? 'Kosongan' : k,
+);
+
+// Opsi dropdown premium untuk Hadap Bangunan
+const HADAP_SELECT_OPTIONS: PremiumSelectOption[] = HADAP_OPTIONS.map((h) => ({
+  value: h,
+  label: h,
+  icon: <Compass className="h-4 w-4" />,
+}));
+
+// Opsi dropdown premium untuk Kondisi Interior
+const KONDISI_DESC: Record<string, string> = {
+  Kosongan: 'Tanpa perabot',
+  'Semi Furnished': 'Sebagian perabot terpasang',
+  'Fully Furnished': 'Perabot lengkap',
+};
+const KONDISI_SELECT_OPTIONS: PremiumSelectOption[] = KONDISI_INTERIOR_OPTIONS.map(
+  (k) => ({ value: k, label: k, desc: KONDISI_DESC[k], icon: <Sofa className="h-4 w-4" /> }),
 );
 
 // Konversi ke number, undefined kalau kosong/0
@@ -78,6 +106,7 @@ export function Step4Specifications({ form }: Step4Props) {
     watch,
     formState: { errors },
     register,
+    setValue,
   } = form;
 
   const luasTanah = watch('luas_tanah');
@@ -440,38 +469,21 @@ export function Step4Specifications({ form }: Step4Props) {
 
           {/* Sumber Air */}
           <FormField label="Sumber Air" error={errors.sumber_air?.message}>
-            <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 rounded-xl blur-lg opacity-0 group-focus-within:opacity-100 transition-opacity" />
-              <div className="relative flex items-center">
-                <div className="absolute left-4">
-                  <Droplets className="h-4 w-4 text-cyan-400" />
-                </div>
-                <select
-                  {...register('sumber_air')}
-                  className={cn(
-                    'w-full h-14 pl-12 pr-8 rounded-xl text-base font-semibold text-slate-100 appearance-none',
-                    'bg-slate-900/50 border-2 border-slate-800',
-                    'focus:border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20',
-                    'transition-all duration-300',
-                  )}
-                >
-                  <option value="">Pilih Sumber Air</option>
-                  {SUMBER_AIR_OPTIONS.map((air) => (
-                    <option key={air} value={air}>
-                      {air}
-                    </option>
-                  ))}
-                </select>
-                {sumberAir && (
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    className="absolute right-3"
-                  >
-                    <CheckCircle2 className="h-5 w-5 text-cyan-500" />
-                  </motion.div>
-                )}
-              </div>
+            <div className="group">
+              <PremiumSelect
+                value={sumberAir ?? ''}
+                onChange={(v) =>
+                  setValue('sumber_air', v, {
+                    shouldValidate: true,
+                    shouldDirty: true,
+                  })
+                }
+                options={SUMBER_AIR_SELECT_OPTIONS}
+                placeholder="Pilih Sumber Air"
+                accent="cyan"
+                ariaLabel="Sumber Air"
+                leadingIcon={<Droplets className="h-4 w-4" />}
+              />
             </div>
           </FormField>
         </div>
@@ -499,38 +511,21 @@ export function Step4Specifications({ form }: Step4Props) {
             label="Hadap Bangunan"
             error={errors.hadap_bangunan?.message}
           >
-            <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 rounded-xl blur-lg opacity-0 group-focus-within:opacity-100 transition-opacity" />
-              <div className="relative flex items-center">
-                <div className="absolute left-4">
-                  <Compass className="h-4 w-4 text-indigo-400" />
-                </div>
-                <select
-                  {...register('hadap_bangunan')}
-                  className={cn(
-                    'w-full h-14 pl-12 pr-8 rounded-xl text-base font-semibold text-slate-100 appearance-none',
-                    'bg-slate-900/50 border-2 border-slate-800',
-                    'focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20',
-                    'transition-all duration-300',
-                  )}
-                >
-                  <option value="">Pilih Arah</option>
-                  {HADAP_OPTIONS.map((hadap) => (
-                    <option key={hadap} value={hadap}>
-                      {hadap}
-                    </option>
-                  ))}
-                </select>
-                {hadapBangunan && (
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    className="absolute right-3"
-                  >
-                    <CheckCircle2 className="h-5 w-5 text-indigo-500" />
-                  </motion.div>
-                )}
-              </div>
+            <div className="group">
+              <PremiumSelect
+                value={hadapBangunan ?? ''}
+                onChange={(v) =>
+                  setValue('hadap_bangunan', v, {
+                    shouldValidate: true,
+                    shouldDirty: true,
+                  })
+                }
+                options={HADAP_SELECT_OPTIONS}
+                placeholder="Pilih Arah"
+                accent="indigo"
+                ariaLabel="Hadap Bangunan"
+                leadingIcon={<Compass className="h-4 w-4" />}
+              />
             </div>
           </FormField>
 
@@ -539,38 +534,21 @@ export function Step4Specifications({ form }: Step4Props) {
             label="Kondisi Interior"
             error={errors.kondisi_interior?.message}
           >
-            <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-r from-pink-500/20 to-rose-500/20 rounded-xl blur-lg opacity-0 group-focus-within:opacity-100 transition-opacity" />
-              <div className="relative flex items-center">
-                <div className="absolute left-4">
-                  <Sofa className="h-4 w-4 text-pink-400" />
-                </div>
-                <select
-                  {...register('kondisi_interior')}
-                  className={cn(
-                    'w-full h-14 pl-12 pr-8 rounded-xl text-base font-semibold text-slate-100 appearance-none',
-                    'bg-slate-900/50 border-2 border-slate-800',
-                    'focus:border-pink-500/50 focus:outline-none focus:ring-2 focus:ring-pink-500/20',
-                    'transition-all duration-300',
-                  )}
-                >
-                  <option value="">Pilih Kondisi</option>
-                  {KONDISI_INTERIOR_OPTIONS.map((kondisi) => (
-                    <option key={kondisi} value={kondisi}>
-                      {kondisi}
-                    </option>
-                  ))}
-                </select>
-                {kondisiInterior && (
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    className="absolute right-3"
-                  >
-                    <CheckCircle2 className="h-5 w-5 text-pink-500" />
-                  </motion.div>
-                )}
-              </div>
+            <div className="group">
+              <PremiumSelect
+                value={kondisiInterior ?? ''}
+                onChange={(v) =>
+                  setValue('kondisi_interior', v, {
+                    shouldValidate: true,
+                    shouldDirty: true,
+                  })
+                }
+                options={KONDISI_SELECT_OPTIONS}
+                placeholder="Pilih Kondisi"
+                accent="rose"
+                ariaLabel="Kondisi Interior"
+                leadingIcon={<Sofa className="h-4 w-4" />}
+              />
             </div>
           </FormField>
         </div>
@@ -598,38 +576,21 @@ export function Step4Specifications({ form }: Step4Props) {
             label="Jenis Sertifikat"
             error={errors.legalitas?.message}
           >
-            <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-r from-amber-500/20 to-orange-500/20 rounded-xl blur-lg opacity-0 group-focus-within:opacity-100 transition-opacity" />
-              <div className="relative flex items-center">
-                <div className="absolute left-4">
-                  <FileText className="h-4 w-4 text-amber-400" />
-                </div>
-                <select
-                  {...register('legalitas')}
-                  className={cn(
-                    'w-full h-14 pl-12 pr-8 rounded-xl text-base font-semibold text-slate-100 appearance-none',
-                    'bg-slate-900/50 border-2 border-slate-800',
-                    'focus:border-amber-500/50 focus:outline-none focus:ring-2 focus:ring-amber-500/20',
-                    'transition-all duration-300',
-                  )}
-                >
-                  <option value="">Pilih Sertifikat</option>
-                  {SERTIFIKAT_ENUM.map((sert) => (
-                    <option key={sert.value} value={sert.value}>
-                      {sert.label}
-                    </option>
-                  ))}
-                </select>
-                {legalitas && (
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    className="absolute right-3"
-                  >
-                    <CheckCircle2 className="h-5 w-5 text-amber-500" />
-                  </motion.div>
-                )}
-              </div>
+            <div className="group">
+              <PremiumSelect
+                value={legalitas ?? ''}
+                onChange={(v) =>
+                  setValue('legalitas', v as ListingFormData['legalitas'], {
+                    shouldValidate: true,
+                    shouldDirty: true,
+                  })
+                }
+                options={SERTIFIKAT_SELECT_OPTIONS}
+                placeholder="Pilih Sertifikat"
+                accent="amber"
+                ariaLabel="Jenis Sertifikat"
+                leadingIcon={<FileText className="h-4 w-4" />}
+              />
             </div>
           </FormField>
 
