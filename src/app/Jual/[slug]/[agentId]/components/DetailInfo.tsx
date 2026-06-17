@@ -80,7 +80,7 @@ const buildShareMessage = (data: any) => {
 
   const harga = parseFloat(data?.harga) || 0;
   const hargaPromo = parseFloat(data?.harga_promo) || 0;
-  const hargaFinal = hargaPromo > 0 ? hargaPromo : harga;
+  const hargaFinal = hargaPromo > 0 && hargaPromo < harga ? hargaPromo : harga;
 
   const lokasiSingkat =
     data?.kota ||
@@ -149,7 +149,7 @@ export default function DetailInfo({ data }: DetailInfoProps) {
 
   const harga = parseFloat(data?.harga) || 0;
   const hargaPromo = parseFloat(data?.harga_promo) || 0;
-  const hargaFinal = hargaPromo > 0 ? hargaPromo : harga;
+  const hargaFinal = hargaPromo > 0 && hargaPromo < harga ? hargaPromo : harga;
 
   const calculateKPR = () => {
     const dp = hargaFinal * (dpPercentage / 100);
