@@ -2,7 +2,7 @@
 import TransaksiPageClient from "./components/TransaksiPageClient";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
 
 export const dynamic = "force-dynamic";
 

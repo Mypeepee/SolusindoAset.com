@@ -4,7 +4,7 @@ import prisma from '@/lib/prisma';
 export const dynamic = 'force-dynamic';
 
 // Slot waktu baku (jam lokal WIB)
-export const TIME_SLOTS = [
+const TIME_SLOTS = [
   { label: '08:00', hour: 8 },
   { label: '09:00', hour: 9 },
   { label: '10:00', hour: 10 },

@@ -5,7 +5,7 @@ import prisma from "@/lib/prisma";
 import DetailClient from "./DetailClient";
 import { getSimilarItems } from "./lib/similar";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
 
 interface Props {
   params: {

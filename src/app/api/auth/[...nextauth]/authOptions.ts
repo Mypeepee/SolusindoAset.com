@@ -1,12 +1,9 @@
-// src/app/api/auth/[...nextauth]/route.ts
-import NextAuth, { type AuthOptions } from "next-auth";
+// src/app/api/auth/[...nextauth]/authOptions.ts
+import { type AuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcrypt";
-
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 
 /**
  * ✅ Prisma singleton (dev-safe)
@@ -353,6 +350,3 @@ export const authOptions: AuthOptions = {
 
   debug: process.env.NODE_ENV === "development",
 };
-
-const handler = NextAuth(authOptions);
-export { handler as GET, handler as POST };

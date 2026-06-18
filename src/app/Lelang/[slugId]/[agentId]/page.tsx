@@ -6,7 +6,7 @@ import prisma from "@/lib/prisma";
 import DetailClient from "../DetailClient";
 import { getSimilarItems } from "@/app/Jual/[slug]/lib/similar";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
 
 interface ParamsShape {
   slugId: string;

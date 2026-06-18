@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import ListingsPage from "./components/listings-page";
 import { fetchListingHeaderStats } from "./lib/property-stats";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
 
 const PAGE_SIZE = 27;
 

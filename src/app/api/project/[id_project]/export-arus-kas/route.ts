@@ -134,7 +134,7 @@ export async function GET(
   // ── Buka template ────────────────────────────────────────────
   const templatePath = path.join(
     process.cwd(),
-    "src/app/dashboard/project/detail_transaksi/%5Bid_project%5D/arus_kas/components/Solusindo_Premier_Laporan_LelangTerbaru.xlsx"
+    "src/app/dashboard/project/detail_transaksi/[id_project]/arus_kas/components/Solusindo_Premier_Laporan_LelangTerbaru.xlsx"
   );
   const wb = await XlsxPopulate.fromDataAsync(fs.readFileSync(templatePath));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

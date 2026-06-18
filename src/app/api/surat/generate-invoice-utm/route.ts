@@ -7,7 +7,7 @@ import { promisify } from "util";
 import { tmpdir } from "os";
 import { join } from "path";
 import path from "path";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
 import { prisma } from "@/lib/prisma";
 
 export const runtime  = "nodejs";

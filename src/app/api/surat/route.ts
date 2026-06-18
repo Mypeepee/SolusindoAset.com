@@ -1,9 +1,18 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-});
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+// Lazy init: jangan buat client saat modul di-import (build time),
+// supaya `next build` tidak gagal ketika OPENAI_API_KEY belum di-set.
+let _openai: OpenAI | null = null;
+function getOpenAI() {
+  if (!_openai) {
+    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return _openai;
+}
 
 export async function POST(req: Request) {
   try {
@@ -39,7 +48,7 @@ Return JSON only:
 }
 `;
 
-    const response = await openai.responses.create({
+    const response = await getOpenAI().responses.create({
       model: "gpt-4.1",
       input: [
         {

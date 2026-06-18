@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions';
 
 const ALLOWED_STATUS = ['TERSEDIA', 'TERJUAL', 'TARIK_LISTING'] as const;
 type StatusEnum = (typeof ALLOWED_STATUS)[number];

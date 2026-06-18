@@ -3,7 +3,6 @@ import Image from "next/image";
 import nextImg from "/public/images/documentation/Categories=Nextjs.svg";
 import reactImg from "/public/images/documentation/Categories=React.svg";
 import tailwindImg from "/public/images/documentation/Categories=Tailwind.svg";
-import nextauthImg from "/public/images/documentation/nextauth.png";
 import typescriptImg from "/public/images/documentation/Categories=Typescript.svg";
 import axiosImg from "/public/images/documentation/axios.svg";
 import { Icon } from "@iconify/react/dist/iconify.js";
@@ -31,12 +30,6 @@ export const Introduction = () => {
       packageName: "Tailwindcss",
       img: tailwindImg,
       version: "3.4.1",
-    },
-    {
-      id: "4",
-      packageName: "NextAuth",
-      img: nextauthImg,
-      version: "4.24.7",
     },
     {
       id: "5",
