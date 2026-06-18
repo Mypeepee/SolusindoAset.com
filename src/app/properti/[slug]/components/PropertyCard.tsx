@@ -34,6 +34,13 @@ function TransaksiBadge({ type }: { type: string }) {
         Sewa
       </span>
     );
+  if (t === "LELANG")
+    return (
+      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.12em] text-amber-100 bg-amber-500/25 border border-amber-400/50 backdrop-blur-sm">
+        <Icon icon="solar:gavel-bold" className="text-xs" />
+        Lelang
+      </span>
+    );
   return null;
 }
 
@@ -204,10 +211,13 @@ export default function PropertyCard({ item, forceAlamatLengkap = false }: Prope
             </span>
           </div>
 
-          {/* badge kanan: tipe transaksi */}
-          <div className="absolute top-4 right-4 z-10">
+          {/* badge kanan: tipe transaksi (selalu tampil, termasuk LELANG) */}
+          <div className="absolute top-4 right-4 z-10 flex flex-col items-end gap-1.5">
             {isLelang ? (
-              <LelangBadge tanggal_lelang={item.tanggal_lelang} />
+              <>
+                <TransaksiBadge type="LELANG" />
+                <LelangBadge tanggal_lelang={item.tanggal_lelang} />
+              </>
             ) : (
               <TransaksiBadge type={item.jenis_transaksi} />
             )}

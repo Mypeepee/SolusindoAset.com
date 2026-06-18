@@ -4,6 +4,7 @@ import { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import DetailClient from "../DetailClient";
+import { getSimilarItems } from "@/app/Jual/[slug]/lib/similar";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
@@ -88,55 +89,6 @@ async function getProperty(id: bigint) {
   if (product.status_tayang !== "TERSEDIA") return null;
 
   return product;
-}
-
-async function getSimilarProperties(currentProperty: any) {
-  try {
-    const similarProperties = await prisma.listing.findMany({
-      where: {
-        AND: [
-          { id_property: { not: currentProperty.id_property } },
-          {
-            OR: [
-              { kota: currentProperty.kota },
-              { kategori: currentProperty.kategori },
-            ],
-          },
-          { status_tayang: "TERSEDIA" },
-          { jenis_transaksi: "LELANG" },
-        ],
-      },
-      include: {
-        agent: {
-          select: {
-            id_agent: true,
-            nama_kantor: true,
-            rating: true,
-            jumlah_closing: true,
-            nomor_whatsapp: true,
-            kota_area: true,
-            jabatan: true,
-            foto_profil_url: true,
-            pengguna: {
-              select: {
-                nama_lengkap: true,
-                nomor_telepon: true,
-                email: true,
-                // ❌ HAPUS foto_profil_url
-              },
-            },
-          },
-        },
-      },
-      take: 50,
-      orderBy: [{ is_hot_deal: "desc" }, { tanggal_dibuat: "desc" }],
-    });
-
-    return similarProperties;
-  } catch (error) {
-    console.error("❌ Error fetching similar properties:", error);
-    return [];
-  }
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -299,26 +251,8 @@ export default async function DetailPage({ params }: Props) {
   const finalFotoArray =
     fotoArray.length > 0 ? fotoArray : ["/images/hero/banner.jpg"];
 
-  const similarPropertiesRaw = await getSimilarProperties(product);
-
-  const similarProperties = similarPropertiesRaw.map((prop) => {
-    const propGambar = prop.gambar || "";
-    const propFotoArray =
-      propGambar.trim().length > 0
-        ? propGambar
-            .split(",")
-            .map((s) => s.trim())
-            .filter((s) => s.length > 0)
-        : ["/images/hero/banner.jpg"];
-
-    const agentPhotoUrl = normalizeAgentPhoto(prop.agent?.foto_profil_url);
-
-    return {
-      ...prop,
-      foto_list: propFotoArray,
-      agent_photo: agentPhotoUrl,
-    };
-  });
+  // Rekomendasi "Properti Serupa" — campuran Primary/Secondary/Lelang, di-ranking relevansi.
+  const similarItems = await getSimilarItems(product);
 
   const productAgentPhoto = normalizeAgentPhoto(
     product.agent?.foto_profil_url
@@ -331,14 +265,13 @@ export default async function DetailPage({ params }: Props) {
       foto_profil_url: productAgentPhoto,
     },
   });
-  const similarForClient = serializePrisma(similarProperties);
 
   return (
     <main className="bg-[#0F0F0F] min-h-screen text-white">
       <DetailClient
         product={productForClient}
         fotoArray={finalFotoArray}
-        similarProperties={similarForClient}
+        similarProperties={similarItems}
         currentAgentId={currentAgentId}
         currentRole={role}
         currentJabatan={jabatan}

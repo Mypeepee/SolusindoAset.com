@@ -9,6 +9,7 @@ import ImageGallery from "./[agentId]/components/ImageGalleryLelang";
 import DetailInfo from "./[agentId]/components/DetailInfoLelang";
 import BookingSidebar from "./[agentId]/components/AgentSidebarLelang";
 import SimilarProperties from "./[agentId]/components/SimilarPropertiesLelang";
+import type { PropertyItem } from "@/app/properti/[slug]/types";
 import KeperluanAgent from "./[agentId]/components/KeperluanAgent";
 
 interface ProductData {
@@ -74,7 +75,7 @@ interface ProductData {
 interface DetailClientProps {
   product: ProductData;
   fotoArray: string[];
-  similarProperties?: ProductData[];
+  similarProperties?: PropertyItem[];
   currentAgentId?: string | null;
   currentRole?: "AGENT" | "OWNER" | "USER" | string | null;
   currentJabatan?: string | null;
@@ -242,38 +243,6 @@ export default function DetailClient({
 
   const [selectedRoom, setSelectedRoom] = useState(minimalRoom);
 
-  // ✅ FORMAT SIMILAR PROPERTIES DENGAN GAMBAR YANG SUDAH DINORMALISASI
-  const formattedSimilarProperties = similarProperties.map((p) => {
-    const photoList = Array.isArray(p.foto_list) && p.foto_list.length > 0
-      ? p.foto_list
-      : [p.gambar || "/images/hero/banner.jpg"];
-
-    const pHarga = convertToNumber(p.harga);
-    const pHargaPromo =
-      p.harga_promo !== undefined && p.harga_promo !== null
-        ? convertToNumber(p.harga_promo)
-        : null;
-    const pNilaiLimit =
-      p.nilai_limit_lelang !== undefined && p.nilai_limit_lelang !== null
-        ? convertToNumber(p.nilai_limit_lelang)
-        : null;
-
-    return {
-      ...p,
-      slug: p.slug || "",
-      gambar: photoList[0],
-      foto_list: photoList,
-      agent_name: p.agent?.pengguna?.nama_lengkap || "Agent Premier",
-      agent_photo: p.agent_photo || "/images/user/user-01.png",
-      harga: pHarga,
-      harga_promo: pHargaPromo,
-      nilai_limit_lelang: pNilaiLimit,
-      jenis_transaksi: p.jenis_transaksi,
-      dilihat: p.dilihat ?? 0,
-      is_hot_deal: p.is_hot_deal ?? false,
-    };
-  });
-
   const ownerId: string = (propertyData as any).owner?.id || "";
 
   const canEdit =
@@ -340,10 +309,7 @@ export default function DetailClient({
         </div>
       </div>
 
-      <SimilarProperties
-        currentProperty={propertyData as any}
-        allProperties={formattedSimilarProperties as any}
-      />
+      <SimilarProperties items={similarProperties} />
     </div>
   );
 }
