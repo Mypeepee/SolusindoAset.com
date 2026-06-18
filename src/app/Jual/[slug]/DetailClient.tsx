@@ -10,6 +10,7 @@ import ImageGallery from "./[agentId]/components/ImageGallery";
 import DetailInfo from "./[agentId]/components/DetailInfo";
 import BookingSidebar from "./[agentId]/components/AgentSidebar";
 import SimilarProperties from "./[agentId]/components/SimilarProperties";
+import type { PropertyItem } from "@/app/properti/[slug]/types";
 
 // ================== INTERFACE ==================
 interface ProductData {
@@ -66,12 +67,14 @@ interface ProductData {
 interface DetailClientProps {
   product: ProductData;
   currentAgentId?: string | null;
+  similarProperties?: PropertyItem[];
 }
 
 // ================== COMPONENT ==================
 export default function DetailClient({
   product,
   currentAgentId,
+  similarProperties = [],
 }: DetailClientProps) {
   // ================== INCREMENT VIEW ==================
   useEffect(() => {
@@ -271,7 +274,7 @@ export default function DetailClient({
         </div>
       </div>
 
-      <SimilarProperties />
+      <SimilarProperties items={similarProperties} />
     </div>
   );
 }

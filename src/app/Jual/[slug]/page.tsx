@@ -3,6 +3,7 @@ import { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import DetailClient from "./DetailClient";
+import { getSimilarItems } from "./lib/similar";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
@@ -122,60 +123,6 @@ async function getProperty(id: bigint) {
   return product;
 }
 
-// Similar properties (khusus PRIMARY/SECONDARY, bukan LELANG/SEWA)
-async function getSimilarProperties(currentProperty: any) {
-  try {
-    const similar = await prisma.listing.findMany({
-      where: {
-        AND: [
-          { id_property: { not: currentProperty.id_property } },
-          {
-            OR: [
-              { kota: currentProperty.kota },
-              { kategori: currentProperty.kategori },
-            ],
-          },
-          { status_tayang: "TERSEDIA" },
-          {
-            jenis_transaksi: {
-              in: ["PRIMARY", "SECONDARY"], // enum jenis_transaksi_enum
-            },
-          },
-        ],
-      },
-      include: {
-        agent: {
-          select: {
-            nama_kantor: true,
-            rating: true,
-            jumlah_closing: true,
-            nomor_whatsapp: true,
-            kota_area: true,
-            jabatan: true,
-            foto_profil_url: true,
-            pengguna: {
-              select: {
-                nama_lengkap: true,
-                nomor_telepon: true,
-                email: true,
-              },
-            },
-          },
-        },
-      },
-      take: 50,
-      orderBy: [
-        { is_hot_deal: "desc" },
-        { tanggal_dibuat: "desc" },
-      ],
-    });
-
-    return similar;
-  } catch (error) {
-    console.error("❌ Error fetching similar properties (Jual):", error);
-    return [];
-  }
-}
 
 // --------- METADATA ----------
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -317,27 +264,13 @@ export default async function DetailPage({ params }: Props) {
 
   const finalFotoArray = [firstImage];
 
-  const similarPropertiesRaw = await getSimilarProperties(product);
-  const similarProperties = similarPropertiesRaw.map((prop) => {
-    const propFotoList = buildFotoList(prop.gambar);
-    const firstImg = propFotoList[0] || "/images/hero/banner.jpg";
-    return {
-      ...prop,
-      gambar_utama_url: firstImg,
-      foto_list: propFotoList,
-    };
-  });
+  const similarItems = await getSimilarItems(product);
 
   const serializedProduct = {
     ...serializeListing(product),
     gambar_utama_url: firstImage,
     foto_list,
   };
-  const serializedSimilar = similarProperties.map((prop) => ({
-    ...serializeListing(prop),
-    gambar_utama_url: prop.gambar_utama_url,
-    foto_list: prop.foto_list,
-  }));
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -400,7 +333,7 @@ export default async function DetailPage({ params }: Props) {
       <DetailClient
         product={serializedProduct as any}
         currentAgentId={null}
-        similarProperties={serializedSimilar as any}
+        similarProperties={similarItems}
       />
     </main>
   );

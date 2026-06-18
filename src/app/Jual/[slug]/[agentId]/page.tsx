@@ -3,6 +3,7 @@ import { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import DetailClient from "../DetailClient";
+import { getSimilarItems } from "../lib/similar";
 
 interface Props {
   params: {
@@ -104,60 +105,6 @@ async function getProperty(id: bigint) {
   if (product.status_tayang !== "TERSEDIA") return null;
 
   return product;
-}
-
-async function getSimilarProperties(currentProperty: any) {
-  try {
-    const similar = await prisma.listing.findMany({
-      where: {
-        AND: [
-          { id_property: { not: currentProperty.id_property } },
-          {
-            OR: [
-              { kota: currentProperty.kota },
-              { kategori: currentProperty.kategori },
-            ],
-          },
-          { status_tayang: "TERSEDIA" },
-          {
-            jenis_transaksi: {
-              in: ["PRIMARY", "SECONDARY"],
-            },
-          },
-        ],
-      },
-      include: {
-        agent: {
-          select: {
-            nama_kantor: true,
-            rating: true,
-            jumlah_closing: true,
-            nomor_whatsapp: true,
-            kota_area: true,
-            jabatan: true,
-            foto_profil_url: true,
-            pengguna: {
-              select: {
-                nama_lengkap: true,
-                nomor_telepon: true,
-                email: true,
-              },
-            },
-          },
-        },
-      },
-      take: 50,
-      orderBy: [
-        { is_hot_deal: "desc" },
-        { tanggal_dibuat: "desc" },
-      ],
-    });
-
-    return similar;
-  } catch (error) {
-    console.error("❌ Error fetching similar properties (Jual/agent):", error);
-    return [];
-  }
 }
 
 // --------- METADATA ----------
@@ -285,16 +232,7 @@ export default async function DetailPage({ params }: Props) {
   const foto_list = buildFotoList(product.gambar);
   const firstImage = foto_list[0] || "/images/hero/banner.jpg";
 
-  const similarPropertiesRaw = await getSimilarProperties(product);
-  const similarProperties = similarPropertiesRaw.map((prop) => {
-    const propFotoList = buildFotoList(prop.gambar);
-    const img = propFotoList[0] || "/images/hero/banner.jpg";
-    return {
-      ...prop,
-      gambar_utama_url: img,
-      foto_list: propFotoList,
-    };
-  });
+  const similarItems = await getSimilarItems(product);
 
   const canonicalUrl = `https://premierasset.com/Jual/${slug}`;
 
@@ -345,10 +283,6 @@ export default async function DetailPage({ params }: Props) {
     ...serializeListing(product),
     foto_list,
   };
-  const serializedSimilar = similarProperties.map((prop) => ({
-    ...serializeListing(prop),
-    foto_list: prop.foto_list,
-  }));
 
   return (
     <main className="bg-[#0F0F0F] min-h-screen text-white">
@@ -368,7 +302,7 @@ export default async function DetailPage({ params }: Props) {
       <DetailClient
         product={serializedProduct}
         currentAgentId={agentId}
-        similarProperties={serializedSimilar}
+        similarProperties={similarItems}
       />
     </main>
   );
