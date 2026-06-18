@@ -788,3 +788,139 @@ section {
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 .crm-pop { animation: crm-pop 0.16s cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* ──────────────────────────────────────────────────────────────
+   BLOG / BERITA — editorial article body typography
+   Scoped to .article-body so it only styles rendered markdown.
+   ────────────────────────────────────────────────────────────── */
+.article-body {
+  color: #cbd2d9;
+  font-size: 1.075rem;
+  line-height: 1.85;
+  font-weight: 400;
+}
+.article-body > * + * { margin-top: 1.35rem; }
+.article-body p { color: #c2cad3; }
+.article-body strong { color: #ffffff; font-weight: 700; }
+.article-body em { color: #e6ebf0; }
+.article-body a {
+  color: #6ee7b7;
+  text-decoration: underline;
+  text-decoration-color: rgba(110, 231, 183, 0.35);
+  text-underline-offset: 3px;
+  transition: color 0.2s, text-decoration-color 0.2s;
+}
+.article-body a:hover { color: #a7f3d0; text-decoration-color: #6ee7b7; }
+
+.article-body h2 {
+  scroll-margin-top: 110px;
+  margin-top: 2.75rem;
+  font-size: 1.6rem;
+  line-height: 1.25;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+  padding-left: 0.9rem;
+  border-left: 3px solid #34d399;
+}
+.article-body h3 {
+  scroll-margin-top: 110px;
+  margin-top: 2.25rem;
+  font-size: 1.28rem;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+.article-body h4 {
+  margin-top: 1.75rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.article-body ul,
+.article-body ol { padding-left: 1.4rem; }
+.article-body ul { list-style: none; }
+.article-body ul > li { position: relative; padding-left: 0.4rem; }
+.article-body ul > li::before {
+  content: "";
+  position: absolute;
+  left: -0.9rem;
+  top: 0.72em;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: #34d399;
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.6);
+}
+.article-body ol { list-style: decimal; }
+.article-body ol > li::marker { color: #6ee7b7; font-weight: 700; }
+.article-body li + li { margin-top: 0.5rem; }
+
+.article-body blockquote {
+  border-left: 3px solid rgba(52, 211, 153, 0.5);
+  background: rgba(52, 211, 153, 0.06);
+  border-radius: 0 0.75rem 0.75rem 0;
+  padding: 1rem 1.25rem;
+  color: #d1fae5;
+  font-style: italic;
+}
+.article-body blockquote p { color: #d1fae5; }
+
+.article-body img {
+  width: 100%;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 1.75rem;
+}
+
+.article-body code {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.4rem;
+  padding: 0.12rem 0.4rem;
+  font-size: 0.9em;
+  color: #a7f3d0;
+}
+.article-body pre {
+  background: #0a0a0a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  padding: 1.1rem 1.25rem;
+  overflow-x: auto;
+}
+.article-body pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: #e2e8f0;
+}
+
+.article-body hr {
+  border: 0;
+  height: 1px;
+  margin: 2.5rem 0;
+  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.14), transparent);
+}
+
+/* Dropcap on the opening paragraph */
+.article-body > p:first-of-type::first-letter {
+  float: left;
+  font-size: 3.1rem;
+  line-height: 0.82;
+  font-weight: 800;
+  margin: 0.18rem 0.7rem 0 0;
+  color: #34d399;
+}
+
+.article-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+.article-body th,
+.article-body td {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.6rem 0.85rem;
+  text-align: left;
+}
+.article-body th { background: rgba(255, 255, 255, 0.04); color: #fff; font-weight: 700; }

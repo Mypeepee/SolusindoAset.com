@@ -37,6 +37,17 @@ export async function middleware(req: NextRequest) {
         return NextResponse.redirect(url);
       }
     }
+
+    // ✅ Kelola Berita hanya untuk OWNER, ADMIN & PRINCIPAL
+    if (pathname.startsWith("/dashboard/berita")) {
+      const jabatan = String((token as any).jabatan || "").toUpperCase();
+      if (!["OWNER", "ADMIN", "PRINCIPAL"].includes(jabatan)) {
+        const url = req.nextUrl.clone();
+        url.pathname = "/dashboard";
+        url.searchParams.set("reason", "forbidden");
+        return NextResponse.redirect(url);
+      }
+    }
   }
 
   // ✅ Optional: larang agent buka gabung-jadi-agent

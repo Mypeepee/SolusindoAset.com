@@ -1,9 +1,13 @@
 // app/api/HRM/status/route.ts
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { sendAgentDecisionEmail } from "@/lib/mailer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://solusindoaset.com";
+const SUPPORT_EMAIL = "closingsystem@gmail.com";
 
 type Status = "AKTIF" | "PENDING" | "SUSPEND";
 type Role = "USER" | "AGENT";
@@ -30,10 +34,16 @@ export async function PUT(req: Request) {
       );
     }
 
-    // Ambil agent + id_pengguna (wajib untuk update role pengguna)
+    // Ambil agent + id_pengguna (wajib untuk update role pengguna) + data untuk email
     const existingAgent = await prisma.agent.findUnique({
       where: { id_agent },
-      select: { id_agent: true, id_pengguna: true, status_keanggotaan: true },
+      select: {
+        id_agent: true,
+        id_pengguna: true,
+        status_keanggotaan: true,
+        nama_kantor: true,
+        pengguna: { select: { email: true, nama_lengkap: true } },
+      },
     });
 
     if (!existingAgent) {
@@ -44,6 +54,7 @@ export async function PUT(req: Request) {
     }
 
     const id_pengguna = existingAgent.id_pengguna;
+    const prevStatus = existingAgent.status_keanggotaan; // untuk menentukan isi email
 
     // Tentukan perubahan role berdasarkan status
     // - AKTIF: role -> AGENT
@@ -72,6 +83,32 @@ export async function PUT(req: Request) {
 
       return { agent, pengguna };
     });
+
+    // 📧 Email keputusan ke AGENT (best-effort, non-blocking) — hanya bila status
+    // benar-benar berubah dan menjadi AKTIF (diterima) atau SUSPEND (ditolak).
+    const agentEmail = existingAgent.pengguna?.email;
+    if (
+      agentEmail &&
+      status_keanggotaan !== prevStatus &&
+      (status_keanggotaan === "AKTIF" || status_keanggotaan === "SUSPEND")
+    ) {
+      const accepted = status_keanggotaan === "AKTIF";
+      const wasPending = prevStatus === "PENDING";
+      const actionUrl = accepted
+        ? `${BASE_URL}/dashboard`
+        : wasPending
+          ? `${BASE_URL}/gabung-jadi-agent`
+          : `mailto:${SUPPORT_EMAIL}`;
+
+      sendAgentDecisionEmail(agentEmail, {
+        agentName: existingAgent.pengguna?.nama_lengkap || "Agent",
+        agentId: existingAgent.id_agent,
+        office: existingAgent.nama_kantor,
+        decision: accepted ? "ACCEPTED" : "REJECTED",
+        wasPending,
+        actionUrl,
+      }).catch((e) => console.warn("sendAgentDecisionEmail failed:", e));
+    }
 
     return NextResponse.json(
       {

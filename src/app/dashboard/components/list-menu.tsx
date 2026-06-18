@@ -60,7 +60,11 @@ export interface MenuItem {
     transaksi: { label: "Transaksi", icon: "solar:hand-money-linear", href: "/dashboard/transaksi" },
     crm: { label: "CRM", icon: "solar:users-group-rounded-linear", href: "/dashboard/crm" },
     project: { label: "Project", icon: "solar:presentation-graph-linear", href: "/dashboard/project" },
+    berita: { label: "Berita", icon: "solar:notebook-linear", href: "/dashboard/berita" },
   };
+
+  // Jabatan yang boleh mengelola berita (sinkron dengan API + middleware).
+  const BERITA_EDITORS = ["OWNER", "ADMIN", "PRINCIPAL"];
 
   export type DashboardMenu = { homepage: MenuItem[]; apps: MenuItem[] };
 
@@ -73,8 +77,13 @@ export interface MenuItem {
   export function getDashboardMenu(jabatan?: string | null): DashboardMenu {
     const j = (jabatan || "").toUpperCase();
 
+    const canBerita = BERITA_EDITORS.includes(j);
+
     if (j === "OWNER") {
-      return { homepage: homepageMenu, apps: appsMenu };
+      return {
+        homepage: canBerita ? [...homepageMenu, MENU.berita] : homepageMenu,
+        apps: appsMenu,
+      };
     }
 
     if (j === "PRINCIPAL") {
@@ -87,6 +96,7 @@ export interface MenuItem {
           MENU.transaksi,
           MENU.crm,
           MENU.project,
+          ...(canBerita ? [MENU.berita] : []),
         ],
         apps: [],
       };
@@ -101,6 +111,7 @@ export interface MenuItem {
         MENU.transaksi,
         MENU.crm,
         MENU.project,
+        ...(canBerita ? [MENU.berita] : []),
       ],
       apps: [],
     };

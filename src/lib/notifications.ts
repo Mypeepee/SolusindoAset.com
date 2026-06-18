@@ -1,6 +1,119 @@
 import prisma from "@/lib/prisma";
 import { pusherServer } from "@/lib/pusher-server";
+import { sendNewAgentEmail } from "@/lib/mailer";
 import { jabatan_agent_enum, status_agent_enum } from "@prisma/client";
+
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://solusindoaset.com";
+
+/**
+ * Kirim email "agent baru bergabung" (best-effort) ke:
+ *  - Semua OWNER aktif (lintas kantor)
+ *  - PRINCIPAL aktif dari kantor yang sama dengan agent baru
+ *  - UPLINE (kalau daftar via kode referral) — dengan narasi "referral"
+ *
+ * Dedup ketat berdasarkan email: satu orang hanya menerima SATU email meski
+ * cocok di beberapa peran. Khususnya bila upline ternyata adalah owner /
+ * principal kantor itu sendiri, ia hanya menerima email pimpinan (bukan ganda).
+ * Agent itu sendiri juga tidak pernah dikirimi.
+ * Tidak melempar error agar tidak mengganggu alur pendaftaran.
+ */
+async function emailNewAgentNotifications(
+  id_agent: string,
+  nama_lengkap: string,
+  id_upline?: string | null,
+) {
+  try {
+    const baru = await prisma.agent.findUnique({
+      where: { id_agent },
+      select: {
+        id_agent: true,
+        nama_kantor: true,
+        kota_area: true,
+        nomor_whatsapp: true,
+        tanggal_gabung: true,
+        pengguna: { select: { email: true } },
+      },
+    });
+    if (!baru) return;
+
+    const reviewUrl = `${BASE_URL}/dashboard/human-resource-management?agent=${id_agent}`;
+
+    // Field email yang sama untuk semua peran.
+    const base = {
+      agentName: nama_lengkap,
+      agentId: baru.id_agent,
+      office: baru.nama_kantor,
+      area: baru.kota_area,
+      whatsapp: baru.nomor_whatsapp,
+      agentEmail: baru.pengguna?.email ?? null,
+      joinedAt: baru.tanggal_gabung,
+      reviewUrl,
+    };
+
+    // Dedup global berdasarkan email; seed dengan email agent itu sendiri agar
+    // ia tidak pernah menerima notifikasi tentang dirinya sendiri.
+    const seen = new Set<string>();
+    const selfEmail = baru.pengguna?.email?.trim().toLowerCase();
+    if (selfEmail) seen.add(selfEmail);
+
+    const jobs: Promise<unknown>[] = [];
+
+    // 1) Pimpinan: OWNER (lintas kantor) + PRINCIPAL kantor yang sama.
+    const pimpinan = await prisma.agent.findMany({
+      where: {
+        status_keanggotaan: status_agent_enum.AKTIF,
+        id_agent: { not: id_agent },
+        OR: [
+          { jabatan: jabatan_agent_enum.OWNER },
+          { jabatan: jabatan_agent_enum.PRINCIPAL, nama_kantor: baru.nama_kantor },
+        ],
+      },
+      select: {
+        jabatan: true,
+        pengguna: { select: { email: true, nama_lengkap: true } },
+      },
+    });
+
+    for (const p of pimpinan) {
+      const email = p.pengguna?.email?.trim().toLowerCase();
+      if (!email || seen.has(email)) continue; // dedup
+      seen.add(email);
+      jobs.push(
+        sendNewAgentEmail(p.pengguna!.email!, {
+          ...base,
+          recipientName: p.pengguna?.nama_lengkap ?? null,
+          recipientRole:
+            p.jabatan === jabatan_agent_enum.OWNER ? "OWNER" : "PRINCIPAL",
+        }).catch((e) => console.warn("sendNewAgentEmail (pimpinan) failed:", e)),
+      );
+    }
+
+    // 2) UPLINE — kecuali ia sudah menerima email sebagai owner/principal kantor
+    //    itu (mis. upline = principal kantornya sendiri / = owner). Tidak ganda.
+    if (id_upline) {
+      const upline = await prisma.agent.findUnique({
+        where: { id_agent: id_upline },
+        select: { pengguna: { select: { email: true, nama_lengkap: true } } },
+      });
+      const email = upline?.pengguna?.email?.trim().toLowerCase();
+      if (email && !seen.has(email)) {
+        seen.add(email);
+        jobs.push(
+          sendNewAgentEmail(upline!.pengguna!.email!, {
+            ...base,
+            recipientName: upline!.pengguna?.nama_lengkap ?? null,
+            recipientRole: "UPLINE",
+            uplineCode: id_upline,
+          }).catch((e) => console.warn("sendNewAgentEmail (upline) failed:", e)),
+        );
+      }
+    }
+
+    await Promise.all(jobs);
+  } catch (e) {
+    console.warn("emailNewAgentNotifications failed:", e);
+  }
+}
 
 /**
  * Dipanggil saat agent baru pertama kali submit pendaftaran (status PENDING).
@@ -24,6 +137,9 @@ export async function notifyNewAgentRegistration(params: {
     select: { id_notifikasi: true },
   });
   if (already) return;
+
+  // 📧 Email ultra-premium ke OWNER, PRINCIPAL kantor & UPLINE (best-effort).
+  await emailNewAgentNotifications(id_agent, nama_lengkap, id_upline);
 
   const recipients: Array<{
     id_pengguna: string;
