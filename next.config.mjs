@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: false,
-
+  swcMinify: false,
   // Jangan gagalkan production build hanya karena error type/lint.
   // Kode tetap dikompilasi & berjalan (type dihapus saat build). Utang
   // type-strictness bisa dibereskan bertahap tanpa memblokir deploy.
