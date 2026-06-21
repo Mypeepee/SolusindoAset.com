@@ -103,9 +103,11 @@ interface PropertyCardProps {
   item: PropertyItem;
   /** Kalau true, selalu tampilkan alamat_lengkap tanpa lihat jenis_transaksi. */
   forceAlamatLengkap?: boolean;
+  /** Mode kompak untuk tampilan "Properti Serupa" — image lebih pendek, padding lebih kecil. */
+  compact?: boolean;
 }
 
-export default function PropertyCard({ item, forceAlamatLengkap = false }: PropertyCardProps) {
+export default function PropertyCard({ item, forceAlamatLengkap = false, compact = false }: PropertyCardProps) {
   const [imgIdx, setImgIdx] = useState(0);
   const images =
     item.foto_list.length > 0
@@ -154,7 +156,7 @@ export default function PropertyCard({ item, forceAlamatLengkap = false }: Prope
       >
         {/* ── IMAGE ── */}
         <div
-          className="relative h-64 w-full overflow-hidden"
+          className={`relative w-full overflow-hidden ${compact ? "h-44" : "h-64"}`}
           {...(images.length > 1 ? swipe : {})}
         >
           <Image
@@ -240,9 +242,9 @@ export default function PropertyCard({ item, forceAlamatLengkap = false }: Prope
         </div>
 
         {/* ── CONTENT ── */}
-        <div className="p-5 flex flex-col flex-grow bg-gradient-to-b from-slate-900/80 via-slate-950/90 to-black border-t border-slate-800">
+        <div className={`flex flex-col flex-grow bg-gradient-to-b from-slate-900/80 via-slate-950/90 to-black border-t border-slate-800 ${compact ? "p-3" : "p-5"}`}>
           {/* Harga */}
-          <div className="mb-2">
+          <div className={compact ? "mb-1" : "mb-2"}>
             {hasDiscount ? (
               <>
                 <div className="flex items-baseline gap-2">
@@ -269,14 +271,14 @@ export default function PropertyCard({ item, forceAlamatLengkap = false }: Prope
 
           {/* Judul */}
           <h4
-            className="text-gray-100 text-base font-bold line-clamp-2 group-hover:text-primary transition-colors mb-2"
+            className={`text-gray-100 font-bold line-clamp-2 group-hover:text-primary transition-colors ${compact ? "text-sm mb-1" : "text-base mb-2"}`}
             title={item.judul}
           >
             {item.judul}
           </h4>
 
           {/* Lokasi */}
-          <div className="flex items-start gap-2 mb-4">
+          <div className={`flex items-start gap-2 ${compact ? "mb-2" : "mb-4"}`}>
             <Icon
               icon="solar:map-point-wave-bold"
               className="text-primary text-base shrink-0 mt-0.5"
@@ -291,7 +293,7 @@ export default function PropertyCard({ item, forceAlamatLengkap = false }: Prope
           </div>
 
           {/* Specs box */}
-          <div className="bg-gradient-to-r from-slate-900/90 via-slate-900/80 to-slate-950/90 rounded-2xl p-3 mb-4 border border-slate-700/80 shadow-[0_12px_35px_rgba(0,0,0,0.8)]">
+          <div className={`bg-gradient-to-r from-slate-900/90 via-slate-900/80 to-slate-950/90 rounded-xl border border-slate-700/80 shadow-[0_12px_35px_rgba(0,0,0,0.8)] ${compact ? "p-2 mb-2" : "p-3 mb-4 rounded-2xl"}`}>
             {isLelang ? (
               <div className="flex justify-between items-center px-1">
                 <div className="flex items-center gap-2">
@@ -340,7 +342,7 @@ export default function PropertyCard({ item, forceAlamatLengkap = false }: Prope
           </div>
 
           {/* Agent + CTA */}
-          <div className="mt-auto pt-4 flex items-center justify-between border-t border-slate-800 -mx-5 px-5 pb-1">
+          <div className={`mt-auto flex items-center justify-between border-t border-slate-800 pb-1 ${compact ? "pt-2 -mx-3 px-3" : "pt-4 -mx-5 px-5"}`}>
             <div className="flex items-center gap-2.5">
               <div className="relative w-9 h-9 rounded-full p-[1px] bg-gradient-to-tr from-primary to-transparent shrink-0">
                 <div className="w-full h-full rounded-full overflow-hidden border-2 border-[#151515] relative">

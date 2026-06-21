@@ -68,7 +68,7 @@ function useCountUp(target: number, trigger: boolean): number {
 function CategoryCard({ cat, count, isLoading }: { cat: CategoryItem; count: number; isLoading: boolean }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = useState(false);
-  const inView = useInView(cardRef, { once: true, margin: "-60px" });
+  const inView = useInView(cardRef, { once: true, amount: 0 });
   const shouldCount = inView && !isLoading;
   const displayCount = useCountUp(count, shouldCount);
 

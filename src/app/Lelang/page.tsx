@@ -147,11 +147,13 @@ export default async function SearchPage({ searchParams }: Props) {
       ? Number(searchParams.maxLB)
       : undefined;
 
-  // ✅ Sort parameter (default: lelang-terdekat)
+  // ✅ Sort parameter (default: terbaru — TANPA filter tanggal otomatis).
+  //    Filter waktu lelang (terdekat/terjauh/berlalu) hanya aktif jika user
+  //    memilihnya sendiri lewat SortBar.
   const sortRaw =
     typeof searchParams.sort === "string"
       ? searchParams.sort
-      : "lelang-terdekat";
+      : "terbaru";
 
   const limit = 18;
   const skip = (page - 1) * limit;

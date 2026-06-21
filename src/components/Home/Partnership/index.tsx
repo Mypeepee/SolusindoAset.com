@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 
@@ -18,49 +18,43 @@ const partners = [
   { name: "Permata", logo: "/images/logo/Permata.svg.png" },
 ];
 
-const row = [...partners, ...partners, ...partners];
+// 2 salinan → loop seamless saat track digeser -50%.
+const loop = [...partners, ...partners];
+
+// Kecepatan: ~2.5 dtk per logo (kalem & terbaca, bukan ngebut).
+const DURATION = `${partners.length * 2.5}s`;
+
+/**
+ * Satu baris logo yang bergeser. `colored=false` → versi putih monokrom
+ * (terlihat di dark mode). `colored=true` → warna asli (dipakai layer atas
+ * yang di-mask ke tengah, jadi hanya logo di tengah yang berwarna).
+ */
+const Track = ({ colored }: { colored: boolean }) => (
+  <div
+    className="flex w-max items-center py-8 animate-logo-marquee will-change-transform"
+    style={{ animationDuration: DURATION }}
+    aria-hidden={colored ? true : undefined}
+  >
+    {loop.map((p, i) => (
+      <div
+        key={`${p.name}-${i}`}
+        className="mx-6 sm:mx-9 shrink-0 inline-flex items-center justify-center"
+      >
+        <span className="relative h-10 w-32 sm:h-14 sm:w-44">
+          <Image
+            src={p.logo}
+            alt={colored || i >= partners.length ? "" : p.name}
+            fill
+            sizes="200px"
+            className={`object-contain ${colored ? "" : "brightness-0 invert opacity-50"}`}
+          />
+        </span>
+      </div>
+    ))}
+  </div>
+);
 
 const Partnership = () => {
-  const trackRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const container = trackRef.current;
-    if (!container) return;
-
-    const items = Array.from(
-      container.querySelectorAll<HTMLElement>("[data-logo]")
-    );
-    if (!items.length) return;
-
-    let raf = 0;
-    let last: HTMLElement | null = null;
-
-    const tick = () => {
-      const rect = container.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      let best: HTMLElement | null = null;
-      let bestD = Infinity;
-      for (const el of items) {
-        const r = el.getBoundingClientRect();
-        const ic = r.left + r.width / 2;
-        const d = Math.abs(ic - cx);
-        if (d < bestD) {
-          bestD = d;
-          best = el;
-        }
-      }
-      if (best !== last) {
-        last?.classList.remove("is-focus");
-        best?.classList.add("is-focus");
-        last = best;
-      }
-      raf = requestAnimationFrame(tick);
-    };
-
-    tick();
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
   return (
     <section className="relative w-full pt-4 pb-10 overflow-hidden bg-[#0F0F0F] border-t border-white/5 z-20">
       <div
@@ -97,44 +91,26 @@ const Partnership = () => {
         </div>
 
         {/* Marquee track */}
-        <div
-          ref={trackRef}
-          className="relative mt-10 sm:mt-12 overflow-hidden"
-        >
+        <div className="relative mt-10 sm:mt-12 overflow-hidden">
           {/* Edge fades */}
-          <div className="pointer-events-none absolute inset-y-0 left-0 w-24 sm:w-40 bg-gradient-to-r from-[#0F0F0F] via-[#0F0F0F]/85 to-transparent z-10" />
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-24 sm:w-40 bg-gradient-to-l from-[#0F0F0F] via-[#0F0F0F]/85 to-transparent z-10" />
+          <div className="pointer-events-none absolute inset-y-0 left-0 w-24 sm:w-40 bg-gradient-to-r from-[#0F0F0F] via-[#0F0F0F]/85 to-transparent z-20" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-24 sm:w-40 bg-gradient-to-l from-[#0F0F0F] via-[#0F0F0F]/85 to-transparent z-20" />
 
-          {/* Center spotlight band */}
-          <div className="pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 w-40 sm:w-56 z-[1]">
+          {/* Center spotlight band (penanda zona "menyala") */}
+          <div className="pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 w-44 sm:w-60 z-[1]">
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-emerald-400/[0.05] to-transparent" />
-            <div className="absolute inset-y-2 left-0 w-px bg-gradient-to-b from-transparent via-emerald-400/30 to-transparent" />
-            <div className="absolute inset-y-2 right-0 w-px bg-gradient-to-b from-transparent via-emerald-400/30 to-transparent" />
+            <div className="absolute inset-y-3 left-0 w-px bg-gradient-to-b from-transparent via-emerald-400/25 to-transparent" />
+            <div className="absolute inset-y-3 right-0 w-px bg-gradient-to-b from-transparent via-emerald-400/25 to-transparent" />
           </div>
 
-          <motion.div
-            animate={{ x: ["0%", "-33.333%"] }}
-            transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-            className="flex items-center gap-10 sm:gap-14 whitespace-nowrap will-change-transform py-8"
-          >
-            {row.map((p, i) => (
-              <div
-                key={`${p.name}-${i}`}
-                data-logo={`${p.name}-${i}`}
-                className="logo-item shrink-0 inline-flex items-center justify-center grayscale opacity-40 transition-[filter,opacity,transform] duration-500 ease-out hover:grayscale-0 hover:opacity-100 hover:scale-110 [&.is-focus]:grayscale-0 [&.is-focus]:opacity-100 [&.is-focus]:scale-110"
-              >
-                <span className="relative h-10 w-32 sm:h-14 sm:w-44">
-                  <Image
-                    src={p.logo}
-                    alt={p.name}
-                    fill
-                    sizes="200px"
-                    className="object-contain"
-                  />
-                </span>
-              </div>
-            ))}
-          </motion.div>
+          {/* LAYER 1: logo putih monokrom (selalu terlihat di dark mode) */}
+          <Track colored={false} />
+
+          {/* LAYER 2: logo warna asli, di-mask ke tengah → otomatis menyala
+              saat melintasi pusat. Animasi identik dengan layer 1 → sinkron. */}
+          <div className="marquee-color-mask absolute inset-0 z-[2] overflow-hidden">
+            <Track colored={true} />
+          </div>
         </div>
 
         {/* Footnote */}

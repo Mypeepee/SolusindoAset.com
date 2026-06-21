@@ -4,119 +4,263 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Icon } from "@iconify/react";
 
-// --- DATA FAQ (Disesuaikan untuk Premier / Property All-in-One) ---
-const faqs = [
+const CsIcon = ({ className = "" }: { className?: string }) => (
+  <span
+    aria-hidden
+    className={`inline-block shrink-0 ${className}`}
+    style={{
+      backgroundColor: "#86efac",
+      WebkitMaskImage: "url(/images/icons/customer-service.png)",
+      maskImage: "url(/images/icons/customer-service.png)",
+      WebkitMaskSize: "contain",
+      maskSize: "contain",
+      WebkitMaskRepeat: "no-repeat",
+      maskRepeat: "no-repeat",
+      WebkitMaskPosition: "center",
+      maskPosition: "center",
+    }}
+  />
+);
+
+const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+const VIEWPORT = { once: true, amount: 0 } as const;
+const WA_LINK = "https://wa.me/6281335716679";
+
+const FAQS = [
   {
-    question: "Bagaimana alur pembelian aset lelang di Premier?",
-    answer: "Kami menyederhanakan proses lelang yang rumit. Tim kami akan mendampingi Anda mulai dari cek legalitas aset, survei lokasi, pendaftaran NIPL (Nomor Induk Peserta Lelang), hingga proses bidding dan balik nama sertifikat.",
+    q: "Bagaimana cara kerja layanan Solusindo dari awal sampai akhir?",
+    a: "Mulai dari konsultasi gratis — Anda ceritakan kebutuhan dan budget, tim kami pilihkan aset yang paling sesuai. Kami kawal seluruh proses: cek legalitas, pendampingan bidding (untuk lelang), koordinasi notaris, balik nama, hingga serah terima kunci. Anda tidak perlu mengurus satu pun tahap sendirian.",
   },
   {
-    question: "Apakah harga yang tertera sudah termasuk biaya notaris?",
-    answer: "Harga yang tertera di website adalah harga aset. Biaya tambahan seperti Pajak Pembeli (BPHTB), Biaya Notaris/PPAT, dan Balik Nama akan dihitungkan secara transparan oleh agen kami sebelum Anda bertransaksi.",
+    q: "Apa yang membedakan Solusindo dari agen properti biasa?",
+    a: "Agen biasa hanya mempertemukan pembeli dan penjual. Solusindo adalah spesialis lelang bank — kami punya akses ke aset yang belum dipublikasikan, tim hukum internal untuk verifikasi legalitas, dan pengalaman mendampingi ratusan proses bidding. Kami juga menyatukan 4 pasar properti (lelang, jual, sewa, developer) dalam satu platform — sehingga Anda tidak perlu cari-cari di banyak tempat.",
   },
   {
-    question: "Bisakah saya menitipkan properti untuk dijual/disewakan?",
-    answer: "Tentu! Gunakan fitur 'Titip Jual' di menu akun Anda. Agen spesialis area kami akan menghubungi Anda untuk verifikasi data, foto aset, dan strategi pemasaran agar properti cepat laku.",
+    q: "Apakah ada biaya layanan yang harus dibayar di muka?",
+    a: "Tidak ada. Konsultasi 100% gratis dan tidak ada biaya pendaftaran. Model kami adalah success fee — biaya jasa baru ada setelah transaksi berhasil terjadi. Tidak ada biaya tersembunyi, semua dijelaskan secara transparan sebelum Anda memutuskan.",
   },
   {
-    question: "Metode pembayaran apa saja yang tersedia?",
-    answer: "Untuk Booking Fee, kami mendukung Transfer Bank (Virtual Account) dan E-Wallet. Untuk pelunasan transaksi Jual-Beli, pembayaran dilakukan langsung melalui mekanisme perbankan (KPR/Cash Keras) yang aman.",
+    q: "Bagaimana Solusindo memastikan setiap transaksi aman secara hukum?",
+    a: "Setiap aset diverifikasi tim internal kami sebelum ditawarkan: keaslian sertifikat dicek ke BPN, status sengketa diperiksa, dan PBB dipastikan tidak ada tunggakan. Untuk lelang, kami juga mengecek status penghuni dan klausul pengosongan. Proses AJB dan balik nama dikerjakan bersama notaris/PPAT terpercaya yang sudah kami vetting sendiri.",
   },
   {
-    question: "Apakah uang tanda jadi (Booking Fee) bisa kembali?",
-    answer: "Kebijakan refund Booking Fee bergantung pada jenis transaksi. Untuk unit Developer (Primary), biasanya hangus jika batal sepihak. Namun untuk Secondary/Sewa, hal ini tertuang dalam perjanjian penawaran yang disepakati kedua belah pihak.",
+    q: "Berapa lama dari konsultasi pertama sampai kunci ada di tangan saya?",
+    a: "Tergantung jenis transaksi. Lelang bank: jika aset sudah ditemukan, proses bidding bisa selesai dalam 1–2 minggu; balik nama tambah 30–45 hari. Jual-beli secondary: negosiasi sampai AJB umumnya 2–4 minggu. Sewa: bisa deal dalam hitungan hari. Tim kami aktif mendorong setiap tahap agar tidak molor.",
   },
 ];
 
 const FAQ = () => {
-  const [activeIndex, setActiveIndex] = useState<number | null>(0);
-
-  const toggleAccordion = (index: number) => {
-    setActiveIndex(activeIndex === index ? null : index);
-  };
+  const [open, setOpen] = useState<number | null>(0);
 
   return (
-    // REVISI PADDING: py-16 (Standar Compact yang kita sepakati)
-    // BG: #0F0F0F (Abu gelap premium, sama dengan section WhyKosku & Types)
-    <section className="py-10 bg-[#0F0F0F] relative z-10" id="faq">
-      <div className="container mx-auto lg:max-w-screen-xl px-4">
-        <div className="grid lg:grid-cols-12 gap-10 items-start">
-          
-          {/* BAGIAN KIRI: JUDUL (STICKY / DIAM SAAT SCROLL) */}
-          {/* Fitur yang Anda suka ada di class 'lg:sticky lg:top-32' */}
-          <div className="lg:col-span-5 lg:sticky lg:top-32">
-            <span className="text-[#86efac] font-bold tracking-widest uppercase text-xs mb-2 block">
-              Pusat Bantuan
+    <section className="py-10 md:py-12 bg-[#0F0F0F] relative" id="faq">
+      {/* ambient */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(ellipse 50% 30% at 50% 100%, rgba(52,211,153,0.05), transparent 65%)",
+        }}
+      />
+
+      <div className="container mx-auto px-4 max-w-screen-xl relative z-10">
+
+        {/* ── HEADER ── */}
+        <div className="max-w-2xl mx-auto text-center mb-10 md:mb-12">
+          <motion.span
+            initial={{ opacity: 0, y: 10 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={VIEWPORT}
+            transition={{ duration: 0.5, ease: EASE }}
+            className="inline-flex items-center gap-2 py-1.5 px-4 rounded-full bg-[#86efac]/10 border border-[#86efac]/25 text-[#86efac] text-[10px] font-bold tracking-[0.22em] uppercase font-mono mb-6"
+          >
+            <Icon icon="solar:question-circle-bold" />
+            Pusat Bantuan
+          </motion.span>
+
+          <motion.h2
+            initial={{ opacity: 0, y: 24, filter: "blur(10px)" }}
+            whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+            viewport={VIEWPORT}
+            transition={{ duration: 0.7, ease: EASE, delay: 0.07 }}
+            className="text-4xl md:text-5xl font-extrabold text-white leading-[1.06] tracking-tight mb-5"
+          >
+            Semua yang Perlu{" "}
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#86efac] to-teal-400">
+              Anda Ketahui
             </span>
-            <h2 className="text-white sm:text-5xl text-3xl font-extrabold leading-tight mb-6">
-              Sering <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#86efac] to-teal-500">Ditanyakan</span>
-            </h2>
-            <p className="text-white/50 text-base mb-8 leading-relaxed">
-              Masih bingung seputar prosedur lelang, jual-beli, atau sewa? Temukan jawaban lengkapnya di sini.
-            </p>
+          </motion.h2>
 
-            {/* Support Card Kecil */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="bg-[#86efac]/20 p-3 rounded-full">
-                  <Icon icon="solar:headset-bold-duotone" className="text-[#86efac] text-2xl" />
-                </div>
-                <div>
-                  <h4 className="text-white font-bold">Butuh Konsultasi?</h4>
-                  <p className="text-white/40 text-xs">Tim ahli kami siap 24/7</p>
-                </div>
-              </div>
-              <button className="w-full py-3 rounded-xl bg-white text-black font-bold text-sm hover:bg-[#86efac] transition-colors duration-300 flex items-center justify-center gap-2">
-                <Icon icon="logos:whatsapp-icon" className="text-base" />
-                Hubungi CS
-              </button>
-            </div>
-          </div>
-
-          {/* BAGIAN KANAN: ACCORDION LIST (SCROLLABLE) */}
-          <div className="lg:col-span-7 flex flex-col gap-4">
-            {faqs.map((item, index) => (
-              <div
-                key={index}
-                className={`rounded-2xl border transition-all duration-300 overflow-hidden ${
-                  activeIndex === index
-                    ? "border-[#86efac]/50 bg-white/5 shadow-[0_0_30px_rgba(134,239,172,0.05)]"
-                    : "border-white/10 bg-transparent hover:border-white/20"
-                }`}
-              >
-                <button
-                  onClick={() => toggleAccordion(index)}
-                  className="w-full flex items-center justify-between p-6 text-left focus:outline-none"
-                >
-                  <span className={`text-base md:text-lg font-bold transition-colors pr-4 ${activeIndex === index ? 'text-[#86efac]' : 'text-white'}`}>
-                    {item.question}
-                  </span>
-                  <div className={`p-2 rounded-full transition-all duration-300 shrink-0 ${activeIndex === index ? 'bg-[#86efac] text-black rotate-180' : 'bg-white/10 text-white'}`}>
-                    <Icon icon="solar:alt-arrow-down-linear" width="20" />
-                  </div>
-                </button>
-
-                <AnimatePresence>
-                  {activeIndex === index && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.3, ease: "easeInOut" }}
-                    >
-                      <div className="px-6 pb-6 pt-0 text-white/50 text-sm leading-relaxed border-t border-white/5 mt-2">
-                        <div className="pt-4">
-                          {item.answer}
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            ))}
-          </div>
-
+          <motion.p
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={VIEWPORT}
+            transition={{ delay: 0.2, duration: 0.5 }}
+            className="text-white/45 text-base leading-relaxed"
+          >
+            Lima pertanyaan yang paling sering diajukan sebelum memulai perjalanan
+            properti bersama kami.
+          </motion.p>
         </div>
+
+        {/* ── ACCORDION ── */}
+        <div className="max-w-3xl mx-auto">
+          {/* top divider */}
+          <motion.div
+            initial={{ scaleX: 0 }}
+            whileInView={{ scaleX: 1 }}
+            viewport={VIEWPORT}
+            transition={{ duration: 0.6, ease: EASE }}
+            className="h-px bg-white/[0.07] origin-left mb-0"
+          />
+
+          {FAQS.map((faq, i) => {
+            const isOpen = open === i;
+            return (
+              <div key={i}>
+                {/* item */}
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={VIEWPORT}
+                  transition={{ duration: 0.45, ease: EASE, delay: i * 0.06 }}
+                  className="relative"
+                >
+                  {/* left accent bar */}
+                  <AnimatePresence>
+                    {isOpen && (
+                      <motion.div
+                        initial={{ scaleY: 0, opacity: 0 }}
+                        animate={{ scaleY: 1, opacity: 1 }}
+                        exit={{ scaleY: 0, opacity: 0 }}
+                        transition={{ duration: 0.28, ease: EASE }}
+                        className="absolute left-0 top-0 bottom-0 w-[2px] origin-top rounded-full"
+                        style={{
+                          background:
+                            "linear-gradient(to bottom, #86efac, #34d399, transparent)",
+                        }}
+                      />
+                    )}
+                  </AnimatePresence>
+
+                  {/* open bg glow */}
+                  <AnimatePresence>
+                    {isOpen && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.35 }}
+                        className="absolute inset-0 pointer-events-none rounded-r-xl"
+                        style={{
+                          background:
+                            "linear-gradient(to right, rgba(134,239,172,0.04), transparent 50%)",
+                        }}
+                      />
+                    )}
+                  </AnimatePresence>
+
+                  {/* button row */}
+                  <button
+                    onClick={() => setOpen(isOpen ? null : i)}
+                    className="group w-full flex items-start gap-6 md:gap-8 py-7 md:py-8 px-5 text-left focus:outline-none"
+                  >
+                    {/* number */}
+                    <motion.span
+                      animate={{ color: isOpen ? "#86efac" : "rgba(255,255,255,0.18)" }}
+                      transition={{ duration: 0.2 }}
+                      className="font-mono text-xs font-bold pt-[3px] shrink-0 select-none"
+                    >
+                      {String(i + 1).padStart(2, "0")}
+                    </motion.span>
+
+                    {/* question */}
+                    <motion.span
+                      animate={{ color: isOpen ? "#ffffff" : "rgba(255,255,255,0.72)" }}
+                      transition={{ duration: 0.2 }}
+                      className="flex-1 text-base md:text-[1.125rem] font-semibold leading-snug group-hover:text-white transition-colors duration-200"
+                    >
+                      {faq.q}
+                    </motion.span>
+
+                    {/* toggle icon */}
+                    <motion.div
+                      animate={{ rotate: isOpen ? 45 : 0 }}
+                      transition={{ type: "spring", stiffness: 300, damping: 22 }}
+                      className={`shrink-0 w-8 h-8 rounded-lg border flex items-center justify-center mt-0.5 transition-all duration-200 ${
+                        isOpen
+                          ? "bg-[#86efac] border-transparent text-black"
+                          : "bg-white/[0.04] border-white/[0.1] text-white/40 group-hover:border-white/20 group-hover:text-white/70"
+                      }`}
+                    >
+                      <Icon icon="solar:add-square-bold" className="text-base" />
+                    </motion.div>
+                  </button>
+
+                  {/* answer */}
+                  <AnimatePresence initial={false}>
+                    {isOpen && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+                        className="overflow-hidden"
+                      >
+                        <motion.div
+                          initial={{ y: -8, filter: "blur(4px)" }}
+                          animate={{ y: 0, filter: "blur(0px)" }}
+                          exit={{ y: -4, filter: "blur(2px)" }}
+                          transition={{ duration: 0.3, ease: EASE }}
+                          className="pl-[3.25rem] md:pl-[4rem] pr-5 pb-8"
+                        >
+                          <p className="text-white/52 text-sm md:text-[15px] leading-[1.8]">
+                            {faq.a}
+                          </p>
+                        </motion.div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+
+                {/* divider */}
+                <div className="h-px bg-white/[0.07] mx-5" />
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ── FOOTER CTA ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={VIEWPORT}
+          transition={{ duration: 0.5, ease: EASE, delay: 0.15 }}
+          className="max-w-3xl mx-auto mt-12 flex flex-col sm:flex-row items-center justify-between gap-5 px-5 py-6 rounded-2xl border border-white/[0.07] bg-white/[0.02]"
+        >
+          <div className="flex items-center gap-3 text-sm">
+            <div className="w-9 h-9 rounded-xl bg-[#86efac]/10 border border-[#86efac]/20 flex items-center justify-center shrink-0">
+              <CsIcon className="w-5 h-5" />
+            </div>
+            <span className="text-white/50">
+              Masih ada pertanyaan?{" "}
+              <span className="text-white/80 font-medium">Tim kami siap membantu 24 jam.</span>
+            </span>
+          </div>
+          <motion.a
+            href={WA_LINK}
+            target="_blank"
+            rel="noopener noreferrer"
+            whileHover={{ scale: 1.04, y: -1 }}
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: "spring", stiffness: 280, damping: 20 }}
+            className="shrink-0 inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#86efac] hover:bg-[#6ee7b7] text-black text-sm font-bold shadow-[0_0_20px_rgba(134,239,172,0.25)] hover:shadow-[0_0_32px_rgba(134,239,172,0.45)] transition-colors"
+          >
+            <Icon icon="ic:baseline-whatsapp" className="text-base" />
+            Tanya Sekarang
+          </motion.a>
+        </motion.div>
+
       </div>
     </section>
   );

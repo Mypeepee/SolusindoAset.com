@@ -7,6 +7,7 @@ import { Icon } from "@iconify/react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import type { TabCounts } from "../types";
+import TransactionTabs from "@/components/search/TransactionTabs";
 
 // ─── PORTAL DROPDOWN ─────────────────────────────────────────────────────────
 // Renders children directly into document.body to escape any stacking context
@@ -40,6 +41,7 @@ function PortalDropdown({
   return createPortal(
     <div
       data-search-portal="true"
+      className="zoom-safe"
       style={{
         position: "fixed",
         top: rect.bottom + 12,
@@ -463,7 +465,7 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
   };
 
   return (
-    <div ref={wrapperRef} className="w-full relative z-[100]">
+    <div ref={wrapperRef} className="w-full relative z-[100] zoom-safe">
 
       {/* SEARCH BAR */}
       <div
@@ -1051,6 +1053,7 @@ export default function KategoriHero({ slug, label, tabCounts }: KategoriHeroPro
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.42, duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
           className="mt-7 md:mt-8">
+          <TransactionTabs active="semua" />
           <DarkSearchBar slug={slug} activeColor={activeColor} />
         </motion.div>
       </div>

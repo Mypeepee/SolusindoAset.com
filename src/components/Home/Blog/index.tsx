@@ -21,7 +21,7 @@ const Blog = async () => {
   if (posts.length === 0) return null;
 
   return (
-    <section className="relative z-10 bg-[#0F0F0F] py-16 sm:py-20" id="blog">
+    <section className="relative z-10 bg-[#0F0F0F] py-10 sm:py-14" id="blog">
       <div className="container mx-auto px-4 lg:max-w-screen-xl">
         {/* HEADER */}
         <div className="mb-10 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">

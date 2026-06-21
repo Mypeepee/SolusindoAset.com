@@ -46,8 +46,77 @@
   .task-overdue { animation: task-overdue-glow 2.4s ease-in-out infinite; }
 }
 
+/* ── Property detail skeleton shimmer ── */
+@keyframes skeleton-wave {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    #1a1a1a 25%,
+    #242424 50%,
+    #1a1a1a 75%
+  );
+  background-size: 800px 100%;
+  animation: skeleton-wave 1.6s ease-in-out infinite;
+}
+
 html {
   scroll-behavior: smooth;
+}
+
+/* Cegah horizontal scroll di seluruh halaman.
+   `clip` dipilih (bukan `hidden`) agar tidak membuat scroll container,
+   sehingga `position: sticky` tetap berfungsi. */
+body {
+  overflow-x: clip;
+}
+
+/* Marquee logo "Ekosistem Kami" — geser mulus sejauh -50%.
+   Track berisi 2 salinan logo + lebar `w-max`, jadi -50% = tepat satu set
+   → loop seamless yang melewati SEMUA logo. Pure CSS (compositor-only),
+   tanpa JS per-frame, jadi mulus 60fps. */
+@keyframes logo-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.animate-logo-marquee {
+  animation-name: logo-marquee;
+  animation-duration: 24s; /* default; di-override inline sesuai jumlah logo */
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-logo-marquee {
+    animation: none;
+    transform: none;
+  }
+}
+
+/* Reveal warna hanya di pita tengah — logo yang lewat tengah "menyala".
+   Layer warna di-mask; di luar tengah transparan (yang tampak = layer putih). */
+.marquee-color-mask {
+  -webkit-mask-image: linear-gradient(to right, transparent 22%, #000 40%, #000 60%, transparent 78%);
+  mask-image: linear-gradient(to right, transparent 22%, #000 40%, #000 60%, transparent 78%);
+}
+@media (max-width: 640px) {
+  /* Di mobile logo lebih besar relatif layar → pita reveal dilebarkan. */
+  .marquee-color-mask {
+    -webkit-mask-image: linear-gradient(to right, transparent 6%, #000 28%, #000 72%, transparent 94%);
+    mask-image: linear-gradient(to right, transparent 6%, #000 28%, #000 72%, transparent 94%);
+  }
+}
+
+/* Cegah iOS Safari auto-zoom saat fokus ke input pencarian.
+   iOS hanya zoom kalau font-size < 16px, jadi paksa 16px di layar kecil.
+   Discope ke `.zoom-safe` agar tidak mengubah input rapat di dashboard. */
+@media (max-width: 640px) {
+  .zoom-safe input:not([type="checkbox"]):not([type="radio"]),
+  .zoom-safe select,
+  .zoom-safe textarea {
+    font-size: 16px;
+  }
 }
 
 section {

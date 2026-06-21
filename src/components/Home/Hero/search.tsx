@@ -61,6 +61,7 @@ const CardSlider = () => {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>("semua");
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
   
   // --- STATE WILAYAH ---
   const [viewLevel, setViewLevel] = useState<'provinsi' | 'kota' | 'kecamatan' | 'kelurahan'>('provinsi');
@@ -238,6 +239,7 @@ const CardSlider = () => {
   };
 
   const handleSearch = () => {
+    if (searching) return;
     if (hasRangeError()) {
       toast.error("Perbaiki range nilai sebelum mencari", { icon: "⚠️" });
       setShaking(true);
@@ -287,22 +289,30 @@ const CardSlider = () => {
       activeTab === "beli"   ? "/Jual" :
       activeTab === "sewa"   ? "/Sewa" : "/Lelang";
 
+    setSearching(true);
     router.push(`${destination}?${params.toString()}`);
   };
 
+  // Failsafe: kalau navigasi menggantung, tombol pulih sendiri.
+  useEffect(() => {
+    if (!searching) return;
+    const t = setTimeout(() => setSearching(false), 8000);
+    return () => clearTimeout(t);
+  }, [searching]);
+
   return (
-    <div className="w-full max-w-6xl mx-auto font-sans relative z-30" ref={wrapperRef}>
+    <div className="w-full max-w-6xl mx-auto font-sans relative z-30 zoom-safe" ref={wrapperRef}>
       
       {/* TABS */}
       <div className="flex justify-center mb-6">
-        <div className="bg-[#1A1A1A]/90 backdrop-blur-md border border-white/20 p-1.5 rounded-full inline-flex shadow-xl overflow-x-auto max-w-full no-scrollbar">
+        <div className="bg-[#1A1A1A]/90 backdrop-blur-md border border-white/20 p-1.5 rounded-full flex w-full max-w-md sm:w-auto sm:inline-flex shadow-xl">
           {[
             { id: "semua",  label: "Semua",  icon: "solar:map-point-rotate-bold" },
             { id: "beli",   label: "Beli",   icon: "solar:home-2-bold" },
-            { id: "sewa",   label: "Sewa",   icon: "solar:key-minimalistic-square-bold" },
             { id: "lelang", label: "Lelang", icon: "solar:tag-price-bold" },
+            { id: "sewa",   label: "Sewa",   icon: "solar:key-minimalistic-square-bold" },
           ].map((tab) => (
-            <button
+            <motion.button
               key={tab.id}
               onClick={() => {
                 const newTab = tab.id as TabType;
@@ -313,23 +323,33 @@ const CardSlider = () => {
                   type: PROPERTY_TYPES[newTab].includes(prev.type) ? prev.type : "",
                 }));
               }}
+              whileTap={{ scale: 0.94 }}
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
               className={`
-                relative flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors duration-200
+                relative flex flex-1 sm:flex-initial items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-6 py-2.5 rounded-full text-xs sm:text-sm font-bold whitespace-nowrap transition-colors duration-300
                 ${activeTab === tab.id ? "text-darkmode" : "text-gray-400 hover:text-white"}
               `}
             >
               {activeTab === tab.id && (
                 <motion.span
                   layoutId="activeTabPill"
-                  className="absolute inset-0 rounded-full bg-primary shadow-[0_0_20px_rgba(74,222,128,0.45)]"
-                  transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                  className="absolute inset-0 rounded-full shadow-[0_0_26px_rgba(74,222,128,0.6),0_4px_12px_rgba(0,0,0,0.25)]"
+                  style={{ background: "linear-gradient(180deg,#9af7b5 0%,#4ade80 55%,#37d06d 100%)" }}
+                  transition={{ type: "spring", stiffness: 420, damping: 30, mass: 0.8 }}
                 />
               )}
-              <span className="relative z-10 flex items-center gap-2">
-                <Icon icon={tab.icon} className="text-lg" />
+              <span className="relative z-10 flex items-center gap-1.5 sm:gap-2">
+                <motion.span
+                  initial={false}
+                  animate={activeTab === tab.id ? { scale: [1, 1.28, 1] } : { scale: 1 }}
+                  transition={{ duration: 0.4, ease: "easeOut" }}
+                  className="flex"
+                >
+                  <Icon icon={tab.icon} className="text-base sm:text-lg shrink-0" />
+                </motion.span>
                 {tab.label}
               </span>
-            </button>
+            </motion.button>
           ))}
         </div>
       </div>
@@ -622,12 +642,17 @@ const CardSlider = () => {
           <div className="w-full lg:w-[10%] p-4 lg:p-1.5 shrink-0 flex items-center justify-center">
             <motion.button
               onClick={handleSearch}
+              disabled={searching}
               animate={shaking ? { x: [0, -16, 16, -16, 16, -16, 16, -12, 12, -8, 8, 0], rotate: [0, -3, 3, -3, 3, -3, 3, -2, 2, -1, 1, 0] } : {}}
               transition={{ duration: 0.7, ease: "easeInOut" }}
-              className="w-full lg:w-12 h-12 bg-primary hover:bg-[#6ee7b7] text-darkmode rounded-2xl lg:rounded-full font-bold text-lg flex items-center justify-center shadow-lg shadow-primary/30 transition-all transform active:scale-95"
+              className="w-full lg:w-12 h-12 bg-primary hover:bg-[#6ee7b7] text-darkmode rounded-2xl lg:rounded-full font-bold text-lg flex items-center justify-center shadow-lg shadow-primary/30 transition-all transform active:scale-95 disabled:opacity-80 disabled:cursor-not-allowed"
             >
-              <Icon icon="solar:magnifer-linear" className="text-xl stroke-2" />
-              <span className="lg:hidden ml-2">Cari Sekarang</span>
+              {searching ? (
+                <span className="w-5 h-5 rounded-full border-2 border-darkmode border-t-transparent animate-spin" />
+              ) : (
+                <Icon icon="solar:magnifer-linear" className="text-xl stroke-2" />
+              )}
+              <span className="lg:hidden ml-2">{searching ? "Mencari..." : "Cari Sekarang"}</span>
             </motion.button>
           </div>
 

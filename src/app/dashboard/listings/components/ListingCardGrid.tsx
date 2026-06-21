@@ -12,7 +12,11 @@ import ListingFilters, {
 import MarkSoldDialog from "./MarkSoldDialog";
 import type { Listing } from "./listings-table";
 import type { PropertyItem } from "@/app/properti/[slug]/types";
-import { getPaginationPages, smoothScrollToElement } from "@/lib/pagination";
+import {
+  getPaginationPages,
+  getPaginationPagesCompact,
+  smoothScrollToElement,
+} from "@/lib/pagination";
 
 const formatViews = (n: number) =>
   new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(n || 0);
@@ -237,6 +241,11 @@ export default function ListingCardGrid({
     [currentPage, totalPages]
   );
 
+  const pageNumbersCompact = useMemo(
+    () => getPaginationPagesCompact(currentPage, totalPages),
+    [currentPage, totalPages]
+  );
+
   return (
     <div className="space-y-5">
       {/* ── Filter bar ── */}
@@ -409,26 +418,53 @@ export default function ListingCardGrid({
               <Icon icon="solar:alt-arrow-left-linear" className="text-sm" />
             </button>
 
-            {pageNumbers.map((n, i) =>
-              n === "..." ? (
-                <span key={`ellipsis-${i}`} className="px-1 text-xs text-zinc-500">
-                  …
-                </span>
-              ) : (
-                <button
-                  key={n}
-                  onClick={() => goToPage(Number(n))}
-                  disabled={isPending}
-                  className={`h-8 min-w-[2rem] rounded-full px-2 text-xs font-bold transition-all disabled:cursor-wait ${
-                    n === currentPage
-                      ? "bg-emerald-500 text-black shadow-[0_0_12px_rgba(52,211,153,0.6)]"
-                      : "bg-white/5 text-zinc-300 hover:bg-white/10"
-                  }`}
-                >
-                  {n}
-                </button>
-              )
-            )}
+            {/* Desktop: nomor lengkap */}
+            <div className="hidden items-center gap-1.5 sm:flex">
+              {pageNumbers.map((n, i) =>
+                n === "..." ? (
+                  <span key={`ellipsis-${i}`} className="px-1 text-xs text-zinc-500">
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={n}
+                    onClick={() => goToPage(Number(n))}
+                    disabled={isPending}
+                    className={`h-8 min-w-[2rem] rounded-full px-2 text-xs font-bold transition-all disabled:cursor-wait ${
+                      n === currentPage
+                        ? "bg-emerald-500 text-black shadow-[0_0_12px_rgba(52,211,153,0.6)]"
+                        : "bg-white/5 text-zinc-300 hover:bg-white/10"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                )
+              )}
+            </div>
+
+            {/* Mobile: nomor ringkas — tetap muat di layar kecil */}
+            <div className="flex items-center gap-1 sm:hidden">
+              {pageNumbersCompact.map((n, i) =>
+                n === "..." ? (
+                  <span key={`m-ellipsis-${i}`} className="px-0.5 text-xs text-zinc-500">
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={`m-${n}`}
+                    onClick={() => goToPage(Number(n))}
+                    disabled={isPending}
+                    className={`h-8 min-w-[2rem] rounded-full px-2 text-xs font-bold transition-all disabled:cursor-wait ${
+                      n === currentPage
+                        ? "bg-emerald-500 text-black shadow-[0_0_12px_rgba(52,211,153,0.6)]"
+                        : "bg-white/5 text-zinc-300 hover:bg-white/10"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                )
+              )}
+            </div>
 
             <button
               onClick={() => goToPage(currentPage + 1)}

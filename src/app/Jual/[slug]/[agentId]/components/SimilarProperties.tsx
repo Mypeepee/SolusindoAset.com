@@ -16,57 +16,57 @@ export default function SimilarProperties({ items = [] }: SimilarPropertiesProps
   if (!items.length) return null;
 
   const scrollByCard = (dir: number) =>
-    scrollRef.current?.scrollBy({ left: dir * 350, behavior: "smooth" });
+    scrollRef.current?.scrollBy({ left: dir * 290, behavior: "smooth" });
 
   return (
-    <section className="container mx-auto px-4 mt-10 pt-8 border-t border-white/5 mb-12">
+    <section className="container mx-auto px-4 mt-6 pt-6 border-t border-white/5 mb-8">
       {/* HEADER */}
-      <div className="flex items-end justify-between gap-4 mb-6">
+      <div className="flex items-center justify-between gap-4 mb-4">
         <div>
-          <h2 className="flex items-center gap-2 text-xl font-bold text-white">
+          <h2 className="flex items-center gap-2 text-base font-bold text-white">
             <Icon
               icon="solar:magnifer-zoom-in-bold-duotone"
               className="text-[#86efac]"
             />
             Properti Serupa
           </h2>
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-0.5 text-xs text-gray-500">
             Pilihan paling relevan berdasarkan lokasi, tipe &amp; harga
           </p>
         </div>
 
         {/* Scroll controls (desktop) */}
-        <div className="hidden sm:flex items-center gap-2">
+        <div className="hidden sm:flex items-center gap-1.5">
           <button
             type="button"
             onClick={() => scrollByCard(-1)}
             aria-label="Sebelumnya"
-            className="grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/5 text-gray-300 transition-all hover:border-[#86efac]/50 hover:bg-[#86efac]/10 hover:text-[#86efac]"
+            className="grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-white/5 text-gray-300 transition-all hover:border-[#86efac]/50 hover:bg-[#86efac]/10 hover:text-[#86efac]"
           >
-            <Icon icon="solar:alt-arrow-left-linear" />
+            <Icon icon="solar:alt-arrow-left-linear" className="text-sm" />
           </button>
           <button
             type="button"
             onClick={() => scrollByCard(1)}
             aria-label="Berikutnya"
-            className="grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/5 text-gray-300 transition-all hover:border-[#86efac]/50 hover:bg-[#86efac]/10 hover:text-[#86efac]"
+            className="grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-white/5 text-gray-300 transition-all hover:border-[#86efac]/50 hover:bg-[#86efac]/10 hover:text-[#86efac]"
           >
-            <Icon icon="solar:alt-arrow-right-linear" />
+            <Icon icon="solar:alt-arrow-right-linear" className="text-sm" />
           </button>
         </div>
       </div>
 
-      {/* SCROLLABLE CARDS — kartu sama persis dengan listing primary/secondary */}
+      {/* SCROLLABLE CARDS */}
       <div
         ref={scrollRef}
-        className="flex snap-x snap-mandatory gap-5 overflow-x-auto scrollbar-hide pb-6 -mx-4 px-4 md:mx-0 md:px-0"
+        className="flex snap-x snap-mandatory gap-3 overflow-x-auto scrollbar-hide pb-3 -mx-4 px-4 md:mx-0 md:px-0"
       >
         {items.map((item) => (
           <div
             key={item.id_property}
-            className="w-[290px] shrink-0 snap-start sm:w-[330px]"
+            className="w-[250px] shrink-0 snap-start sm:w-[280px]"
           >
-            <PropertyCard item={item} />
+            <PropertyCard item={item} compact />
           </div>
         ))}
       </div>

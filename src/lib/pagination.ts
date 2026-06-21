@@ -48,6 +48,36 @@ export function getPaginationPages(
 }
 
 /**
+ * Versi RINGKAS untuk layar kecil — maksimal 5 token agar pagination tidak
+ * pernah melebihi lebar device, tapi tetap menampilkan nomor & konteks.
+ *
+ * Aturan (mirip pagination situs besar):
+ *  - totalPages <= 5 → tampilkan semua
+ *  - dekat awal  (cur ≤ 3)        → `1 2 3 … last`
+ *  - dekat akhir (cur ≥ last-2)   → `1 … last-2 last-1 last`
+ *  - tengah                       → `1 … cur … last`
+ *
+ * Catatan: ambang batas dipilih agar "…" tidak pernah dipakai untuk
+ * menyembunyikan SATU halaman saja (mis. page 3 → `1 2 3 … last`, bukan
+ * `1 … 3 … last`).
+ */
+export function getPaginationPagesCompact(
+  currentPage: number,
+  totalPages: number
+): PageItem[] {
+  if (totalPages <= 1) return [];
+  if (totalPages <= 5)
+    return Array.from({ length: totalPages }, (_, i) => i + 1);
+
+  if (currentPage <= 3) return [1, 2, 3, "...", totalPages];
+
+  if (currentPage >= totalPages - 2)
+    return [1, "...", totalPages - 2, totalPages - 1, totalPages];
+
+  return [1, "...", currentPage, "...", totalPages];
+}
+
+/**
  * Find the nearest scrollable ancestor of an element. Dashboard layouts often
  * use a nested `overflow-y-auto` container instead of window scroll — falling
  * back to `window` would silently do nothing in that case.

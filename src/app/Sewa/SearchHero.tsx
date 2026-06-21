@@ -6,6 +6,7 @@ import { Icon } from "@iconify/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DateRange } from "./types";
 import { daysInMonth, firstDayOfMonth, monthNames } from "./utils";
+import TransactionTabs from "@/components/search/TransactionTabs";
 
 // --- DATE PICKER MODAL ---
 const DatePickerModal = ({
@@ -178,11 +179,23 @@ const HeroFilter = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedRangeString, setSelectedRangeString] = useState("Pilih Tanggal");
   const [nights, setNights] = useState(0);
+  const [searching, setSearching] = useState(false);
+
+  // Hasil baru sudah ter-render (query berubah) → lepas state "Mencari...".
+  React.useEffect(() => { setSearching(false); }, [searchParams]);
+  // Failsafe: kalau navigasi menggantung, tombol pulih sendiri.
+  React.useEffect(() => {
+    if (!searching) return;
+    const t = setTimeout(() => setSearching(false), 8000);
+    return () => clearTimeout(t);
+  }, [searching]);
 
   const handleSearch = () => {
+    if (searching) return;
     const params = new URLSearchParams();
     if (lokasi.trim()) params.set("lokasi", lokasi.trim());
     params.set("durasi", duration);
+    setSearching(true);
     router.push(`/Sewa?${params.toString()}`);
   };
 
@@ -195,7 +208,8 @@ const HeroFilter = () => {
 
   return (
     <>
-      <div className="relative z-20 -mt-20 lg:-mt-28 container mx-auto px-4">
+      <div className="relative z-20 -mt-20 lg:-mt-28 container mx-auto px-4 zoom-safe">
+        <TransactionTabs active="sewa" />
         <div className="bg-[#1A1A1A]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
           
           <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -z-10 pointer-events-none"></div>
@@ -280,9 +294,18 @@ const HeroFilter = () => {
              <div className="lg:col-span-2">
                 <button
                   onClick={handleSearch}
-                  className="w-full h-full bg-primary hover:bg-green-500 text-darkmode font-extrabold text-base rounded-2xl shadow-[0_0_30px_rgba(34,197,94,0.2)] hover:shadow-[0_0_40px_rgba(34,197,94,0.4)] flex items-center justify-center gap-2 transition-all transform hover:scale-[1.02] active:scale-95"
+                  disabled={searching}
+                  className="w-full h-full bg-primary hover:bg-green-500 text-darkmode font-extrabold text-base rounded-2xl shadow-[0_0_30px_rgba(34,197,94,0.2)] hover:shadow-[0_0_40px_rgba(34,197,94,0.4)] flex items-center justify-center gap-2 transition-all transform hover:scale-[1.02] active:scale-95 disabled:opacity-80 disabled:cursor-not-allowed disabled:hover:scale-100"
                 >
-                   <Icon icon="solar:magnifer-bold-duotone" className="text-xl"/> Cari
+                   {searching ? (
+                     <>
+                       <span className="w-5 h-5 rounded-full border-2 border-darkmode border-t-transparent animate-spin" /> Mencari...
+                     </>
+                   ) : (
+                     <>
+                       <Icon icon="solar:magnifer-bold-duotone" className="text-xl"/> Cari
+                     </>
+                   )}
                 </button>
              </div>
 

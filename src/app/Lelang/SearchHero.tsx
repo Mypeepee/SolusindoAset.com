@@ -1,9 +1,10 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Icon } from "@iconify/react";
 import toast from "react-hot-toast";
+import TransactionTabs from "@/components/search/TransactionTabs";
 
 // --- 1. CONFIGURATION & TYPES ---
 
@@ -97,8 +98,10 @@ const buildFormData = (init: SearchHeroInitial): SearchState => ({
 
 const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
   const [viewLevel, setViewLevel] = useState<'provinsi' | 'kota' | 'kecamatan' | 'kelurahan'>('provinsi');
   const [currentList, setCurrentList] = useState<Region[]>([]);
   const [parentRegion, setParentRegion] = useState<Region | null>(null);
@@ -113,6 +116,15 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
     setFormData(buildFormData(initial));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial.q, initial.idProperty, initial.kota, initial.tipe, initial.minHarga, initial.maxHarga, initial.minLT, initial.maxLT, initial.minLB, initial.maxLB]);
+
+  // Hasil baru sudah ter-render (query berubah) → lepas state "Mencari...".
+  useEffect(() => { setSearching(false); }, [searchParams]);
+  // Failsafe: kalau navigasi menggantung, tombol pulih sendiri.
+  useEffect(() => {
+    if (!searching) return;
+    const t = setTimeout(() => setSearching(false), 8000);
+    return () => clearTimeout(t);
+  }, [searching]);
 
   const keywordTrimmed = formData.keyword.trim();
   const keywordMode: "id" | "alamat" | null =
@@ -257,6 +269,7 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
   };
 
   const handleSearch = () => {
+    if (searching) return;
     if (hasRangeError()) {
       toast.error("Perbaiki range nilai sebelum mencari", { icon: "⚠️" });
       setShaking(true);
@@ -297,6 +310,7 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
     if (maxLb) params.set("maxLB", maxLb);
 
     params.set("page", "1");
+    setSearching(true);
     router.push(`/Lelang?${params.toString()}`);
   };
 
@@ -348,7 +362,8 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
       </section>
 
       {/* === BAGIAN 2: FILTER FORM (identik Jual) === */}
-      <div className="container mx-auto px-4 relative z-30 -mt-24 mb-10" ref={wrapperRef}>
+      <div className="container mx-auto px-4 relative z-30 -mt-24 mb-10 zoom-safe" ref={wrapperRef}>
+        <TransactionTabs active="lelang" />
         <div className="bg-[#1A1A1A] rounded-[2rem] shadow-2xl shadow-black/50 p-2 lg:p-3 border border-white/10 backdrop-blur-md">
           <div className="flex flex-col lg:flex-row items-stretch lg:items-center divide-y lg:divide-y-0 lg:divide-x divide-white/10">
 
@@ -590,12 +605,17 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
             <div className="w-full lg:w-[10%] p-4 lg:p-1.5 shrink-0 flex items-center justify-center">
               <motion.button
                 onClick={handleSearch}
+                disabled={searching}
                 animate={shaking ? { x: [0, -16, 16, -16, 16, -16, 16, -12, 12, -8, 8, 0], rotate: [0, -3, 3, -3, 3, -3, 3, -2, 2, -1, 1, 0] } : {}}
                 transition={{ duration: 0.7, ease: "easeInOut" }}
-                className="w-full lg:w-12 h-12 bg-primary hover:bg-[#6ee7b7] text-darkmode rounded-2xl lg:rounded-full font-bold text-lg flex items-center justify-center shadow-lg shadow-primary/30 transition-all transform active:scale-95"
+                className="w-full lg:w-12 h-12 bg-primary hover:bg-[#6ee7b7] text-darkmode rounded-2xl lg:rounded-full font-bold text-lg flex items-center justify-center shadow-lg shadow-primary/30 transition-all transform active:scale-95 disabled:opacity-80 disabled:cursor-not-allowed"
               >
-                <Icon icon="solar:magnifer-linear" className="text-xl stroke-2" />
-                <span className="lg:hidden ml-2">Cari</span>
+                {searching ? (
+                  <span className="w-5 h-5 rounded-full border-2 border-darkmode border-t-transparent animate-spin" />
+                ) : (
+                  <Icon icon="solar:magnifer-linear" className="text-xl stroke-2" />
+                )}
+                <span className="lg:hidden ml-2">{searching ? "Mencari..." : "Cari"}</span>
               </motion.button>
             </div>
 
