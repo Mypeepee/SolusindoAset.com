@@ -10,7 +10,6 @@
 /coverage
 
 # next.js
-/.next/
 /out/
 
 # production
@@ -50,4 +49,4 @@ backend/keys/
 # nested project clone
 /Kosku.com/
 /Kosku.com.zip.next/cache
-.next
+.next/cache
