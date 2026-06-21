@@ -4,6 +4,8 @@ import prisma from "@/lib/prisma";
 import AgentListClient from "./AgentListClient";
 import { Icon } from "@iconify/react";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Agent Solusindo Aset | Solusindo Aset",
   description:
