@@ -1,1 +1,1 @@
-self.__NEXT_FONT_MANIFEST="{\"pages\":{},\"app\":{\"/Users/jasnc/Downloads/Important/kosku/src/app/layout\":[\"static/media/7549cc4ac83197aa-s.p.ttf\"]},\"appUsingSizeAdjust\":true,\"pagesUsingSizeAdjust\":false}"
+self.__NEXT_FONT_MANIFEST='{"pages":{},"app":{"/Users/jasnc/Downloads/Important/kosku/src/app/layout":["static/media/7549cc4ac83197aa-s.p.ttf"]},"appUsingSizeAdjust":true,"pagesUsingSizeAdjust":false}';
