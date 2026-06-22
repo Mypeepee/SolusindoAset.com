@@ -1,1 +1,0 @@
-body:has(.hide-header-footer) header{display:none!important}body:has(.hide-header-footer) footer{display:none!important}body:has(.hide-header-footer) main{padding-top:0!important}body:has(.hide-header-footer)>div>div>footer,body:has(.hide-header-footer)>div>div>header{display:none!important}
