@@ -1,4 +1,7 @@
 // server.js
+// Force production mode — cPanel NodeJS Selector does not always inject NODE_ENV
+process.env.NODE_ENV = process.env.NODE_ENV || 'production';
+
 const { createServer } = require('http')
 const { parse } = require('url')
 const next = require('next')
