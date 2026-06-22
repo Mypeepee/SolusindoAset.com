@@ -17,6 +17,22 @@ const nextConfig = {
     serverComponentsExternalPackages: ["pdf-parse", "pdfjs-dist", "pdf-lib", "docxtemplater", "pizzip", "puppeteer", "ffmpeg-static"],
   },
 
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      // Paksa nodemailer ikut di-bundle ke dalam .next/server — server tidak perlu install sendiri
+      config.externals = (config.externals || []).map((ext) => {
+        if (typeof ext !== "function") return ext;
+        return (ctx, cb) => {
+          if (ctx.request === "nodemailer" || ctx.request?.startsWith("nodemailer/")) {
+            return cb();
+          }
+          return ext(ctx, cb);
+        };
+      });
+    }
+    return config;
+  },
+
   images: {
     remotePatterns: [
       // Avatar Google (OAuth)
