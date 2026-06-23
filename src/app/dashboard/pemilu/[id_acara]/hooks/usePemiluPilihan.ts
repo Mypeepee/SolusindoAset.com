@@ -2,8 +2,12 @@
 "use client";
 
 import { useEffect } from "react";
-import Pusher from "pusher-js";
+import PusherDefault from "pusher-js";
 import type { Pilihan } from "../PemiluClient";
+
+// pusher-js is a UMD/CJS bundle; unwrap .default so `new Pusher()` works under
+// webpack ESM interop (avoids "pusher_js ... is not a constructor").
+const Pusher = (((PusherDefault as any)?.default ?? PusherDefault) as typeof PusherDefault);
 
 export function usePemiluPilihan(
   id_acara: string,

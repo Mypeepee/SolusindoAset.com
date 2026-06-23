@@ -11,63 +11,60 @@ import { useSwipe } from "@/hooks/useSwipe";
 
 // ─── BADGES ──────────────────────────────────────────────────────────────────
 
-function TransaksiBadge({ type }: { type: string }) {
-  const t = type?.toUpperCase();
-  if (t === "PRIMARY")
-    return (
-      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.12em] text-blue-200 bg-blue-500/20 border border-blue-400/40 backdrop-blur-sm">
-        <Icon icon="solar:home-2-bold-duotone" className="text-xs" />
-        Primary
-      </span>
-    );
-  if (t === "SECONDARY")
-    return (
-      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.12em] text-violet-200 bg-violet-500/20 border border-violet-400/40 backdrop-blur-sm">
-        <Icon icon="solar:buildings-2-bold-duotone" className="text-xs" />
-        Secondary
-      </span>
-    );
-  if (t === "SEWA")
-    return (
-      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-200 bg-emerald-500/20 border border-emerald-400/40 backdrop-blur-sm">
-        <Icon icon="solar:key-bold-duotone" className="text-xs" />
-        Sewa
-      </span>
-    );
-  if (t === "LELANG")
-    return (
-      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.12em] text-amber-100 bg-amber-500/25 border border-amber-400/50 backdrop-blur-sm">
-        <Icon icon="solar:gavel-bold" className="text-xs" />
-        Lelang
-      </span>
-    );
-  return null;
+type BadgeSize = "sm" | "md";
+
+function TransaksiBadge({ type, size = "md" }: { type: string; size?: BadgeSize }) {
+  const map: Record<string, { label: string; icon: string; cls: string }> = {
+    PRIMARY:   { label: "Primary",   icon: "solar:home-2-bold-duotone",      cls: "text-blue-200 bg-blue-500/20 border-blue-400/40" },
+    SECONDARY: { label: "Secondary", icon: "solar:buildings-2-bold-duotone", cls: "text-violet-200 bg-violet-500/20 border-violet-400/40" },
+    SEWA:      { label: "Sewa",      icon: "solar:key-bold-duotone",         cls: "text-emerald-200 bg-emerald-500/20 border-emerald-400/40" },
+    LELANG:    { label: "Lelang",    icon: "solar:gavel-bold",               cls: "text-amber-100 bg-amber-500/25 border-amber-400/50" },
+  };
+  const b = map[type?.toUpperCase()];
+  if (!b) return null;
+
+  const sm = size === "sm";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full font-bold uppercase tracking-[0.12em] border backdrop-blur-sm ${b.cls} ${
+        sm ? "px-2 py-0.5 text-[9px]" : "px-3 py-1.5 text-[10px] gap-1.5"
+      }`}
+    >
+      <Icon icon={b.icon} className={sm ? "text-[10px]" : "text-xs"} />
+      {b.label}
+    </span>
+  );
 }
 
-function LelangBadge({ tanggal_lelang }: { tanggal_lelang: string | null }) {
+function LelangBadge({ tanggal_lelang, size = "md" }: { tanggal_lelang: string | null; size?: BadgeSize }) {
   const days = daysUntil(tanggal_lelang);
   if (days === null) return null;
 
+  const sm = size === "sm";
+  const pad = sm ? "px-2.5 py-1" : "px-4 py-2";
+  const txt = sm ? "text-[9px]" : "text-[10px]";
+  const ic = sm ? "text-xs" : "text-sm";
+
   if (days <= 0)
     return (
-      <span className="relative inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-[0.14em] text-amber-50">
+      <span className={`relative inline-flex items-center gap-1.5 rounded-full font-bold uppercase tracking-[0.14em] text-amber-50 ${pad} ${txt}`}>
         <span className="absolute inset-0 rounded-full bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 opacity-80 blur-[3px]" />
         <span className="absolute inset-[1px] rounded-full bg-gradient-to-r from-[#18181b] via-[#030712] to-[#111827] border border-amber-300/80 shadow-[0_0_22px_rgba(250,204,21,0.75)]" />
-        <span className="relative inline-flex items-center gap-1.5 px-1">
-          <Icon icon="solar:cup-star-bold-duotone" className="text-sm text-amber-200" />
-          <span className="text-[10px] tracking-[0.24em]">PELUANG EMAS</span>
+        <span className="relative inline-flex items-center gap-1.5 px-0.5">
+          <Icon icon="solar:cup-star-bold-duotone" className={`${ic} text-amber-200`} />
+          <span className={sm ? "tracking-[0.14em]" : "tracking-[0.24em]"}>PELUANG EMAS</span>
         </span>
       </span>
     );
 
   if (days <= 10)
     return (
-      <span className="relative inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-[0.14em] text-white">
+      <span className={`relative inline-flex items-center gap-1.5 rounded-full font-bold uppercase tracking-[0.14em] text-white ${pad} ${txt}`}>
         <span className="absolute inset-0 rounded-full bg-[conic-gradient(at_top,_#22c55e,_#f97316,_#ef4444,_#22c55e)] opacity-90 blur-[3px]" />
         <span className="absolute inset-[1px] rounded-full bg-gradient-to-r from-black/80 via-black/70 to-black/80 border border-red-400/80 shadow-[0_0_26px_rgba(248,113,113,0.8)]" />
-        <span className="relative inline-flex items-center gap-1 px-1">
+        <span className="relative inline-flex items-center gap-1 px-0.5">
           <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-ping" />
-          <Icon icon="solar:fire-bold-duotone" className="text-sm text-yellow-200" />
+          <Icon icon="solar:fire-bold-duotone" className={`${ic} text-yellow-200`} />
           {days} hari lagi
         </span>
       </span>
@@ -75,22 +72,22 @@ function LelangBadge({ tanggal_lelang }: { tanggal_lelang: string | null }) {
 
   if (days <= 20)
     return (
-      <span className="relative inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-[0.12em] text-white">
+      <span className={`relative inline-flex items-center gap-1.5 rounded-full font-bold uppercase tracking-[0.12em] text-white ${pad} ${txt}`}>
         <span className="absolute inset-0 rounded-full bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 opacity-80 blur-[2px]" />
         <span className="absolute inset-0 rounded-full bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 animate-pulse opacity-70" />
-        <span className="relative inline-flex items-center gap-1.5 px-1">
-          <Icon icon="solar:fire-bold-duotone" className="text-sm text-yellow-100" />
+        <span className="relative inline-flex items-center gap-1.5 px-0.5">
+          <Icon icon="solar:fire-bold-duotone" className={`${ic} text-yellow-100`} />
           {days} hari lagi
         </span>
       </span>
     );
 
   return (
-    <span className="relative inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-[0.14em] text-sky-50">
+    <span className={`relative inline-flex items-center gap-1.5 rounded-full font-bold uppercase tracking-[0.14em] text-sky-50 ${pad} ${txt}`}>
       <span className="absolute inset-0 rounded-full bg-gradient-to-r from-sky-500 via-cyan-400 to-emerald-400 opacity-70 blur-[3px]" />
       <span className="absolute inset-[1px] rounded-full bg-gradient-to-r from-[#020617] via-[#020617] to-[#022c22] border border-sky-300/70 shadow-[0_0_18px_rgba(56,189,248,0.7)]" />
-      <span className="relative inline-flex items-center gap-1.5 px-1">
-        <Icon icon="solar:calendar-bold-duotone" className="text-sm text-sky-200" />
+      <span className="relative inline-flex items-center gap-1.5 px-0.5">
+        <Icon icon="solar:calendar-bold-duotone" className={`${ic} text-sky-200`} />
         {formatDateShort(tanggal_lelang!)}
       </span>
     </span>
@@ -156,7 +153,7 @@ export default function PropertyCard({ item, forceAlamatLengkap = false, compact
       >
         {/* ── IMAGE ── */}
         <div
-          className={`relative w-full overflow-hidden ${compact ? "h-44" : "h-64"}`}
+          className={`relative w-full overflow-hidden ${compact ? "h-52" : "h-64"}`}
           {...(images.length > 1 ? swipe : {})}
         >
           <Image
@@ -206,22 +203,26 @@ export default function PropertyCard({ item, forceAlamatLengkap = false, compact
           )}
 
           {/* badge kiri: kategori */}
-          <div className="absolute top-4 left-4 z-10">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/80 text-emerald-300 text-[11px] font-semibold border border-emerald-400/40 backdrop-blur-sm">
-              <Icon icon={icon} className="text-sm" />
+          <div className={`absolute z-10 ${compact ? "top-3 left-3" : "top-4 left-4"}`}>
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full bg-black/80 text-emerald-300 font-semibold border border-emerald-400/40 backdrop-blur-sm ${
+                compact ? "px-2 py-0.5 text-[10px]" : "px-3 py-1.5 text-[11px]"
+              }`}
+            >
+              <Icon icon={icon} className={compact ? "text-xs" : "text-sm"} />
               {item.kategori.replace(/_/g, " ")}
             </span>
           </div>
 
           {/* badge kanan: tipe transaksi (selalu tampil, termasuk LELANG) */}
-          <div className="absolute top-4 right-4 z-10 flex flex-col items-end gap-1.5">
+          <div className={`absolute z-10 flex flex-col items-end gap-1.5 ${compact ? "top-3 right-3" : "top-4 right-4"}`}>
             {isLelang ? (
               <>
-                <TransaksiBadge type="LELANG" />
-                <LelangBadge tanggal_lelang={item.tanggal_lelang} />
+                <TransaksiBadge type="LELANG" size={compact ? "sm" : "md"} />
+                <LelangBadge tanggal_lelang={item.tanggal_lelang} size={compact ? "sm" : "md"} />
               </>
             ) : (
-              <TransaksiBadge type={item.jenis_transaksi} />
+              <TransaksiBadge type={item.jenis_transaksi} size={compact ? "sm" : "md"} />
             )}
           </div>
 

@@ -1,6 +1,10 @@
 // src/app/dashboard/pemilu/[id_acara]/hooks/usePemiluGiliran.ts
 import { useEffect, useState, useRef } from "react";
-import Pusher from "pusher-js";
+import PusherDefault from "pusher-js";
+
+// pusher-js is a UMD/CJS bundle; unwrap .default so `new Pusher()` works under
+// webpack ESM interop (avoids "pusher_js ... is not a constructor").
+const Pusher = (((PusherDefault as any)?.default ?? PusherDefault) as typeof PusherDefault);
 
 export function usePemiluGiliran(
   id_acara: string,

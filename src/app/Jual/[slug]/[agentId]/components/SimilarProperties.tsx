@@ -16,7 +16,7 @@ export default function SimilarProperties({ items = [] }: SimilarPropertiesProps
   if (!items.length) return null;
 
   const scrollByCard = (dir: number) =>
-    scrollRef.current?.scrollBy({ left: dir * 290, behavior: "smooth" });
+    scrollRef.current?.scrollBy({ left: dir * 312, behavior: "smooth" });
 
   return (
     <section className="container mx-auto px-4 mt-6 pt-6 border-t border-white/5 mb-8">
@@ -59,12 +59,12 @@ export default function SimilarProperties({ items = [] }: SimilarPropertiesProps
       {/* SCROLLABLE CARDS */}
       <div
         ref={scrollRef}
-        className="flex snap-x snap-mandatory gap-3 overflow-x-auto scrollbar-hide pb-3 -mx-4 px-4 md:mx-0 md:px-0"
+        className="flex snap-x snap-mandatory gap-3 overflow-x-auto scrollbar-hide pb-3 px-0.5 scroll-pl-0.5"
       >
         {items.map((item) => (
           <div
             key={item.id_property}
-            className="w-[250px] shrink-0 snap-start sm:w-[280px]"
+            className="w-[270px] shrink-0 snap-start sm:w-[300px]"
           >
             <PropertyCard item={item} compact />
           </div>

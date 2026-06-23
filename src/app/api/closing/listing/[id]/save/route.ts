@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
 import { prisma } from "@/lib/prisma";
+import { buildAssetMatchWhere } from "@/lib/auctionMatch";
 
 function toBigInt(v: number | null | undefined): bigint {
   if (v == null || !Number.isFinite(v)) return 0n;
@@ -134,7 +135,10 @@ export async function POST(
       const currentListing = await tx.listing.findUnique({
         where: { id_property: id_listing },
         select: {
+          legalitas: true,
           nomor_legalitas: true,
+          kelurahan: true,
+          kecamatan: true,
           kota: true,
           tanggal_lelang: true,
           jenis_transaksi: true,
@@ -203,22 +207,19 @@ export async function POST(
         }
       }
 
-      if (currentListing?.nomor_legalitas) {
-        await tx.listing.updateMany({
-          where: {
-            OR: [
-              { id_property: id_listing },
-              { nomor_legalitas: currentListing.nomor_legalitas, kota: currentListing.kota },
-            ],
-          },
-          data: { status_tayang: "TERJUAL" },
-        });
-      } else {
-        await tx.listing.update({
-          where: { id_property: id_listing },
-          data: { status_tayang: "TERJUAL" },
-        });
-      }
+      // Tandai TERJUAL: listing ini + semua listing yang merupakan aset yang sama
+      // persis (jenis + nomor sertifikat + wilayah, lihat @/lib/auctionMatch).
+      // WAJIB cocok sampai kelurahan supaya aset lain dengan nomor sertifikat
+      // kebetulan sama di kelurahan berbeda tidak ikut tertandai terjual.
+      const soldMatch = currentListing
+        ? buildAssetMatchWhere(currentListing)
+        : null;
+      await tx.listing.updateMany({
+        where: soldMatch
+          ? { OR: [{ id_property: id_listing }, soldMatch] }
+          : { id_property: id_listing },
+        data: { status_tayang: "TERJUAL" },
+      });
 
       // ── Transaksi ────────────────────────────────────────────
       const idTransaksi = mou.id_transaksi;

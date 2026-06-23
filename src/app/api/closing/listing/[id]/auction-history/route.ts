@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { buildAssetMatchWhere, deepestWilayahLevel } from "@/lib/auctionMatch";
 
 function splitImages(gambar: any): string[] {
   const raw = (gambar ?? "").toString();
@@ -27,6 +28,7 @@ export async function GET(
         id_property: true,
         jenis_transaksi: true,
         kelurahan: true,
+        kecamatan: true,
         legalitas: true,
         nomor_legalitas: true,
         kota: true,
@@ -44,19 +46,16 @@ export async function GET(
       });
     }
 
-    // Cari listing lain yang merupakan aset yang sama:
-    // kota (selalu ada) + legalitas + nomor_legalitas → unik per aset.
-    // Kelurahan tidak dipakai karena sering tidak konsisten antar listing.
-    const canMatch = current.legalitas && current.nomor_legalitas;
+    // Cari listing lain yang merupakan aset yang sama: jenis + nomor sertifikat +
+    // wilayah administratif. Nomor sertifikat hanya unik per kelurahan, jadi
+    // kelurahan WAJIB dicocokkan (turun ke kecamatan lalu kota bila tidak ada).
+    // Lihat buildAssetMatchWhere di @/lib/auctionMatch.
+    const matchWhere = buildAssetMatchWhere(current);
+    const canMatch = matchWhere !== null;
 
     const rows = await prisma.listing.findMany({
-      where: canMatch
-        ? {
-            id_property: { not: id_property },
-            kota: { equals: current.kota, mode: "insensitive" },
-            legalitas: current.legalitas!,
-            nomor_legalitas: { equals: current.nomor_legalitas!, mode: "insensitive" },
-          }
+      where: matchWhere
+        ? { ...matchWhere, id_property: { not: id_property } }
         : { id_property: -1n },
       orderBy: [{ tanggal_lelang: "asc" }, { tanggal_dibuat: "asc" }],
       select: {
@@ -150,6 +149,10 @@ export async function GET(
       rows: merged,
       matchCriteria: canMatch
         ? {
+            // Level wilayah terdalam yang dipakai untuk pencocokan + labelnya.
+            wilayah_level: deepestWilayahLevel(current),
+            kelurahan: current.kelurahan,
+            kecamatan: current.kecamatan,
             kota: current.kota,
             legalitas: current.legalitas,
             nomor_legalitas: current.nomor_legalitas,

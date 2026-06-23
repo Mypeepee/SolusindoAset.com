@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { buildAssetMatchWhere } from "@/lib/auctionMatch";
 
 export async function GET(
   _req: Request,
@@ -52,24 +53,21 @@ export async function GET(
       };
     };
 
-    // Aset unik dideteksi via kota + legalitas + nomor_legalitas (case-insensitive).
-    // Kelurahan tidak dipakai karena sering tidak konsisten antar listing.
-    const canMatch =
-      !!current.kota &&
-      !!current.legalitas &&
-      !!current.nomor_legalitas?.trim();
+    // Aset unik dideteksi via jenis + nomor sertifikat + wilayah administratif.
+    // Nomor sertifikat hanya unik per kelurahan, jadi kelurahan WAJIB dicocokkan
+    // (turun ke kecamatan lalu kota bila kelurahan tidak tersedia). Lihat
+    // buildAssetMatchWhere di @/lib/auctionMatch.
+    const matchWhere = buildAssetMatchWhere(current);
 
-    if (!canMatch) {
+    if (!matchWhere) {
       return NextResponse.json({ riwayat: [serializeItem(current)] });
     }
 
     const others = await prisma.listing.findMany({
       where: {
+        ...matchWhere,
         id_property: { not: id },
         jenis_transaksi: "LELANG",
-        kota: { equals: current.kota!, mode: "insensitive" },
-        legalitas: current.legalitas!,
-        nomor_legalitas: { equals: current.nomor_legalitas!, mode: "insensitive" },
       },
       select: {
         id_property: true,

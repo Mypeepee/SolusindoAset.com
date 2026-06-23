@@ -55,7 +55,7 @@ export default function TransactionTabs({ active }: { active: TxTab }) {
 
   return (
     <div className="flex justify-center mb-4">
-      <div className="bg-[#1A1A1A]/90 backdrop-blur-md border border-white/15 p-1.5 rounded-full flex w-full max-w-md sm:w-auto sm:inline-flex shadow-xl">
+      <div className="bg-[#1A1A1A]/90 backdrop-blur-md border border-white/15 px-3 py-2 rounded-full flex w-full max-w-md sm:max-w-none sm:w-auto sm:inline-flex shadow-xl">
         {TABS.map((tab) => {
           const isActive = tab.id === displayActive;
           const loading = isPending && pending === tab.id;
@@ -74,9 +74,9 @@ export default function TransactionTabs({ active }: { active: TxTab }) {
               {isActive && (
                 <motion.span
                   layoutId="txTabPill"
-                  className="absolute inset-0 rounded-full shadow-[0_0_26px_rgba(74,222,128,0.6),0_4px_12px_rgba(0,0,0,0.25)]"
+                  className="absolute inset-0 rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.55),inset_0_-1px_2px_rgba(0,0,0,0.18)]"
                   style={{ background: "linear-gradient(180deg,#9af7b5 0%,#4ade80 55%,#37d06d 100%)" }}
-                  transition={{ type: "spring", stiffness: 420, damping: 30, mass: 0.8 }}
+                  transition={{ type: "spring", stiffness: 420, damping: 34, mass: 0.8 }}
                 />
               )}
               <span className="relative z-10 flex items-center gap-1.5 sm:gap-2">

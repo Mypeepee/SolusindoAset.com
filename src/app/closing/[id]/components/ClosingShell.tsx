@@ -668,6 +668,9 @@ type RiwayatRow = {
 };
 
 type MatchCriteria = {
+  wilayah_level?: "kelurahan" | "kecamatan" | "kota";
+  kelurahan?: string | null;
+  kecamatan?: string | null;
   kota?: string | null;
   legalitas: string | null;
   nomor_legalitas: string | null;
@@ -760,12 +763,21 @@ function RiwayatLelangModal({
         {/* criteria pill */}
         {matchCriteria && !loading && (
           <div className="mx-5 mb-3 flex flex-wrap gap-1.5">
-            {matchCriteria.kota && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold text-zinc-400">
-                <Icon icon="solar:city-linear" className="text-[11px] text-zinc-500" />
-                {matchCriteria.kota}
-              </span>
-            )}
+            {(() => {
+              const wilayah = [
+                matchCriteria.kelurahan,
+                matchCriteria.kecamatan,
+                matchCriteria.kota,
+              ]
+                .filter(Boolean)
+                .join(", ");
+              return wilayah ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold text-zinc-400">
+                  <Icon icon="solar:map-point-linear" className="text-[11px] text-zinc-500" />
+                  {wilayah}
+                </span>
+              ) : null;
+            })()}
             {matchCriteria.legalitas && (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold text-zinc-400">
                 <Icon icon="solar:document-linear" className="text-[11px] text-zinc-500" />
