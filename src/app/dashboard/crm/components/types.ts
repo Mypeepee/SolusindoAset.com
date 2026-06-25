@@ -41,6 +41,10 @@ export interface PreferensiKlien {
   tipe_properti: TipeProperti;
   jenis_transaksi: JenisTransaksi | null;
   lokasi_dicari: string | null;
+  loc_provinsi: string | null;
+  loc_kota: string | null;
+  loc_kecamatan: string | null;
+  loc_kelurahan: string | null;
   budget_min: number | null;
   budget_max: number | null;
   luas_min: number | null;
@@ -86,6 +90,10 @@ export interface PreferensiForm {
   tipe_properti: TipeProperti | "";
   jenis_transaksi: JenisTransaksi | "";
   lokasi_dicari: string;
+  loc_provinsi: string;
+  loc_kota: string;
+  loc_kecamatan: string;
+  loc_kelurahan: string;
   budget_min: string;
   budget_max: string;
   luas_min: string;
@@ -168,6 +176,10 @@ export const EMPTY_PREFERENSI: PreferensiForm = {
   tipe_properti:   "",
   jenis_transaksi: "",
   lokasi_dicari:   "",
+  loc_provinsi:    "",
+  loc_kota:        "",
+  loc_kecamatan:   "",
+  loc_kelurahan:   "",
   budget_min:      "",
   budget_max:      "",
   luas_min:        "",

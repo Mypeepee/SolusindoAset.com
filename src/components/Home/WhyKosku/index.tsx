@@ -101,7 +101,7 @@ const WhyKosku = () => {
   const glowY = useTransform(scrollYProgress, [0, 1], ["-12%", "12%"]);
 
   return (
-    <section ref={sectionRef} className="py-10 md:py-14 bg-[#0F0F0F] relative">
+    <section ref={sectionRef} className="py-10 md:py-14 bg-[#0F0F0F] relative overflow-x-clip">
       {/* ambient glow (parallax) */}
       <motion.div
         style={{ y: glowY }}

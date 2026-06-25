@@ -32,7 +32,7 @@ const CtaPenutup = () => {
   const inView = useInView(ref, { once: true, amount: 0 });
 
   return (
-    <section className="py-10 md:py-14 bg-[#0F0F0F]" ref={ref}>
+    <section className="py-10 md:py-14 bg-[#0F0F0F] overflow-x-clip" ref={ref}>
       <div className="container mx-auto px-4 max-w-screen-xl">
         <motion.div
           initial={{ opacity: 0, y: 40, scale: 0.98 }}

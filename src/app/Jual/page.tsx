@@ -4,6 +4,8 @@ import SearchHero from "./searchhero";
 import ProductList from "./produklist";
 import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { buildLocationWhere } from "@/lib/listingLocationFilter";
+import { parseCategoryDbList } from "@/lib/propertyType";
 
 // --- TIPE DATA URL PARAMETERS ---
 type Props = {
@@ -183,7 +185,7 @@ export default async function SearchPage({ searchParams }: Props) {
       ? Number(searchParams.maxLB)
       : undefined;
 
-  const limit = 15;
+  const limit = 30;
   const skip = (page - 1) * limit;
 
   // Filter harga efektif: pakai harga_promo jika valid (> 0), else pakai harga
@@ -213,6 +215,12 @@ export default async function SearchPage({ searchParams }: Props) {
 
   const priceFilter = buildPriceFilter();
 
+  // Filter lokasi multi-wilayah (provinsi/kota/kecamatan/kelurahan) → grup OR.
+  const locationWhere = buildLocationWhere(searchParams);
+
+  // Tipe aset multi-kategori (param `tipe` = daftar enum dipisah koma).
+  const kategoriList = parseCategoryDbList(searchParams.tipe);
+
   // B. BUILD FILTER QUERY (WHERE)
   // Jika idProperty ada → exact match (paling spesifik, abaikan filter q dan
   // filter sekunder lainnya supaya properti yang dicari pasti tampil).
@@ -227,14 +235,11 @@ export default async function SearchPage({ searchParams }: Props) {
       alamat_lengkap: { contains: q, mode: "insensitive" },
     }),
 
-    ...(!idPropertyRaw && kota && {
-      kota: { contains: kota, mode: "insensitive" },
-    }),
+    ...(!idPropertyRaw && locationWhere && { AND: [locationWhere] }),
 
-    ...(!idPropertyRaw && tipe &&
-      allowedKategori.includes(tipe.toUpperCase() as any) && {
-        kategori: tipe.toUpperCase() as any,
-      }),
+    ...(!idPropertyRaw && kategoriList.length > 0 && {
+      kategori: { in: kategoriList as any },
+    }),
 
     ...(!idPropertyRaw && priceFilter && priceFilter),
 

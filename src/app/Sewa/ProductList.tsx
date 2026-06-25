@@ -12,7 +12,7 @@ import { formatRupiah, getFacilityIcon, getTypeColor } from "./utils";
 import { smoothScrollToElement } from "@/lib/pagination";
 import Pagination from "@/components/Pagination";
 
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 30;
 
 const ApartmentCard = ({ item }: { item: Apartment }) => {
   return (

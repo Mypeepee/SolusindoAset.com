@@ -7,7 +7,19 @@ import { Icon } from "@iconify/react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import type { TabCounts } from "../types";
-import TransactionTabs from "@/components/search/TransactionTabs";
+import TransactionTabs, { type TxTab } from "@/components/search/TransactionTabs";
+import LocationPicker from "@/components/search/LocationPicker";
+import {
+  setLocationParams,
+  parseLocationParams,
+  locationsToSelectedRegions,
+  type SelectedRegion,
+} from "@/lib/regionSearch";
+import TypePicker from "@/components/search/TypePicker";
+import {
+  serializeTypes,
+  parseTypeParamToDisplays,
+} from "@/lib/propertyType";
 
 // ─── PORTAL DROPDOWN ─────────────────────────────────────────────────────────
 // Renders children directly into document.body to escape any stacking context
@@ -125,19 +137,15 @@ const PROPERTY_TYPES = {
 
 type TabType = "beli" | "sewa" | "lelang";
 
-interface Region { id: string; name: string; level: "provinsi"|"kota"|"kecamatan"|"kelurahan" }
-interface ApiRegion { id: string; nama: string }
 interface SearchState {
   keyword: string;
-  locations: Region[]; type: string;
+  locations: SelectedRegion[]; types: string[];
   minPrice: string; maxPrice: string;
   minLt: string; maxLt: string;
   minLb: string; maxLb: string;
 }
 
 const isNumericOnly = (val: string) => /^\d+$/.test(val.trim());
-
-const BASE_API = "https://ibnux.github.io/data-indonesia";
 
 const PARTICLES = [
   { x:  8, y: 22, s: 2,   d: 3.1, delay: 0   },
@@ -266,32 +274,32 @@ const ALL_PROPERTY_TYPES = sortAlpha([
   ...new Set([...PROPERTY_TYPES.beli, ...PROPERTY_TYPES.sewa, ...PROPERTY_TYPES.lelang]),
 ]);
 
-function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: string }) {
+function DarkSearchBar({ slug, activeColor, activeTab }: { slug: string; activeColor: string; activeTab: TxTab }) {
   const router = useRouter();
   const sp     = useSearchParams();
   const wrapperRef   = useRef<HTMLDivElement>(null);
-  const refLokasi    = useRef<HTMLDivElement>(null);
-  const refTipe      = useRef<HTMLDivElement>(null);
   const refHarga     = useRef<HTMLDivElement>(null);
   const refDimensi   = useRef<HTMLDivElement>(null);
   const keywordInputRef = useRef<HTMLInputElement>(null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
-  const [viewLevel, setViewLevel]   = useState<Region["level"]>("provinsi");
-  const [currentList, setCurrentList] = useState<Region[]>([]);
-  const [parentRegion, setParentRegion] = useState<Region | null>(null);
-  const [loadingWilayah, setLoadingWilayah] = useState(false);
-
   const fmt = (val: string | null) =>
     val ? new Intl.NumberFormat("id-ID").format(Number(val)) : "";
 
   const [formData, setFormData] = useState<SearchState>(() => {
-    const rawKota = sp.get("kota") ?? sp.get("lokasi") ?? "";
     const rawKeyword = sp.get("idProperty") ?? sp.get("q") ?? "";
+    // tipe aset dihidrasi dari param `kategori` (multi) atau dari slug halaman.
+    const fromParam = parseTypeParamToDisplays(sp.get("kategori"));
+    const cat = KATEGORI_LIST.find((k) => k.slug === slug);
+    const types = fromParam.length
+      ? fromParam
+      : cat && cat.key !== "SEMUA"
+      ? [cat.label]
+      : [];
     return {
       keyword: rawKeyword,
-      locations: rawKota ? [{ id: rawKota, name: rawKota, level: "kota" as const }] : [],
-      type: "",
+      locations: locationsToSelectedRegions(parseLocationParams((k) => sp.get(k))),
+      types,
       minPrice: fmt(sp.get("minHarga")),
       maxPrice: fmt(sp.get("maxHarga")),
       minLt:    fmt(sp.get("minLT") ?? sp.get("minLt")),
@@ -305,46 +313,17 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
   const keywordMode: "id" | "alamat" | null =
     keywordTrimmed === "" ? null : isNumericOnly(keywordTrimmed) ? "id" : "alamat";
 
-  // Sync tipe aset ke kategori halaman yang aktif
+  // Sync tipe aset ke param `kategori` (multi) atau kategori halaman aktif (slug)
   useEffect(() => {
+    const fromParam = parseTypeParamToDisplays(sp.get("kategori"));
+    if (fromParam.length) {
+      setFormData(prev => ({ ...prev, types: fromParam }));
+      return;
+    }
     const cat = KATEGORI_LIST.find(k => k.slug === slug);
-    setFormData(prev => ({ ...prev, type: cat && cat.key !== "SEMUA" ? cat.label : "" }));
-  }, [slug]);
-
-  const mapData = (data: ApiRegion[], level: Region["level"]): Region[] =>
-    data.map(item => ({ id: item.id, name: item.nama, level }))
-        .sort((a, b) => a.name.localeCompare(b.name));
-
-  const getRegionIcon = (level: Region["level"]) => ({
-    provinsi:   "solar:globus-bold-duotone",
-    kota:       "solar:buildings-2-bold-duotone",
-    kecamatan:  "solar:buildings-bold-duotone",
-    kelurahan:  "solar:map-point-wave-bold-duotone",
-  }[level] ?? "solar:map-point-bold-duotone");
-
-  const fetchRegions = async (level: Region["level"], parentId?: string) => {
-    setLoadingWilayah(true);
-    try {
-      const urlMap: Record<string, string> = {
-        provinsi:  `${BASE_API}/propinsi.json`,
-        kota:      parentId ? `${BASE_API}/kabupaten/${parentId}.json` : "",
-        kecamatan: parentId ? `${BASE_API}/kecamatan/${parentId}.json` : "",
-        kelurahan: parentId ? `${BASE_API}/kelurahan/${parentId}.json` : "",
-      };
-      const url = urlMap[level];
-      if (url) {
-        const res = await fetch(url);
-        const data = await res.json();
-        setCurrentList(mapData(data, level));
-      }
-    } catch { toast.error("Gagal memuat data wilayah"); }
-    finally { setLoadingWilayah(false); }
-  };
-
-  useEffect(() => {
-    if (openDropdown === "location" && viewLevel === "provinsi") fetchRegions("provinsi");
+    setFormData(prev => ({ ...prev, types: cat && cat.key !== "SEMUA" ? [cat.label] : [] }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openDropdown]);
+  }, [slug, sp]);
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
@@ -356,28 +335,6 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, []);
-
-  const toggleLocation = (item: Region) => {
-    const exists = formData.locations.some(l => l.id === item.id);
-    if (!exists) toast.success(`${item.name} ditambahkan!`, {
-      icon: "📍",
-      style: { borderRadius: "10px", background: "#1a1f2e", color: "#fff", fontSize: "12px" },
-    });
-    setFormData(prev => {
-      const locs = prev.locations.filter(l => !item.id.startsWith(l.id) && !l.id.startsWith(item.id));
-      return { ...prev, locations: exists ? prev.locations.filter(l => l.id !== item.id) : [...locs, item] };
-    });
-  };
-
-  const handleRowClick = (item: Region) => {
-    if (item.level === "kelurahan") { toggleLocation(item); return; }
-    const nextLevel = ({ provinsi: "kota", kota: "kecamatan", kecamatan: "kelurahan" } as const)[item.level] ?? "kota";
-    setParentRegion(item);
-    setViewLevel(nextLevel);
-    fetchRegions(nextLevel, item.id);
-  };
-
-  const handleBack = () => { setViewLevel("provinsi"); setParentRegion(null); fetchRegions("provinsi"); };
 
   const handleFormattedInput = (e: React.ChangeEvent<HTMLInputElement>, field: keyof SearchState) => {
     const raw = e.target.value.replace(/\D/g, "");
@@ -412,21 +369,15 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
   const handleSearch = () => {
     if (searching) return;
 
-    const targetSlug = formData.type
-      ? KATEGORI_LIST.find(k => k.label === formData.type)?.slug ?? slug
-      : slug;
+    const dbTypes = serializeTypes(formData.types).split(",").filter(Boolean);
     const raw = (v: string) => v.replace(/\./g, "");
+
     const params = new URLSearchParams();
     if (keywordTrimmed) {
       if (keywordMode === "id") params.set("idProperty", keywordTrimmed);
       else params.set("q", keywordTrimmed);
     }
-    // Pertahankan tab aktif (Semua/Jual/Lelang/Sewa) saat pencarian alamat,
-    // supaya hasil tetap relevan dengan tab yang sedang dibuka.
-    // Untuk pencarian by ID, server akan otomatis arahkan ke tab yang sesuai.
-    const currentTipe = sp.get("tipe");
-    if (currentTipe && keywordMode !== "id") params.set("tipe", currentTipe);
-    if (formData.locations.length) params.set("kota", formData.locations.map(l => l.name).join(","));
+    setLocationParams(params, formData.locations);
     if (formData.minPrice) params.set("minHarga", raw(formData.minPrice));
     if (formData.maxPrice) params.set("maxHarga", raw(formData.maxPrice));
     if (formData.minLt)    params.set("minLT",    raw(formData.minLt));
@@ -436,9 +387,29 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
 
     setOpenDropdown(null);
 
-    // Bandingkan tujuan dgn URL saat ini secara order-independent. Kalau tidak
-    // ada perubahan, tak perlu navigasi/spinner (mencegah tombol nyangkut saat
-    // user menekan "Cari" dengan kriteria yang sama persis).
+    // Tab transaksi ≠ "semua" → pindah ke halaman section (Jual/Lelang/Sewa).
+    // Tipe aset dikirim sebagai `tipe` (di Jual/Lelang, `tipe` = kategori).
+    // Pencarian by ID tetap lewat /properti agar server bisa mengarahkan ke
+    // tab/section yang benar lintas transaksi.
+    if (activeTab !== "semua" && keywordMode !== "id") {
+      if (dbTypes.length) params.set("tipe", dbTypes.join(","));
+      const dest =
+        activeTab === "beli" ? "/Jual" : activeTab === "lelang" ? "/Lelang" : "/Sewa";
+      setSearching(true);
+      window.dispatchEvent(new CustomEvent("navigate-start"));
+      router.push(`${dest}?${params.toString()}`);
+      return;
+    }
+
+    // Tab "semua" → tetap di halaman kategori. 1 tipe → slug kategori (URL rapi);
+    // >1 tipe → /properti/semua + param `kategori`.
+    const targetSlug =
+      dbTypes.length === 1
+        ? KATEGORI_LIST.find(k => k.key === dbTypes[0])?.slug ?? "semua"
+        : "semua";
+    if (dbTypes.length > 1) params.set("kategori", dbTypes.join(","));
+
+    // Kalau tujuan & kriteria sama persis dgn URL sekarang → tak perlu navigasi.
     params.sort();
     const nextQuery = params.toString();
     const curParams = new URLSearchParams(sp.toString());
@@ -536,177 +507,27 @@ function DarkSearchBar({ slug, activeColor }: { slug: string; activeColor: strin
           </div>
 
           {/* B. LOKASI */}
-          <div ref={refLokasi} className="w-full lg:w-[20%] px-3 py-2.5 relative group min-w-0">
-            <div className="cursor-pointer" onClick={() => setOpenDropdown(openDropdown === "location" ? null : "location")}>
-              <label className="text-[10px] font-extrabold tracking-wider text-white/30 uppercase mb-1 block group-hover:text-white/60 transition-colors">
-                Lokasi
-              </label>
-              <div className="flex items-center gap-2 w-full">
-                <Icon icon="solar:map-point-bold-duotone" className="text-xl text-white/30 group-hover:text-white/60 transition-colors shrink-0" />
-                <div className="w-full overflow-x-auto no-scrollbar flex items-center gap-1.5 h-6">
-                  {formData.locations.length === 0 ? (
-                    <p className="font-bold text-white/85 text-sm truncate">Semua Lokasi</p>
-                  ) : (
-                    formData.locations.map(loc => (
-                      <span key={loc.id}
-                        onClick={e => { e.stopPropagation(); toggleLocation(loc); }}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap cursor-pointer transition-colors"
-                        style={{ background: `${activeColor}20`, border: `1px solid ${activeColor}40`, color: activeColor }}
-                      >
-                        {loc.name}
-                        <Icon icon="solar:close-circle-bold" className="text-xs" />
-                      </span>
-                    ))
-                  )}
-                </div>
-                <motion.div animate={{ rotate: openDropdown === "location" ? 180 : 0 }} transition={{ duration: 0.2 }}>
-                  <Icon icon="solar:alt-arrow-down-linear" className="text-white/25 shrink-0" />
-                </motion.div>
-              </div>
-            </div>
-
-            <PortalDropdown triggerRef={refLokasi} open={openDropdown === "location"}>
-              <AnimatePresence>
-              {openDropdown === "location" && (
-                <motion.div
-                  initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={{ duration: 0.18, ease: [0.16,1,0.3,1] }}
-                  className="w-[400px] rounded-2xl overflow-hidden flex flex-col max-h-[400px]"
-                  style={panelStyle}
-                >
-                  <div className="p-4 border-b border-white/[0.08] flex items-center justify-between sticky top-0 z-10"
-                    style={{ background: "rgba(255,255,255,0.03)" }}>
-                    <div className="flex items-center gap-2">
-                      {viewLevel !== "provinsi" && (
-                        <button onClick={handleBack} className="p-1.5 hover:bg-white/10 rounded-full transition-colors">
-                          <Icon icon="solar:arrow-left-linear" className="text-lg text-white/60" />
-                        </button>
-                      )}
-                      <h4 className="font-bold text-white/80 text-sm flex items-center gap-2">
-                        <Icon icon={getRegionIcon(viewLevel)} className="text-lg" style={{ color: activeColor }} />
-                        {viewLevel === "provinsi" ? "Pilih Wilayah" : <span style={{ color: activeColor }}>{parentRegion?.name}</span>}
-                      </h4>
-                    </div>
-                    {loadingWilayah && <Icon icon="line-md:loading-loop" className="text-lg" style={{ color: activeColor }} />}
-                  </div>
-
-                  <div className="overflow-y-auto flex-1" style={{ scrollbarWidth: "none" }}>
-                    {viewLevel !== "provinsi" && parentRegion && (
-                      <button onClick={() => toggleLocation(parentRegion)}
-                        className="w-full text-left px-4 py-3 border-b border-white/[0.06] flex items-center gap-3 transition-colors hover:bg-white/5"
-                        style={{ background: `${activeColor}08` }}>
-                        <div className="w-5 h-5 rounded border flex items-center justify-center transition-colors"
-                          style={{
-                            background: formData.locations.some(l => l.id === parentRegion.id) ? activeColor : "transparent",
-                            borderColor: formData.locations.some(l => l.id === parentRegion.id) ? activeColor : "rgba(255,255,255,0.2)",
-                          }}>
-                          {formData.locations.some(l => l.id === parentRegion.id) && <Icon icon="solar:check-read-linear" className="text-[#0a0d14] text-sm" />}
-                        </div>
-                        <span className="text-sm font-bold text-white/80">Pilih Semua di {parentRegion.name}</span>
-                      </button>
-                    )}
-
-                    {currentList.map(item => {
-                      const isSelected = formData.locations.some(l => l.id === item.id);
-                      const hasChild   = item.level !== "kelurahan";
-                      return (
-                        <div key={item.id} className="flex items-center justify-between border-b border-white/[0.04] last:border-0 hover:bg-white/[0.03] transition-colors">
-                          <button onClick={() => handleRowClick(item)} className="flex-1 flex items-center gap-3 px-4 py-3 text-left">
-                            <Icon icon={getRegionIcon(item.level)} className="text-lg shrink-0"
-                              style={{ color: isSelected ? activeColor : "rgba(255,255,255,0.2)" }} />
-                            <div className="flex-1 overflow-hidden">
-                              <span className="text-sm block truncate"
-                                style={{ color: isSelected ? activeColor : "rgba(255,255,255,0.7)", fontWeight: isSelected ? 700 : 500 }}>
-                                {item.name}
-                              </span>
-                              {hasChild && (
-                                <span className="text-[10px] text-white/25">
-                                  Lihat {item.level === "provinsi" ? "Kota" : item.level === "kota" ? "Kecamatan" : "Kelurahan"}
-                                </span>
-                              )}
-                            </div>
-                          </button>
-                          <button onClick={e => { e.stopPropagation(); toggleLocation(item); }}
-                            className="p-3 hover:bg-white/5 rounded-lg transition-colors">
-                            <div className="w-5 h-5 rounded border flex items-center justify-center transition-colors"
-                              style={{
-                                background: isSelected ? activeColor : "transparent",
-                                borderColor: isSelected ? activeColor : "rgba(255,255,255,0.2)",
-                              }}>
-                              {isSelected && <Icon icon="solar:check-read-linear" className="text-[#0a0d14] text-sm" />}
-                            </div>
-                          </button>
-                          {hasChild && (
-                            <button onClick={() => handleRowClick(item)} className="p-2 text-white/20 hover:text-white/60 transition-colors">
-                              <Icon icon="solar:alt-arrow-right-linear" />
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </motion.div>
-              )}
-              </AnimatePresence>
-            </PortalDropdown>
+          <div className="w-full lg:w-[20%] px-3 py-2.5 relative min-w-0">
+            <LocationPicker
+              theme="dark"
+              value={formData.locations}
+              onChange={(locs) => setFormData((prev) => ({ ...prev, locations: locs }))}
+              open={openDropdown === "location"}
+              onOpenChange={(o) => setOpenDropdown(o ? "location" : null)}
+            />
           </div>
 
           {/* C. TIPE ASET */}
-          <div ref={refTipe} className="w-full lg:w-[13%] px-3 py-2.5 relative group min-w-0">
-            <div className="cursor-pointer" onClick={() => setOpenDropdown(openDropdown === "type" ? null : "type")}>
-              <label className="text-[10px] font-extrabold tracking-wider text-white/30 uppercase mb-1 block group-hover:text-white/60 transition-colors">
-                Tipe Aset
-              </label>
-              <div className="flex items-center gap-2">
-                <Icon icon="solar:buildings-bold-duotone" className="text-xl text-white/30 group-hover:text-white/60 transition-colors shrink-0" />
-                <p className="font-bold text-white/85 text-sm truncate flex-1">{formData.type || "Semua Tipe"}</p>
-                <motion.div animate={{ rotate: openDropdown === "type" ? 180 : 0 }} transition={{ duration: 0.2 }}>
-                  <Icon icon="solar:alt-arrow-down-linear" className="text-white/25 shrink-0" />
-                </motion.div>
-              </div>
-            </div>
-
-            <PortalDropdown triggerRef={refTipe} open={openDropdown === "type"}>
-              <AnimatePresence>
-              {openDropdown === "type" && (
-                <motion.div
-                  initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -6, scale: 0.97 }} transition={{ duration: 0.18, ease: [0.16,1,0.3,1] }}
-                  className="w-[260px] rounded-2xl p-2 max-h-[300px] overflow-y-auto"
-                  style={{ ...panelStyle, scrollbarWidth: "none" }}
-                >
-                  <button
-                    onClick={() => { setFormData(p => ({ ...p, type: "" })); setOpenDropdown(null); }}
-                    className="w-full text-left px-4 py-3 rounded-xl text-sm font-medium flex items-center gap-3 transition-colors"
-                    style={{
-                      background: formData.type === "" ? `${activeColor}18` : "transparent",
-                      color: formData.type === "" ? activeColor : "rgba(255,255,255,0.55)",
-                    }}
-                    onMouseEnter={e => { if (formData.type !== "") (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)"; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = formData.type === "" ? `${activeColor}18` : "transparent"; }}
-                  >
-                    <Icon icon="solar:apps-bold-duotone" className="text-lg opacity-70" />
-                    Semua Tipe
-                  </button>
-                  {ALL_PROPERTY_TYPES.map(item => (
-                    <button key={item}
-                      onClick={() => { setFormData(p => ({ ...p, type: item })); setOpenDropdown(null); }}
-                      className="w-full text-left px-4 py-3 rounded-xl text-sm font-medium flex items-center gap-3 transition-colors"
-                      style={{
-                        background: formData.type === item ? `${activeColor}18` : "transparent",
-                        color: formData.type === item ? activeColor : "rgba(255,255,255,0.55)",
-                      }}
-                      onMouseEnter={e => { if (formData.type !== item) (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)"; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = formData.type === item ? `${activeColor}18` : "transparent"; }}
-                    >
-                      <Icon icon={PROPERTY_ICONS[item] || "solar:home-bold-duotone"} className="text-lg opacity-70" />
-                      {item}
-                    </button>
-                  ))}
-                </motion.div>
-              )}
-              </AnimatePresence>
-            </PortalDropdown>
+          <div className="w-full lg:w-[13%] px-3 py-2.5 relative min-w-0">
+            <TypePicker
+              theme="dark"
+              value={formData.types}
+              onChange={(ts) => setFormData((prev) => ({ ...prev, types: ts }))}
+              options={ALL_PROPERTY_TYPES}
+              icons={PROPERTY_ICONS}
+              open={openDropdown === "type"}
+              onOpenChange={(o) => setOpenDropdown(o ? "type" : null)}
+            />
           </div>
 
           {/* D. HARGA */}
@@ -876,6 +697,16 @@ export default function KategoriHero({ slug, label, tabCounts }: KategoriHeroPro
   const dragStartX     = useRef(0);
   const dragScrollLeft = useRef(0);
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
+
+  // Tab transaksi (Semua/Beli/Lelang/Sewa) — terkontrol, tidak navigasi sampai
+  // user menekan Cari. Init dari param `tipe` (transaksi) bila ada.
+  const sp = useSearchParams();
+  const txTipe = sp.get("tipe");
+  const [activeTab, setActiveTab] = useState<TxTab>(
+    txTipe === "jual" ? "beli" :
+    txTipe === "lelang" ? "lelang" :
+    txTipe === "sewa" ? "sewa" : "semua"
+  );
 
   const categoryKey = slug.toUpperCase().replace(/-/g, "_");
   const current     = KATEGORI_LIST.find((k) => k.key === categoryKey);
@@ -1053,8 +884,8 @@ export default function KategoriHero({ slug, label, tabCounts }: KategoriHeroPro
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.42, duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
           className="mt-7 md:mt-8">
-          <TransactionTabs active="semua" />
-          <DarkSearchBar slug={slug} activeColor={activeColor} />
+          <TransactionTabs active={activeTab} onChange={setActiveTab} />
+          <DarkSearchBar slug={slug} activeColor={activeColor} activeTab={activeTab} />
         </motion.div>
       </div>
 

@@ -5,6 +5,8 @@ import ProductList from "./produklist";
 import SortBar from "./sortbar";
 import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { buildLocationWhere } from "@/lib/listingLocationFilter";
+import { parseCategoryDbList } from "@/lib/propertyType";
 
 type Props = {
   searchParams: { [key: string]: string | string[] | undefined };
@@ -155,11 +157,14 @@ export default async function SearchPage({ searchParams }: Props) {
       ? searchParams.sort
       : "terbaru";
 
-  const limit = 18;
+  const limit = 30;
   const skip = (page - 1) * limit;
 
-  // ✅ mapping tipe -> enum kategori
-  const mappedKategori = tipe ? KATEGORI_MAP[tipe.toUpperCase()] : undefined;
+  // ✅ Tipe aset multi-kategori (param `tipe` = daftar enum dipisah koma)
+  const kategoriList = parseCategoryDbList(searchParams.tipe);
+
+  // Filter lokasi multi-wilayah (provinsi/kota/kecamatan/kelurahan) → grup OR.
+  const locationWhere = buildLocationWhere(searchParams);
 
   // ✅ Tanggal hari ini (awal hari untuk comparison yang fair)
   const today = new Date();
@@ -178,12 +183,10 @@ export default async function SearchPage({ searchParams }: Props) {
       alamat_lengkap: { contains: q, mode: "insensitive" },
     }),
 
-    ...(!idPropertyRaw && kota && {
-      kota: { contains: kota, mode: "insensitive" },
-    }),
+    ...(!idPropertyRaw && locationWhere && { AND: [locationWhere] }),
 
-    ...(!idPropertyRaw && mappedKategori && {
-      kategori: { equals: mappedKategori },
+    ...(!idPropertyRaw && kategoriList.length > 0 && {
+      kategori: { in: kategoriList as any },
     }),
 
     ...(!idPropertyRaw && minKT && {

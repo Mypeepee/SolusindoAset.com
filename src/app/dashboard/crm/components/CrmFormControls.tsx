@@ -390,3 +390,252 @@ export function PremiumDateTimePicker({
     </>
   );
 }
+
+/* ════════════════════════════════════════════════════════════
+   SEARCHABLE SELECT — PremiumSelect + filter input (daftar panjang)
+   ════════════════════════════════════════════════════════════ */
+export function SearchableSelect({
+  value, onChange, options, placeholder = "-- Pilih --",
+  disabled = false, loading = false,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: PremiumOption[];
+  placeholder?: string;
+  disabled?: boolean;
+  loading?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const anchorRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const style = useAnchoredPanel(open, anchorRef, 320);
+  useDismiss(open, () => setOpen(false), anchorRef, panelRef);
+
+  useEffect(() => { if (!open) setQ(""); }, [open]);
+
+  const selected = options.find(o => o.value === value);
+  const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9\s]/g, "");
+  const nq = norm(q.trim());
+  const filtered = nq ? options.filter(o => norm(o.label).includes(nq)) : options;
+
+  return (
+    <>
+      <button
+        type="button"
+        ref={anchorRef}
+        disabled={disabled || loading}
+        onClick={() => setOpen(o => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5 text-sm transition-all duration-300 ${
+          disabled || loading
+            ? "cursor-not-allowed border-white/[0.05] bg-white/[0.02] opacity-50"
+            : open
+            ? "border-emerald-400/50 bg-white/[0.05] ring-2 ring-emerald-400/30"
+            : "border-white/[0.08] bg-white/[0.03] hover:border-white/[0.18]"
+        }`}
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <span className={`truncate ${selected ? "font-medium text-white" : "text-slate-500"}`}>
+            {loading ? "Memuat…" : selected?.label ?? placeholder}
+          </span>
+        </span>
+        <Icon
+          icon="solar:alt-arrow-down-line-duotone"
+          className={`shrink-0 text-base text-slate-400 transition-transform duration-300 ${open ? "rotate-180 text-emerald-300" : ""}`}
+        />
+      </button>
+
+      {open && createPortal(
+        <div ref={panelRef} style={style} className="crm-pop">
+          <div className="relative overflow-hidden rounded-xl border border-white/10 bg-[#0c0e14]/95 p-1.5 shadow-[0_24px_60px_-15px_rgba(0,0,0,0.9)] backdrop-blur-2xl">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/60 to-transparent" />
+            <div className="relative mb-1.5 px-1 pt-1">
+              <Icon icon="solar:magnifer-line-duotone" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500" />
+              <input
+                autoFocus
+                value={q}
+                onChange={e => setQ(e.target.value)}
+                placeholder="Cari…"
+                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] py-1.5 pl-8 pr-2.5 text-sm text-white placeholder:text-slate-600 focus:border-emerald-400/40 focus:outline-none focus:ring-2 focus:ring-emerald-400/20"
+              />
+            </div>
+            <div className="max-h-[240px] space-y-0.5 overflow-y-auto [scrollbar-width:thin]">
+              {filtered.length === 0 ? (
+                <p className="px-3 py-3 text-center text-[12px] text-slate-500">Tidak ditemukan</p>
+              ) : filtered.map(opt => {
+                const isSel = opt.value === value;
+                return (
+                  <button
+                    key={opt.value || "__empty"}
+                    type="button"
+                    role="option"
+                    aria-selected={isSel}
+                    onClick={() => { onChange(opt.value); setOpen(false); }}
+                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors duration-150 ${
+                      isSel ? "bg-emerald-500/10 text-white" : "text-slate-300 hover:bg-white/[0.06]"
+                    }`}
+                  >
+                    <span className="flex-1 truncate text-left font-medium">{opt.label}</span>
+                    {isSel && <Icon icon="solar:check-circle-bold" className="shrink-0 text-base text-emerald-400" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════
+   REGION CASCADE — Provinsi → Kota → Kecamatan → Kelurahan
+   Menyimpan NAMA wilayah (bukan id) supaya cocok dgn data listing.
+   ════════════════════════════════════════════════════════════ */
+export type RegionValue = {
+  provinsi: string;
+  kota: string;
+  kecamatan: string;
+  kelurahan: string;
+};
+
+type WilayahItem = { id: string; name: string };
+const normName = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+async function fetchWilayah(level: string, parentId?: string): Promise<WilayahItem[]> {
+  const qs = new URLSearchParams({ level });
+  if (parentId) qs.set("parentId", parentId);
+  try {
+    const r = await fetch(`/api/regions/wilayah?${qs.toString()}`);
+    const j = await r.json();
+    return j.ok ? (j.items as WilayahItem[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function RegionCascadeSelect({
+  value, onChange,
+}: {
+  value: RegionValue;
+  onChange: (v: RegionValue) => void;
+}) {
+  const [provList, setProvList] = useState<WilayahItem[]>([]);
+  const [kotaList, setKotaList] = useState<WilayahItem[]>([]);
+  const [kecList, setKecList]   = useState<WilayahItem[]>([]);
+  const [kelList, setKelList]   = useState<WilayahItem[]>([]);
+
+  const [provId, setProvId] = useState("");
+  const [kotaId, setKotaId] = useState("");
+  const [kecId, setKecId]   = useState("");
+
+  const [loading, setLoading] = useState({ kota: false, kec: false, kel: false });
+
+  // Provinsi: muat sekali.
+  useEffect(() => { fetchWilayah("provinsi").then(setProvList); }, []);
+
+  // Resolusi nama → id untuk pre-fill (mode edit).
+  useEffect(() => {
+    if (!provList.length || !value.provinsi || provId) return;
+    const m = provList.find(p => normName(p.name) === normName(value.provinsi));
+    if (m) setProvId(m.id);
+  }, [provList, value.provinsi, provId]);
+
+  useEffect(() => {
+    if (!provId) { setKotaList([]); return; }
+    setLoading(s => ({ ...s, kota: true }));
+    fetchWilayah("kota", provId).then(list => {
+      setKotaList(list);
+      setLoading(s => ({ ...s, kota: false }));
+    });
+  }, [provId]);
+
+  useEffect(() => {
+    if (!kotaList.length || !value.kota || kotaId) return;
+    const m = kotaList.find(k => normName(k.name) === normName(value.kota));
+    if (m) setKotaId(m.id);
+  }, [kotaList, value.kota, kotaId]);
+
+  useEffect(() => {
+    if (!kotaId) { setKecList([]); return; }
+    setLoading(s => ({ ...s, kec: true }));
+    fetchWilayah("kecamatan", kotaId).then(list => {
+      setKecList(list);
+      setLoading(s => ({ ...s, kec: false }));
+    });
+  }, [kotaId]);
+
+  useEffect(() => {
+    if (!kecList.length || !value.kecamatan || kecId) return;
+    const m = kecList.find(k => normName(k.name) === normName(value.kecamatan));
+    if (m) setKecId(m.id);
+  }, [kecList, value.kecamatan, kecId]);
+
+  useEffect(() => {
+    if (!kecId) { setKelList([]); return; }
+    setLoading(s => ({ ...s, kel: true }));
+    fetchWilayah("kelurahan", kecId).then(list => {
+      setKelList(list);
+      setLoading(s => ({ ...s, kel: false }));
+    });
+  }, [kecId]);
+
+  const toOpts = (list: WilayahItem[]): PremiumOption[] => list.map(i => ({ value: i.id, label: i.name }));
+
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <SearchableSelect
+        value={provId}
+        placeholder="Provinsi"
+        options={toOpts(provList)}
+        loading={!provList.length}
+        onChange={id => {
+          const name = provList.find(p => p.id === id)?.name ?? "";
+          setProvId(id); setKotaId(""); setKecId("");
+          setKotaList([]); setKecList([]); setKelList([]);
+          onChange({ provinsi: name, kota: "", kecamatan: "", kelurahan: "" });
+        }}
+      />
+      <SearchableSelect
+        value={kotaId}
+        placeholder="Kota / Kabupaten"
+        options={toOpts(kotaList)}
+        disabled={!provId}
+        loading={loading.kota}
+        onChange={id => {
+          const name = kotaList.find(k => k.id === id)?.name ?? "";
+          setKotaId(id); setKecId("");
+          setKecList([]); setKelList([]);
+          onChange({ ...value, kota: name, kecamatan: "", kelurahan: "" });
+        }}
+      />
+      <SearchableSelect
+        value={kecId}
+        placeholder="Kecamatan"
+        options={toOpts(kecList)}
+        disabled={!kotaId}
+        loading={loading.kec}
+        onChange={id => {
+          const name = kecList.find(k => k.id === id)?.name ?? "";
+          setKecId(id);
+          setKelList([]);
+          onChange({ ...value, kecamatan: name, kelurahan: "" });
+        }}
+      />
+      <SearchableSelect
+        value={kelList.find(k => normName(k.name) === normName(value.kelurahan))?.id ?? ""}
+        placeholder="Kelurahan"
+        options={toOpts(kelList)}
+        disabled={!kecId}
+        loading={loading.kel}
+        onChange={id => {
+          const name = kelList.find(k => k.id === id)?.name ?? "";
+          onChange({ ...value, kelurahan: name });
+        }}
+      />
+    </div>
+  );
+}

@@ -134,7 +134,13 @@ const MobileNav: React.FC<MobileNavProps> = ({
       });
     }
 
-    return [...extra, { divider: true }, ...items];
+    // Hindari duplikat: "Dashboard Agent" di atas sudah menuju /dashboard,
+    // jadi buang item "Dashboard" polos (disuntik untuk desktop nav) di mobile.
+    const deduped = isAgent
+      ? items.filter((it) => !(it?.href === "/dashboard" && it?.label === "Dashboard"))
+      : items;
+
+    return [...extra, { divider: true }, ...deduped];
   }, [filteredBaseMenu, status, isAgent]);
 
   return (

@@ -23,24 +23,41 @@ const CARRY_KEYS = [
 ];
 
 /**
- * Pill navigasi transaksi yang dipasang di atas SEMUA search bar.
+ * Pill transaksi yang dipasang di atas SEMUA search bar.
  *
- * Animasi: pakai shared-layout (`layoutId`) untuk pill yang meluncur. Karena tiap
- * section adalah route terpisah, kita pakai pola OPTIMISTIK — saat diklik, pill
- * langsung meluncur ke tujuan (`pending`) sementara halaman berikutnya dimuat,
- * sehingga terasa instan, bukan klik yang "diam dulu baru pindah".
+ * Dua mode:
+ *  - TERKONTROL (disarankan): jika `onChange` diberikan, klik pill HANYA
+ *    mengubah pilihan (tanpa pindah halaman). Inputan form tetap utuh; navigasi
+ *    baru terjadi saat user menekan tombol Cari. Persis seperti tab di Home.
+ *  - LEGACY (navigasi): bila `onChange` tidak diberikan, klik pill langsung
+ *    pindah route sambil membawa param yang relevan (dipakai mis. di Sewa).
  */
-export default function TransactionTabs({ active }: { active: TxTab }) {
+export default function TransactionTabs({
+  active,
+  onChange,
+}: {
+  active: TxTab;
+  onChange?: (tab: TxTab) => void;
+}) {
   const router = useRouter();
   const sp = useSearchParams();
   const [isPending, startTransition] = useTransition();
   const [pending, setPending] = useState<TxTab | null>(null);
 
-  // Tab yang ditampilkan aktif — optimistik saat sedang berpindah.
+  // Tab yang ditampilkan aktif — optimistik saat mode legacy sedang berpindah.
   const displayActive = pending ?? active;
 
   const go = (tab: (typeof TABS)[number]) => {
-    if (tab.id === active || isPending) return;
+    if (tab.id === active) return;
+
+    // Mode terkontrol: cukup ubah pilihan, JANGAN navigasi.
+    if (onChange) {
+      onChange(tab.id);
+      return;
+    }
+
+    // Mode legacy: navigasi sambil membawa param dari URL.
+    if (isPending) return;
     const params = new URLSearchParams();
     CARRY_KEYS.forEach((k) => {
       const v = sp.get(k);

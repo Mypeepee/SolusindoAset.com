@@ -7,7 +7,7 @@ import {
   TipeProperti, JenisTransaksi, TujuanBeli,
   EMPTY_PREFERENSI, JENIS_TRANSAKSI_LABEL, TIPE_PROPERTI_LABEL,
 } from "./types";
-import { PremiumSelect, PremiumDateTimePicker, type PremiumOption } from "./CrmFormControls";
+import { PremiumSelect, PremiumDateTimePicker, RegionCascadeSelect, type PremiumOption } from "./CrmFormControls";
 
 /* Opsi dropdown — dipakai PremiumSelect */
 const SUMBER_OPTIONS: PremiumOption[] = [
@@ -64,6 +64,30 @@ function unformatRupiah(formatted: string) {
   return formatted.replace(/\./g, "").replace(/,/g, "");
 }
 
+/** Bangun payload preferensi (lokasi terstruktur + lokasi_dicari ringkas) untuk dikirim ke API. */
+function buildPrefPayload(p: PreferensiForm) {
+  const lokasiText = [
+    p.loc_kelurahan && `Kel. ${p.loc_kelurahan}`,
+    p.loc_kecamatan && `Kec. ${p.loc_kecamatan}`,
+    p.loc_kota,
+  ].filter(Boolean).join(", ");
+  return {
+    tipe_properti:   p.tipe_properti,
+    jenis_transaksi: p.jenis_transaksi || null,
+    lokasi_dicari:   lokasiText || p.lokasi_dicari.trim() || null,
+    loc_provinsi:    p.loc_provinsi || null,
+    loc_kota:        p.loc_kota || null,
+    loc_kecamatan:   p.loc_kecamatan || null,
+    loc_kelurahan:   p.loc_kelurahan || null,
+    budget_min:      p.budget_min ? Number(unformatRupiah(p.budget_min)) : null,
+    budget_max:      p.budget_max ? Number(unformatRupiah(p.budget_max)) : null,
+    luas_min:        p.luas_min ? Number(p.luas_min) : null,
+    luas_max:        p.luas_max ? Number(p.luas_max) : null,
+    tujuan_beli:     p.tujuan_beli || null,
+    catatan:         p.catatan.trim() || null,
+  };
+}
+
 /** Nomor WA → tampil per 4 digit dengan tanda "-" (mis. 8812-3456-7890) */
 function formatPhone(digits: string) {
   const d = digits.replace(/\D/g, "");
@@ -99,6 +123,10 @@ export default function KlienFormModal({ open, onClose, onSaved, initialData, ed
             tipe_properti:   p.tipe_properti,
             jenis_transaksi: p.jenis_transaksi || "",
             lokasi_dicari:   p.lokasi_dicari || "",
+            loc_provinsi:    p.loc_provinsi || "",
+            loc_kota:        p.loc_kota || "",
+            loc_kecamatan:   p.loc_kecamatan || "",
+            loc_kelurahan:   p.loc_kelurahan || "",
             budget_min:      p.budget_min ? formatRupiah(String(p.budget_min)) : "",
             budget_max:      p.budget_max ? formatRupiah(String(p.budget_max)) : "",
             luas_min:        p.luas_min?.toString() || "",
@@ -181,17 +209,7 @@ export default function KlienFormModal({ open, onClose, onSaved, initialData, ed
         id_properti_asal: form.id_properti_asal || undefined,
         preferensi: form.preferensi
           .filter(p => p.tipe_properti)
-          .map(p => ({
-            tipe_properti:   p.tipe_properti,
-            jenis_transaksi: p.jenis_transaksi || null,
-            lokasi_dicari:   p.lokasi_dicari.trim() || null,
-            budget_min:      p.budget_min ? Number(unformatRupiah(p.budget_min)) : null,
-            budget_max:      p.budget_max ? Number(unformatRupiah(p.budget_max)) : null,
-            luas_min:        p.luas_min ? Number(p.luas_min) : null,
-            luas_max:        p.luas_max ? Number(p.luas_max) : null,
-            tujuan_beli:     p.tujuan_beli || null,
-            catatan:         p.catatan.trim() || null,
-          })),
+          .map(buildPrefPayload),
       };
 
       const url    = isEdit ? `/api/dashboard/klien/${editTarget!.id_klien}` : "/api/dashboard/klien";
@@ -222,17 +240,7 @@ export default function KlienFormModal({ open, onClose, onSaved, initialData, ed
             fetch(`/api/dashboard/klien/${editTarget!.id_klien}/preferensi`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                tipe_properti:   p.tipe_properti,
-                jenis_transaksi: p.jenis_transaksi || null,
-                lokasi_dicari:   p.lokasi_dicari.trim() || null,
-                budget_min:      p.budget_min ? Number(unformatRupiah(p.budget_min)) : null,
-                budget_max:      p.budget_max ? Number(unformatRupiah(p.budget_max)) : null,
-                luas_min:        p.luas_min ? Number(p.luas_min) : null,
-                luas_max:        p.luas_max ? Number(p.luas_max) : null,
-                tujuan_beli:     p.tujuan_beli || null,
-                catatan:         p.catatan.trim() || null,
-              }),
+              body: JSON.stringify(buildPrefPayload(p)),
             })
           )
         );
@@ -545,12 +553,19 @@ function PreferensiCard({
       </div>
 
       <Field label="Lokasi yang Diinginkan">
-        <input
-          type="text"
-          value={pref.lokasi_dicari}
-          onChange={e => onChange("lokasi_dicari", e.target.value)}
-          placeholder="Mis. Kec. Singojuruh, Jl. Ahmad Yani, Cluster XYZ"
-          className={inputCls}
+        <RegionCascadeSelect
+          value={{
+            provinsi:  pref.loc_provinsi,
+            kota:      pref.loc_kota,
+            kecamatan: pref.loc_kecamatan,
+            kelurahan: pref.loc_kelurahan,
+          }}
+          onChange={v => {
+            onChange("loc_provinsi", v.provinsi);
+            onChange("loc_kota", v.kota);
+            onChange("loc_kecamatan", v.kecamatan);
+            onChange("loc_kelurahan", v.kelurahan);
+          }}
         />
       </Field>
 

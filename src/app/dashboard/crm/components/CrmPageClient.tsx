@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@iconify/react";
 import KlienFormModal from "./KlienFormModal";
-import { Klien, KlienStatus, SUMBER_LABEL } from "./types";
+import { Klien, KlienStatus, PreferensiKlien, SUMBER_LABEL, JENIS_TRANSAKSI_LABEL } from "./types";
 
 /* ────────────────────────────────────────────────────────────
    THEME — per-status visual language (futuristic glass + glow)
@@ -714,6 +714,7 @@ function KlienDetailDrawer({ klien, onClose, onEdit, onDelete, onMove }: {
   onMove: (s: KlienStatus) => void;
 }) {
   const [shown, setShown] = useState(false);
+  const [matchPref, setMatchPref] = useState<PreferensiKlien | null>(null);
   useEffect(() => { const t = requestAnimationFrame(() => setShown(true)); return () => cancelAnimationFrame(t); }, []);
   const handleClose = useCallback(() => { setShown(false); setTimeout(onClose, 220); }, [onClose]);
   useEffect(() => {
@@ -844,6 +845,13 @@ function KlienDetailDrawer({ klien, onClose, onEdit, onDelete, onMove }: {
                   )}
                   {p.tujuan_beli && <InfoRow label="Tujuan" value={{ ditempati: "Ditempati", investasi: "Investasi", disewakan: "Disewakan" }[p.tujuan_beli]} />}
                   {p.catatan && <InfoRow label="Catatan" value={p.catatan} />}
+                  <button
+                    onClick={() => setMatchPref(p)}
+                    className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-400/25 bg-emerald-500/10 py-2 text-[12px] font-bold text-emerald-200 transition-all hover:bg-emerald-500/20"
+                  >
+                    <Icon icon="solar:magnifer-bold-duotone" className="text-sm" />
+                    Cari Listing Cocok
+                  </button>
                 </div>
               ))}
             </InfoSection>
@@ -875,7 +883,173 @@ function KlienDetailDrawer({ klien, onClose, onEdit, onDelete, onMove }: {
           </div>
         </footer>
       </div>
+
+      {matchPref && (
+        <MatchListingModal
+          klienId={klien.id_klien}
+          pref={matchPref}
+          onClose={() => setMatchPref(null)}
+        />
+      )}
     </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════
+   MATCH LISTING MODAL — listing yang cocok dgn sebuah preferensi
+   ════════════════════════════════════════════════════════════ */
+type MatchedListing = {
+  id_property: string;
+  slug: string;
+  judul: string;
+  kota: string;
+  kecamatan: string;
+  kelurahan: string;
+  alamat_lengkap: string;
+  jenis_transaksi: string;
+  kategori: string;
+  harga: number;
+  harga_promo: number | null;
+  nilai_limit_lelang: number | null;
+  gambar: string;
+  luas_tanah: number;
+  luas_bangunan: number;
+  kamar_tidur: number;
+  kamar_mandi: number;
+  agent_name: string;
+  agent_office: string;
+};
+
+function MatchListingModal({ klienId, pref, onClose }: {
+  klienId: string;
+  pref: PreferensiKlien;
+  onClose: () => void;
+}) {
+  const [shown, setShown] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<MatchedListing[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => { const t = requestAnimationFrame(() => setShown(true)); return () => cancelAnimationFrame(t); }, []);
+  const close = useCallback(() => { setShown(false); setTimeout(onClose, 200); }, [onClose]);
+  useEffect(() => {
+    const fn = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+    window.addEventListener("keydown", fn);
+    return () => window.removeEventListener("keydown", fn);
+  }, [close]);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true); setError(null);
+    fetch(`/api/dashboard/klien/${klienId}/preferensi/${pref.id_preferensi}/match`)
+      .then(r => r.json())
+      .then(j => { if (!active) return; if (j.ok) setItems(j.items); else setError("Gagal memuat"); })
+      .catch(() => { if (active) setError("Gagal memuat"); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [klienId, pref.id_preferensi]);
+
+  const tipeLabel = pref.tipe_properti.charAt(0) + pref.tipe_properti.slice(1).toLowerCase().replace(/_/g, " ");
+
+  return (
+    <div
+      onClick={e => { e.stopPropagation(); close(); }}
+      className={`fixed inset-0 z-[80] flex items-end justify-center bg-black/70 backdrop-blur-xl transition-opacity duration-200 sm:items-center ${shown ? "opacity-100" : "opacity-0"}`}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        className={`relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-t-[28px] border-t border-white/[0.1] bg-[#0a0c12] shadow-[0_-30px_80px_rgba(0,0,0,0.7)] transition-transform duration-300 sm:max-h-[85vh] sm:rounded-[28px] sm:border ${shown ? "translate-y-0" : "translate-y-10"}`}
+      >
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-emerald-400/0 via-emerald-400/80 to-emerald-400/0" />
+        <div className="absolute left-1/2 top-2.5 z-20 h-1 w-12 -translate-x-1/2 rounded-full bg-white/20 sm:hidden" />
+
+        <button onClick={close} className="absolute right-4 top-4 z-20 grid h-9 w-9 place-items-center rounded-full border border-white/[0.1] bg-white/[0.06] text-slate-200 transition-all hover:bg-white/[0.12]">
+          <Icon icon="solar:close-circle-bold" className="text-lg" />
+        </button>
+
+        <header className="shrink-0 border-b border-white/[0.06] px-5 pb-4 pt-9 sm:pt-6">
+          <div className="flex items-center gap-2">
+            <Icon icon="solar:magnifer-bold-duotone" className="text-base text-emerald-300" />
+            <h3 className="text-[15px] font-extrabold text-white">Listing yang Cocok</h3>
+          </div>
+          <p className="mt-1 text-[12px] text-slate-400">
+            {tipeLabel}
+            {pref.jenis_transaksi ? ` · ${JENIS_TRANSAKSI_LABEL[pref.jenis_transaksi]}` : ""}
+            {pref.lokasi_dicari ? ` · ${pref.lokasi_dicari}` : ""}
+            {(pref.budget_min || pref.budget_max)
+              ? ` · ${[formatRp(pref.budget_min), formatRp(pref.budget_max)].filter(Boolean).join("–")} Rp`
+              : ""}
+          </p>
+        </header>
+
+        <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-4">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-20 text-slate-400">
+              <Icon icon="svg-spinners:ring-resize" className="text-3xl text-emerald-400" />
+              <p className="text-[13px]">Mencari listing…</p>
+            </div>
+          ) : error ? (
+            <div className="py-20 text-center text-[13px] text-rose-300">{error}</div>
+          ) : items.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="grid h-16 w-16 place-items-center rounded-3xl border border-white/[0.06] bg-white/[0.02]">
+                <Icon icon="solar:home-smile-angle-bold-duotone" className="text-3xl text-slate-500" />
+              </div>
+              <p className="mt-3 text-[14px] font-bold text-white">Belum ada listing yang cocok</p>
+              <p className="mt-1 max-w-xs text-[12px] text-slate-500">
+                Coba longgarkan kriteria preferensi (budget, luas, atau lokasi) lalu cari lagi.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="px-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                {items.length} listing ditemukan
+              </p>
+              {items.map(it => <MatchCard key={it.id_property} it={it} />)}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MatchCard({ it }: { it: MatchedListing }) {
+  const isLel = it.jenis_transaksi.toUpperCase() === "LELANG";
+  const price = isLel ? it.nilai_limit_lelang : (it.harga_promo ?? it.harga);
+  const lokasi = [it.kelurahan, it.kecamatan, it.kota].filter(Boolean).join(", ");
+  const luas = it.kategori.toUpperCase() === "TANAH"
+    ? (it.luas_tanah ? `LT ${it.luas_tanah} m²` : "")
+    : [it.luas_tanah ? `LT ${it.luas_tanah}` : "", it.luas_bangunan ? `LB ${it.luas_bangunan}` : ""].filter(Boolean).join(" · ");
+
+  return (
+    <a
+      href={propertiHref(it)}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-2.5 transition-all hover:border-emerald-400/30 hover:bg-emerald-500/[0.05]"
+    >
+      <div className="relative h-20 w-24 shrink-0 overflow-hidden rounded-xl bg-white/[0.04]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={it.gambar} alt={it.judul} className="h-full w-full object-cover" loading="lazy" />
+        <span className="absolute left-1 top-1 rounded-md bg-black/60 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-200 backdrop-blur">
+          {JENIS_TRANSAKSI_LABEL[it.jenis_transaksi as keyof typeof JENIS_TRANSAKSI_LABEL] ?? it.jenis_transaksi}
+        </span>
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
+        <div>
+          <p className="line-clamp-1 text-[13px] font-bold text-white">{it.judul}</p>
+          <p className="mt-0.5 line-clamp-1 text-[11px] text-slate-400">
+            <Icon icon="solar:map-point-bold-duotone" className="mr-0.5 inline align-[-2px] text-[11px] text-slate-500" />
+            {lokasi || "—"}
+          </p>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[13px] font-extrabold text-emerald-300">{formatRp(price)} Rp</span>
+          {luas && <span className="shrink-0 text-[10px] text-slate-500">{luas}</span>}
+        </div>
+      </div>
+    </a>
   );
 }
 

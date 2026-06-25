@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { buildLocationWhere } from "@/lib/listingLocationFilter";
+import { parseCategoryDbList } from "@/lib/propertyType";
 import KategoriPageClient from "./KategoriPageClient";
 
 // --- SLUG → KATEGORI MAP ---
@@ -124,7 +126,6 @@ export default async function KategoriPage({ params, searchParams }: Props) {
   // Parse searchParams
   const page = typeof searchParams.page === "string" ? Number(searchParams.page) : 1;
   const tipe = typeof searchParams.tipe === "string" ? searchParams.tipe         : "semua";
-  const kota = typeof searchParams.kota === "string" ? searchParams.kota         : undefined;
   const minHarga = typeof searchParams.minHarga === "string" ? Number(searchParams.minHarga) : undefined;
   const maxHarga = typeof searchParams.maxHarga === "string" ? Number(searchParams.maxHarga) : undefined;
   const minLT    = typeof searchParams.minLT    === "string" ? Number(searchParams.minLT)    : undefined;
@@ -170,7 +171,7 @@ export default async function KategoriPage({ params, searchParams }: Props) {
   // sort: selalu punya nilai fallback untuk query DB
   const rawSort = typeof searchParams.sort === "string" ? searchParams.sort : "";
   const sort     = rawSort || "terbaru";
-  const limit = 15;
+  const limit = 30;
   const skip  = (page - 1) * limit;
 
   // jenis_transaksi filter berdasarkan tab
@@ -188,8 +189,20 @@ export default async function KategoriPage({ params, searchParams }: Props) {
   // `baseWhere` = semua filter pencarian KECUALI jenis_transaksi (tab). Dipakai
   // bersama oleh daftar listing & perhitungan tab count, supaya angka di pill
   // tab ikut menyesuaikan filter user (kota, harga, dll), bukan total semua.
+  // Filter lokasi multi-wilayah (provinsi/kota/kecamatan/kelurahan) → grup OR.
+  const locationWhere = buildLocationWhere(searchParams);
+
+  // Multi-tipe aset: param `kategori` (daftar enum) MENGGANTIKAN kategori slug.
+  const kategoriList = parseCategoryDbList(searchParams.kategori);
+  const kategoriWhere: Prisma.ListingWhereInput =
+    kategoriList.length > 0
+      ? { kategori: { in: kategoriList as any } }
+      : kategori
+      ? { kategori }
+      : {};
+
   const baseWhere: Prisma.ListingWhereInput = {
-    ...(kategori && { kategori }),
+    ...kategoriWhere,
     status_tayang: "TERSEDIA",
     ...(idPropertyRaw && { id_property: BigInt(idPropertyRaw) }),
     // Keyword dicari lintas kolom (alamat, kota, area administratif, judul),
@@ -205,7 +218,7 @@ export default async function KategoriPage({ params, searchParams }: Props) {
         { judul:          { contains: q, mode: "insensitive" } },
       ],
     }),
-    ...(!idPropertyRaw && kota && { kota: { contains: kota, mode: "insensitive" } }),
+    ...(!idPropertyRaw && locationWhere && { AND: [locationWhere] }),
     ...(!idPropertyRaw && (minHarga !== undefined || maxHarga !== undefined) && {
       harga: {
         ...(minHarga !== undefined && { gte: minHarga }),

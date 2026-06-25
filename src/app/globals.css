@@ -64,11 +64,18 @@
 
 html {
   scroll-behavior: smooth;
+  /* Guard horizontal-scroll juga dipasang di root.
+     iOS Safari TIDAK mempropagasi overflow-x dari <body> ke viewport,
+     jadi tanpa rule ini halaman tetap bisa di-scroll ke kanan di iPhone
+     (mis. animasi framer `initial={{ x: 44 }}` yang sementara keluar layar). */
+  overflow-x: clip;
 }
 
 /* Cegah horizontal scroll di seluruh halaman.
    `clip` dipilih (bukan `hidden`) agar tidak membuat scroll container,
-   sehingga `position: sticky` tetap berfungsi. */
+   sehingga `position: sticky` tetap berfungsi.
+   Diset di html DAN body agar konsisten lintas browser (Chrome pakai body,
+   Safari iOS hanya menghormati yang di root). */
 body {
   overflow-x: clip;
 }

@@ -1,11 +1,20 @@
 "use client";
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Icon } from "@iconify/react";
 import toast from "react-hot-toast";
-import TransactionTabs from "@/components/search/TransactionTabs";
+import TransactionTabs, { type TxTab } from "@/components/search/TransactionTabs";
+import LocationPicker from "@/components/search/LocationPicker";
+import {
+  setLocationParams,
+  parseLocationParams,
+  locationsToSelectedRegions,
+  type SelectedRegion,
+} from "@/lib/regionSearch";
+import TypePicker from "@/components/search/TypePicker";
+import { serializeTypes, parseTypeParamToDisplays } from "@/lib/propertyType";
 
 // --- 1. CONFIGURATION & TYPES ---
 
@@ -27,21 +36,10 @@ const BUY_TYPES = sortAlpha([
   "Rumah", "Tanah", "Gudang", "Apartemen", "Pabrik", "Ruko", "Toko", "Hotel & Villa"
 ]);
 
-interface Region {
-  id: string;
-  name: string;
-  level: 'provinsi' | 'kota' | 'kecamatan' | 'kelurahan';
-}
-
-interface ApiRegion {
-  id: string;
-  nama: string;
-}
-
 interface SearchState {
   keyword: string;
-  locations: Region[];
-  type: string;
+  locations: SelectedRegion[];
+  types: string[];
   minPrice: string;
   maxPrice: string;
   minLt: string;
@@ -84,12 +82,13 @@ export interface SearchHeroInitial {
   maxLB?: number;
 }
 
-const buildFormData = (init: SearchHeroInitial): SearchState => ({
+const buildFormData = (
+  init: SearchHeroInitial,
+  locations: SelectedRegion[]
+): SearchState => ({
   keyword: init.idProperty || init.q || "",
-  locations: init.kota
-    ? [{ id: init.kota, name: init.kota, level: "kota" as const }]
-    : [],
-  type: init.tipe ? (DB_TYPE_TO_DISPLAY[init.tipe] ?? "") : "",
+  locations,
+  types: parseTypeParamToDisplays(init.tipe),
   minPrice: init.minHarga ? formatIdNumber(String(init.minHarga)) : "",
   maxPrice: init.maxHarga ? formatIdNumber(String(init.maxHarga)) : "",
   minLt: init.minLT ? formatIdNumber(String(init.minLT)) : "",
@@ -104,22 +103,25 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
 
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
-
-  // State Wilayah
-  const [viewLevel, setViewLevel] = useState<'provinsi' | 'kota' | 'kecamatan' | 'kelurahan'>('provinsi');
-  const [currentList, setCurrentList] = useState<Region[]>([]);
-  const [parentRegion, setParentRegion] = useState<Region | null>(null);
-  const [loadingWilayah, setLoadingWilayah] = useState(false);
+  const [activeTab, setActiveTab] = useState<TxTab>("beli");
 
   const [rangeErrors, setRangeErrors] = useState<{ price?: string; lt?: string; lb?: string }>({});
   const [shaking, setShaking] = useState(false);
 
-  const [formData, setFormData] = useState<SearchState>(() => buildFormData(initial));
+  // Wilayah terpilih dihidrasi dari URL (multi-level: provinsi/kota/kecamatan/kelurahan).
+  const hydratedLocations = useMemo(
+    () => locationsToSelectedRegions(parseLocationParams((k) => searchParams.get(k))),
+    [searchParams]
+  );
+
+  const [formData, setFormData] = useState<SearchState>(() =>
+    buildFormData(initial, hydratedLocations)
+  );
 
   useEffect(() => {
-    setFormData(buildFormData(initial));
+    setFormData(buildFormData(initial, hydratedLocations));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initial.q, initial.idProperty, initial.kota, initial.tipe, initial.minHarga, initial.maxHarga, initial.minLT, initial.maxLT, initial.minLB, initial.maxLB]);
+  }, [initial.q, initial.idProperty, initial.tipe, initial.minHarga, initial.maxHarga, initial.minLT, initial.maxLT, initial.minLB, initial.maxLB, hydratedLocations]);
 
   // Hasil baru sudah ter-render (query berubah) → lepas state "Mencari...".
   useEffect(() => { setSearching(false); }, [searchParams]);
@@ -136,100 +138,6 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
 
   const wrapperRef = useRef<HTMLDivElement>(null);
   const keywordInputRef = useRef<HTMLInputElement>(null);
-  const BASE_API = "https://ibnux.github.io/data-indonesia";
-
-  // --- HELPER FUNCTIONS ---
-
-  const mapData = (data: ApiRegion[], level: Region['level']): Region[] => {
-    return data
-      .map(item => ({ id: item.id, name: item.nama, level }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  };
-
-  const getRegionIcon = (level: Region['level']) => {
-    switch (level) {
-      case 'provinsi': return "solar:globus-bold-duotone";
-      case 'kota': return "solar:buildings-2-bold-duotone";
-      case 'kecamatan': return "solar:buildings-bold-duotone";
-      case 'kelurahan': return "solar:map-point-wave-bold-duotone"; 
-      default: return "solar:map-point-bold-duotone";
-    }
-  };
-
-  const fetchRegions = async (level: Region['level'], parentId?: string) => {
-    setLoadingWilayah(true);
-    try {
-        let url = "";
-        if (level === 'provinsi') url = `${BASE_API}/propinsi.json`;
-        if (level === 'kota' && parentId) url = `${BASE_API}/kabupaten/${parentId}.json`;
-        if (level === 'kecamatan' && parentId) url = `${BASE_API}/kecamatan/${parentId}.json`;
-        if (level === 'kelurahan' && parentId) url = `${BASE_API}/kelurahan/${parentId}.json`;
-
-        if (url) {
-            const res = await fetch(url);
-            const data = await res.json();
-            setCurrentList(mapData(data, level));
-        }
-    } catch (err) {
-        console.error(err);
-        toast.error("Gagal memuat data wilayah");
-    } finally {
-        setLoadingWilayah(false);
-    }
-  };
-
-  useEffect(() => {
-    if (openDropdown === "location" && viewLevel === 'provinsi') {
-        fetchRegions('provinsi');
-    }
-  }, [openDropdown]);
-
-  // Handler Selection
-  const toggleLocation = (item: Region) => {
-    const isAlreadySelected = formData.locations.some(loc => loc.id === item.id);
-
-    if (!isAlreadySelected) {
-        toast.success(`${item.name} ditambahkan`, {
-            icon: '📍',
-            style: { borderRadius: '10px', background: '#333', color: '#fff', fontSize: '12px' },
-        });
-    }
-
-    setFormData(prev => {
-        const exists = prev.locations.find(loc => loc.id === item.id);
-        let newLocations = [...prev.locations];
-
-        if (exists) {
-            newLocations = newLocations.filter(loc => loc.id !== item.id);
-        } else {
-            newLocations = newLocations.filter(loc => !item.id.startsWith(loc.id));
-            newLocations = newLocations.filter(loc => !loc.id.startsWith(item.id));
-            newLocations.push(item);
-        }
-        return { ...prev, locations: newLocations };
-    });
-  };
-
-  // Handler Navigation
-  const handleRowClick = (item: Region) => {
-    if (item.level !== 'kelurahan') {
-        setParentRegion(item);
-        let nextLevel: Region['level'] = 'kota';
-        if (item.level === 'provinsi') nextLevel = 'kota';
-        if (item.level === 'kota') nextLevel = 'kecamatan';
-        if (item.level === 'kecamatan') nextLevel = 'kelurahan';
-        setViewLevel(nextLevel);
-        fetchRegions(nextLevel, item.id);
-    } else {
-        toggleLocation(item);
-    }
-  };
-
-  const handleBack = () => {
-    setViewLevel('provinsi');
-    setParentRegion(null);
-    fetchRegions('provinsi');
-  };
 
   // Utils
   const toggleDropdown = (name: string) => {
@@ -238,6 +146,8 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Element;
+      if (target?.closest?.("[data-search-portal]")) return;
       if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
         setOpenDropdown(null);
       }
@@ -297,15 +207,10 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
       else params.set("q", keywordTrimmed);
     }
 
-    if (formData.locations.length > 0) {
-      params.set("kota", formData.locations[0].name);
-    }
+    setLocationParams(params, formData.locations);
 
-    if (formData.type) {
-      let dbType = formData.type.toUpperCase().replace(/\s+/g, "_");
-      if (formData.type === "Hotel & Villa") dbType = "HOTEL_DAN_VILLA";
-      params.set("tipe", dbType);
-    }
+    const typeParam = serializeTypes(formData.types);
+    if (typeParam) params.set(activeTab === "semua" ? "kategori" : "tipe", typeParam);
 
     const minPrice = parseRawNumber(formData.minPrice);
     const maxPrice = parseRawNumber(formData.maxPrice);
@@ -323,8 +228,12 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
     if (maxLb) params.set("maxLB", maxLb);
 
     params.set("page", "1");
+    const destination =
+      activeTab === "semua"  ? "/properti/semua" :
+      activeTab === "beli"   ? "/Jual" :
+      activeTab === "sewa"   ? "/Sewa" : "/Lelang";
     setSearching(true);
-    router.push(`/Jual?${params.toString()}`);
+    router.push(`${destination}?${params.toString()}`);
   };
 
   return (
@@ -359,7 +268,7 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
       {/* === BAGIAN 2: FILTER FORM (Integrated CardSlider) === */}
       <div className="container mx-auto px-4 relative z-30 -mt-24 mb-10 zoom-safe" ref={wrapperRef}>
 
-        <TransactionTabs active="beli" />
+        <TransactionTabs active={activeTab} onChange={setActiveTab} />
 
         {/* SEARCH CONTAINER (Dark Theme) */}
         <div className="bg-[#1A1A1A] rounded-[2rem] shadow-2xl shadow-black/50 p-2 lg:p-3 border border-white/10 backdrop-blur-md">
@@ -422,144 +331,27 @@ const SearchHero = ({ initial = {} }: { initial?: SearchHeroInitial }) => {
             </div>
 
             {/* === B. LOKASI === */}
-            <div className="w-full lg:w-[20%] px-3 lg:px-4 py-4 lg:py-2.5 relative group min-w-0">
-                <div 
-                className="cursor-pointer h-full flex flex-col justify-center"
-                onClick={() => toggleDropdown("location")}
-                >
-                <label className="text-[10px] font-extrabold tracking-wider text-gray-400 uppercase mb-1 block group-hover:text-primary transition-colors">
-                    Lokasi
-                </label>
-                
-                <div className="flex items-center gap-2 w-full">
-                    <Icon icon="solar:map-point-bold-duotone" className="text-xl text-gray-400 group-hover:text-primary transition-colors shrink-0" />
-
-                    <div className="w-full overflow-x-auto no-scrollbar flex items-center gap-1.5 h-6">
-                        {formData.locations.length === 0 ? (
-                            <p className="font-bold text-white text-sm truncate">Semua Lokasi</p>
-                        ) : (
-                            formData.locations.map((loc) => (
-                                <span 
-                                    key={loc.id} 
-                                    onClick={(e) => { e.stopPropagation(); toggleLocation(loc); }}
-                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/20 border border-primary/30 text-white text-[10px] font-bold whitespace-nowrap hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/50 transition-colors cursor-pointer group-bubble"
-                                >
-                                    {loc.name}
-                                    <Icon icon="solar:close-circle-bold" className="text-primary group-hover:text-red-400 text-xs"/>
-                                </span>
-                            ))
-                        )}
-                    </div>
-
-                    <Icon icon="solar:alt-arrow-down-linear" className={`text-gray-400 transition-transform shrink-0 ${openDropdown === "location" ? "rotate-180" : ""}`} />
-                </div>
-                </div>
-
-                {/* DROPDOWN LOKASI (Dark Mode) */}
-                {openDropdown === "location" && (
-                <div className="absolute top-full left-0 w-full lg:w-[400px] bg-[#222] rounded-2xl shadow-2xl border border-white/10 mt-4 p-0 z-50 animate-fade-in-up overflow-hidden flex flex-col max-h-[400px]">
-                    <div className="p-4 border-b border-white/10 bg-[#2A2A2A] flex items-center justify-between sticky top-0 z-10">
-                        <div className="flex items-center gap-2">
-                            {viewLevel !== 'provinsi' && (
-                                <button onClick={handleBack} className="p-1.5 hover:bg-white/10 rounded-full transition-colors group">
-                                    <Icon icon="solar:arrow-left-linear" className="text-lg text-gray-400 group-hover:text-white"/>
-                                </button>
-                            )}
-                            <h4 className="font-bold text-white text-sm flex items-center gap-2">
-                                <Icon icon={getRegionIcon(viewLevel)} className="text-primary text-lg"/> 
-                                {viewLevel === 'provinsi' ? <span>Pilih Wilayah</span> : <span className="text-primary truncate max-w-[200px] block">{parentRegion?.name}</span>}
-                            </h4>
-                        </div>
-                        {loadingWilayah && <Icon icon="line-md:loading-loop" className="text-primary text-lg" />}
-                    </div>
-                    
-                    <div className="overflow-y-auto custom-scrollbar flex-1 bg-[#1A1A1A]">
-                        {viewLevel !== 'provinsi' && parentRegion && (
-                            <button 
-                                onClick={() => toggleLocation(parentRegion)}
-                                className="w-full text-left px-4 py-3 bg-primary/5 hover:bg-primary/10 border-b border-white/5 flex items-center gap-3 transition-colors"
-                            >
-                                <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${formData.locations.some(l => l.id === parentRegion.id) ? "bg-primary border-primary" : "border-gray-600 bg-transparent"}`}>
-                                    {formData.locations.some(l => l.id === parentRegion.id) && <Icon icon="solar:check-read-linear" className="text-white text-sm"/>}
-                                </div>
-                                <div>
-                                    <span className="text-sm font-bold text-white block">Pilih Semua di {parentRegion.name}</span>
-                                </div>
-                            </button>
-                        )}
-
-                        {currentList.map((item) => {
-                            const isSelected = formData.locations.some(l => l.id === item.id);
-                            const hasChild = item.level !== 'kelurahan';
-                            return (
-                                <div key={item.id} className="flex items-center justify-between group hover:bg-white/5 border-b border-white/5 last:border-0 pr-2">
-                                    <button onClick={() => handleRowClick(item)} className="flex-1 flex items-center gap-3 px-4 py-3 text-left">
-                                        <Icon icon={getRegionIcon(item.level)} className={`text-lg shrink-0 ${isSelected ? "text-primary" : "text-gray-500 group-hover:text-primary"}`}/>
-                                        <div className="flex-1 overflow-hidden">
-                                            <span className={`text-sm block truncate ${isSelected ? "font-bold text-primary" : "font-medium text-gray-300"}`}>{item.name}</span>
-                                            {hasChild && <span className="text-[10px] text-gray-500 group-hover:text-primary transition-colors">Lihat {item.level === 'provinsi' ? 'Kota' : item.level === 'kota' ? 'Kecamatan' : 'Kelurahan'}</span>}
-                                        </div>
-                                    </button>
-                                    <button onClick={(e) => { e.stopPropagation(); toggleLocation(item); }} className="p-3 hover:bg-white/10 rounded-lg transition-colors">
-                                        <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isSelected ? "bg-primary border-primary" : "border-gray-600 bg-transparent"}`}>
-                                            {isSelected && <Icon icon="solar:check-read-linear" className="text-white text-sm"/>}
-                                        </div>
-                                    </button>
-                                    {hasChild && (
-                                        <button onClick={() => handleRowClick(item)} className="p-2 text-gray-500 hover:text-primary"><Icon icon="solar:alt-arrow-right-linear" /></button>
-                                    )}
-                                </div>
-                            )
-                        })}
-                    </div>
-                </div>
-                )}
+            <div className="w-full lg:w-[20%] px-3 lg:px-4 py-4 lg:py-2.5 relative min-w-0">
+                <LocationPicker
+                  theme="dark"
+                  value={formData.locations}
+                  onChange={(locs) => setFormData((prev) => ({ ...prev, locations: locs }))}
+                  open={openDropdown === "location"}
+                  onOpenChange={(o) => setOpenDropdown(o ? "location" : null)}
+                />
             </div>
 
             {/* === C. TIPE ASET === */}
-            <div className="w-full lg:w-[13%] px-3 lg:px-4 py-4 lg:py-2.5 relative group min-w-0">
-                <div 
-                className="cursor-pointer"
-                onClick={() => toggleDropdown("type")}
-                >
-                <label className="text-[10px] font-extrabold tracking-wider text-gray-400 uppercase mb-1 block group-hover:text-primary transition-colors">
-                    Tipe Aset
-                </label>
-                <div className="flex items-center gap-2">
-                    <Icon icon="solar:buildings-bold-duotone" className="text-xl text-gray-400 group-hover:text-primary transition-colors shrink-0" />
-                    <div className="w-full overflow-hidden">
-                        <p className="font-bold text-white text-sm truncate">
-                            {formData.type || "Semua Tipe"}
-                        </p>
-                    </div>
-                    <Icon icon="solar:alt-arrow-down-linear" className={`text-gray-400 transition-transform shrink-0 ${openDropdown === "type" ? "rotate-180" : ""}`} />
-                </div>
-                </div>
-
-                {openDropdown === "type" && (
-                <div className="absolute top-full left-0 w-full lg:w-[280px] bg-[#222] rounded-2xl shadow-2xl border border-white/10 mt-4 p-2 z-50 animate-fade-in-up max-h-[300px] overflow-y-auto custom-scrollbar">
-                    <button 
-                        onClick={() => { setFormData(prev => ({...prev, type: ""})); setOpenDropdown(null); }}
-                        className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-colors flex items-center gap-3 ${formData.type === "" ? "bg-primary/10 text-primary" : "text-gray-300 hover:bg-white/5"}`}
-                    >
-                        <Icon icon="solar:apps-bold-duotone" className="text-lg opacity-70" />
-                        Semua Tipe
-                    </button>
-                    {BUY_TYPES.map((item) => (
-                        <button 
-                            key={item}
-                            onClick={() => {
-                                setFormData(prev => ({...prev, type: item}));
-                                setOpenDropdown(null);
-                            }}
-                            className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-colors flex items-center gap-3 ${formData.type === item ? "bg-primary/10 text-primary" : "text-gray-300 hover:bg-white/5"}`}
-                        >
-                            <Icon icon={PROPERTY_ICONS[item] || "solar:home-bold-duotone"} className="text-lg opacity-70" />
-                            {item}
-                        </button>
-                    ))}
-                </div>
-                )}
+            <div className="w-full lg:w-[13%] px-3 lg:px-4 py-4 lg:py-2.5 relative min-w-0">
+                <TypePicker
+                  theme="dark"
+                  value={formData.types}
+                  onChange={(ts) => setFormData((prev) => ({ ...prev, types: ts }))}
+                  options={BUY_TYPES}
+                  icons={PROPERTY_ICONS}
+                  open={openDropdown === "type"}
+                  onOpenChange={(o) => setOpenDropdown(o ? "type" : null)}
+                />
             </div>
 
             {/* === D. HARGA === */}
