@@ -46,11 +46,11 @@ const Hero = () => {
         {/* Background Image */}
         <div className="absolute inset-0 z-0">
           <Image
-            // Menggunakan path gambar yang Anda minta
-            src="/images/hero/banner.jpg" 
+            src="/images/hero/banner.jpg"
             alt="Kosku Banner"
             fill
             priority
+            sizes="100vw"
             className="object-cover"
           />
           {/* Dark Overlay (Supaya teks terbaca jelas) */}

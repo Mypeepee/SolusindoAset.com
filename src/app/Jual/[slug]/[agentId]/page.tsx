@@ -1,9 +1,12 @@
 import React from "react";
+import { cache } from "react";
 import { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import DetailClient from "../DetailClient";
 import { getSimilarItems } from "../lib/similar";
+
+export const revalidate = 3600;
 
 interface Props {
   params: {
@@ -76,7 +79,7 @@ function serializeListing(l: any) {
 }
 
 // --------- DB HELPERS ----------
-async function getProperty(id: bigint) {
+const getProperty = cache(async (id: bigint) => {
   const product = await prisma.listing.findUnique({
     where: { id_property: id },
     include: {
@@ -105,7 +108,7 @@ async function getProperty(id: bigint) {
   if (product.status_tayang !== "TERSEDIA") return null;
 
   return product;
-}
+});
 
 // --------- METADATA ----------
 export async function generateMetadata({ params }: Props): Promise<Metadata> {

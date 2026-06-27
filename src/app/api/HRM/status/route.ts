@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { sendAgentDecisionEmail } from "@/lib/mailer";
+import { rewardAgentReferral } from "@/lib/referral";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,6 +41,7 @@ export async function PUT(req: Request) {
       select: {
         id_agent: true,
         id_pengguna: true,
+        id_upline: true,
         status_keanggotaan: true,
         nama_kantor: true,
         pengguna: { select: { email: true, nama_lengkap: true } },
@@ -108,6 +110,21 @@ export async function PUT(req: Request) {
         wasPending,
         actionUrl,
       }).catch((e) => console.warn("sendAgentDecisionEmail failed:", e));
+    }
+
+    // 🎁 REWARD REFERRAL AGENT: saat downline RESMI diverifikasi (PENDING -> AKTIF),
+    // upline (id_upline) dapat +10.000 poin. Idempotent & best-effort (tidak
+    // menggagalkan proses approval). Hanya pada transisi pertama dari PENDING.
+    if (
+      status_keanggotaan === "AKTIF" &&
+      prevStatus === "PENDING" &&
+      existingAgent.id_upline
+    ) {
+      await rewardAgentReferral({
+        uplineAgentId: existingAgent.id_upline,
+        downlineAgentId: existingAgent.id_agent,
+        downlineNama: existingAgent.pengguna?.nama_lengkap || "Agent",
+      }).catch((e) => console.warn("rewardAgentReferral failed:", e));
     }
 
     return NextResponse.json(

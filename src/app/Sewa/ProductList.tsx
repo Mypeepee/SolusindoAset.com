@@ -25,7 +25,7 @@ const ApartmentCard = ({ item }: { item: Apartment }) => {
         className="bg-[#1A1A1A] rounded-3xl border border-white/5 overflow-hidden hover:border-primary/50 hover:shadow-[0_10px_40px_-10px_rgba(34,197,94,0.15)] transition-all duration-500 relative h-full flex flex-col"
       >
         <div className="relative h-56 w-full overflow-hidden">
-          <Image src={item.image} alt={item.name} fill className="object-cover transition-transform duration-700 group-hover:scale-110" />
+          <Image src={item.image} alt={item.name} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" className="object-cover transition-transform duration-700 group-hover:scale-110" />
           <div className="absolute inset-0 bg-gradient-to-t from-[#151515] via-transparent to-transparent opacity-90" />
           
           <div className="absolute top-4 left-4 flex gap-2">

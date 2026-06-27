@@ -17,15 +17,15 @@ function buildDriveUrl(raw: string | null | undefined): string | null {
   if (!t) return null;
 
   if (!t.includes("http")) {
-    return `https://drive.google.com/uc?export=view&id=${t}`;
+    return `/api/drive-image?id=${t}&sz=w96`;
   }
 
   try {
     const u = new URL(t);
     const id = u.searchParams.get("id");
-    if (id) return `https://drive.google.com/uc?export=view&id=${id}`;
+    if (id) return `/api/drive-image?id=${id}&sz=w96`;
     const m = t.match(/\/d\/([^/?#]+)/);
-    if (m?.[1]) return `https://drive.google.com/uc?export=view&id=${m[1]}`;
+    if (m?.[1]) return `/api/drive-image?id=${m[1]}&sz=w96`;
     return t;
   } catch {
     return null;
@@ -617,9 +617,16 @@ function ReferralCTACard({ agentId }: { agentId: string }) {
       <div className="relative flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center">
         {/* Left: label + code */}
         <div className="flex flex-1 flex-col gap-1.5">
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
-            Kode Referral Kamu
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
+              Kode Referral Kamu
+            </p>
+            {/* Reward badge */}
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/30 bg-amber-500/[0.12] px-2 py-0.5 text-[10px] font-extrabold text-amber-300 shadow-[0_0_14px_-4px_rgba(251,191,36,0.6)]">
+              <Icon icon="solar:medal-ribbons-star-bold-duotone" className="text-[12px]" />
+              +10.000 POIN / REFERRAL
+            </span>
+          </div>
           {/* Code display */}
           <div className="flex items-center gap-0 self-start overflow-hidden rounded-xl border border-white/[0.1] bg-[#0d1413] ring-1 ring-emerald-400/10">
             {/* Prefix chip */}
@@ -648,8 +655,10 @@ function ReferralCTACard({ agentId }: { agentId: string }) {
             </button>
           </div>
           <p className="text-[10.5px] leading-relaxed text-slate-500">
-            Bagikan kode ini ke calon agent. Jika mereka daftar atau transaksi dengan kode ini,
-            aktivitas mereka tercatat di jaringanmu.
+            Bagikan kode ini ke calon agent. Setiap orang yang kamu ajak dan{" "}
+            <span className="font-semibold text-amber-300/90">resmi menjadi agent</span> lewat kodemu,
+            kamu dapat <span className="font-semibold text-amber-300/90">+10.000 poin</span> &amp; mereka
+            masuk ke jaringanmu.
           </p>
         </div>
 

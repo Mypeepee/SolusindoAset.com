@@ -9,6 +9,57 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
+ * Ekstrak raw fileId dari berbagai format Google Drive URL atau string mentah.
+ * - Raw ID: "1ABC..." → "1ABC..."
+ * - uc?export=view&id=XXX → "XXX"
+ * - thumbnail?id=XXX → "XXX"
+ * - /d/XXX/view → "XXX"
+ * - lh3.googleusercontent.com/d/XXX → "XXX"
+ */
+function extractDriveFileId(idOrUrl: string): string | null {
+  const raw = idOrUrl.trim();
+
+  // Sudah raw ID (tidak ada slash/http)
+  if (!raw.includes("/") && !raw.includes("http")) return raw;
+
+  try {
+    // lh3.googleusercontent.com/d/{fileId}
+    if (raw.includes("googleusercontent.com/d/")) {
+      const m = raw.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      return m?.[1] ?? null;
+    }
+
+    const url = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
+
+    // ?id=XXX atau ?export=view&id=XXX
+    const fromQuery = url.searchParams.get("id");
+    if (fromQuery) return fromQuery;
+
+    // /d/{fileId}/view atau /d/{fileId}
+    const fromPath = url.pathname.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (fromPath?.[1]) return fromPath[1];
+  } catch {
+    // ignore
+  }
+
+  return null;
+}
+
+/**
+ * Konversi fileId atau URL Google Drive menjadi URL proxy lokal.
+ * Proxy (`/api/drive-image?id=XXX`) meng-cache gambar dengan header immutable
+ * sehingga browser tidak pernah hit Drive CDN lagi → tidak ada 429.
+ *
+ * Gunakan fungsi ini sebagai pengganti buildDriveImageUrl di seluruh codebase.
+ */
+export function driveImageUrl(idOrUrl?: string | null, sz?: string): string | null {
+  if (!idOrUrl) return null;
+  const fileId = extractDriveFileId(idOrUrl);
+  if (!fileId) return null;
+  return sz ? `/api/drive-image?id=${fileId}&sz=${sz}` : `/api/drive-image?id=${fileId}`;
+}
+
+/**
  * Format number to Indonesian currency (Rupiah)
  * @example formatCurrency(1500000) // "Rp 1.500.000"
  */

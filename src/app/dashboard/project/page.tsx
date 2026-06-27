@@ -10,17 +10,6 @@ import ProjectCampaignCard, {
 } from "./components/ProjectCampaignCard";
 import type { CreateProjectFormValues } from "./components/modal/AddProjectModal";
 
-type ProjectListResponse = {
-  success: boolean;
-  data?: ProjectCampaign[];
-  message?: string;
-};
-
-type DeleteProjectResponse = {
-  success: boolean;
-  message?: string;
-};
-
 type InvestorWalletSummary = {
   idAgent?: string;
   totalDana: number;
@@ -34,9 +23,15 @@ type InvestorWalletSummary = {
   realizedProfit: number;
 };
 
-type WalletSummaryResponse = {
+type ProjectListResponse = {
   success: boolean;
-  data?: InvestorWalletSummary;
+  data?: ProjectCampaign[];
+  wallet?: InvestorWalletSummary;
+  message?: string;
+};
+
+type DeleteProjectResponse = {
+  success: boolean;
   message?: string;
 };
 
@@ -336,7 +331,7 @@ function enrichProjectsWithUserInvestment(
         ? "Sudah Terjual"
         : pickString(project.status, "Project"),
     };
-  });
+  }) as ProjectCampaign[];
 }
 
 export default function ProjectPage() {
@@ -382,6 +377,10 @@ export default function ProjectPage() {
       );
 
       setCampaigns(enrichedProjects);
+
+      if (result.wallet) {
+        setWalletSummary({ ...EMPTY_WALLET_SUMMARY, ...result.wallet });
+      }
     } catch (error) {
       setCampaigns([]);
       setProjectError(
@@ -394,50 +393,12 @@ export default function ProjectPage() {
     }
   }, [currentAgentId]);
 
-  const fetchWalletSummary = useCallback(async () => {
-    if (!currentAgentId) {
-      setWalletSummary(EMPTY_WALLET_SUMMARY);
-      return;
-    }
-
-    try {
-      const response = await fetch(
-        `/api/project/wallet?id_agent=${encodeURIComponent(currentAgentId)}`,
-        {
-          method: "GET",
-          cache: "no-store",
-        }
-      );
-
-      const result = (await response.json()) as WalletSummaryResponse;
-
-      if (!response.ok || !result.success) {
-        throw new Error(
-          result.message || "Gagal mengambil ringkasan wallet investor."
-        );
-      }
-
-      setWalletSummary({
-        ...EMPTY_WALLET_SUMMARY,
-        ...(result.data ?? {}),
-        realizedProfit: Number(result.data?.realizedProfit ?? 0),
-      });
-    } catch (error) {
-      console.error("[FETCH_WALLET_SUMMARY_ERROR]", error);
-      setWalletSummary(EMPTY_WALLET_SUMMARY);
-    }
-  }, [currentAgentId]);
-
   useEffect(() => {
     fetchProjects();
   }, [fetchProjects]);
 
-  useEffect(() => {
-    fetchWalletSummary();
-  }, [fetchWalletSummary]);
-
   async function handleProjectCreated(_values: CreateProjectFormValues) {
-    await Promise.all([fetchProjects(), fetchWalletSummary()]);
+    await fetchProjects();
   }
 
   const handleAskDeleteProject = useCallback((project: ProjectCampaign) => {
@@ -481,7 +442,7 @@ export default function ProjectPage() {
       );
       setProjectToDelete(null);
 
-      await fetchWalletSummary();
+      await fetchProjects();
     } catch (error) {
       const message =
         error instanceof Error
@@ -493,7 +454,7 @@ export default function ProjectPage() {
     } finally {
       setDeletingProjectId(null);
     }
-  }, [projectToDelete, fetchWalletSummary]);
+  }, [projectToDelete, fetchProjects]);
 
   const totalBerjalan = useMemo(
     () => campaigns.filter((item) => !isProjectSold(item)).length,

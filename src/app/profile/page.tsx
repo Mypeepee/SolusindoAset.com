@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
+import { driveImageUrl as buildDriveImageUrl } from "@/lib/utils";
 
 import ProfileHeader from "./ProfileHeader";
 import ProfileSidebar from "./ProfileSidebar";
@@ -16,31 +17,6 @@ import DataPenting from "./DataPenting";
 import ModalRekening from "./ModalRekening";
 import ModalNPWP from "./ModalNPWP";
 import ModalKTP from "./ModalKTP";
-
-const buildDriveImageUrl = (idOrUrl?: string | null) => {
-  if (!idOrUrl) return null;
-
-  if (!idOrUrl.includes("http")) {
-    return `https://drive.google.com/uc?export=view&id=${idOrUrl}`;
-  }
-
-  try {
-    const url = new URL(idOrUrl);
-    const idFromQuery = url.searchParams.get("id");
-    if (idFromQuery) {
-      return `https://drive.google.com/uc?export=view&id=${idFromQuery}`;
-    }
-
-    const match = url.pathname.match(/\/d\/([^/]+)/);
-    if (match?.[1]) {
-      return `https://drive.google.com/uc?export=view&id=${match[1]}`;
-    }
-  } catch {
-    // ignore
-  }
-
-  return null;
-};
 
 type SidebarTabId = "profile" | "data-penting" | "booking" | "reward";
 
@@ -215,7 +191,6 @@ const ProfilePage = () => {
           <ProfileSidebar
             activeTab={activeTab}
             setActiveTab={setActiveTab}
-            onSignOut={() => signOut({ callbackUrl: "/" })}
             role={userData.peran}
           />
 

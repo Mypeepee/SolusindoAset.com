@@ -26,16 +26,17 @@ const ModalKTP: React.FC<Props> = ({
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // reset & isi dari initialImageUrl setiap kali modal dibuka
+  // reset state setiap kali modal dibuka — Drive URL TIDAK diisi ke cropper
+  // karena crossOrigin:"anonymous" + Drive URL akan tainted canvas error saat crop
   useEffect(() => {
     if (open) {
-      setImageSrc(initialImageUrl || null);
+      setImageSrc(null);
       setCrop({ x: 0, y: 0 });
       setZoom(1.1);
       setCroppedAreaPixels(null);
       setLoading(false);
     }
-  }, [open, initialImageUrl]);
+  }, [open]);
 
   const onCropComplete = useCallback(
     (_area: Area, pixels: Area) => {
@@ -193,6 +194,18 @@ const ModalKTP: React.FC<Props> = ({
             <div className="flex-1 overflow-y-auto px-5 py-4 pb-8 grid grid-cols-1 md:grid-cols-[2fr_minmax(0,1fr)] gap-4">
               {/* Crop area */}
               <div className="flex flex-col gap-3">
+                {/* Preview foto KTP yang tersimpan saat ini */}
+                {initialImageUrl && !imageSrc && (
+                  <div className="rounded-xl border border-sky-400/20 bg-sky-500/5 p-2 flex flex-col gap-1.5">
+                    <p className="text-[10px] text-sky-300 px-1">Foto KTP tersimpan saat ini:</p>
+                    <img
+                      src={initialImageUrl}
+                      alt="KTP tersimpan"
+                      className="w-full rounded-lg object-contain max-h-28"
+                    />
+                    <p className="text-[10px] text-gray-500 px-1">Unggah foto baru di bawah untuk menggantinya.</p>
+                  </div>
+                )}
                 <div className="relative rounded-xl border border-white/10 bg-gradient-to-br from-slate-900 via-slate-950 to-black overflow-hidden min-h-[260px] md:min-h-[320px] flex items-center justify-center">
                   {imageSrc ? (
                     <div className="relative w-full h-full">

@@ -1,3 +1,5 @@
+import type { SelectedRegion } from "@/lib/regionSearch";
+
 export type KlienStatus =
   | "lead_baru"
   | "sudah_dikontak"
@@ -86,14 +88,16 @@ export interface Klien {
   } | null;
 }
 
+/**
+ * Form preferensi — satu kartu boleh memuat BANYAK tipe properti & BANYAK lokasi
+ * (UX multi-select seperti search bar). Saat disimpan, kartu di-"expand" jadi
+ * satu baris PreferensiKlien per kombinasi (tipe × lokasi); saat edit,
+ * baris-baris yang sekriteria di-grup balik jadi satu kartu.
+ */
 export interface PreferensiForm {
-  tipe_properti: TipeProperti | "";
+  tipe_properti: TipeProperti[];
   jenis_transaksi: JenisTransaksi | "";
-  lokasi_dicari: string;
-  loc_provinsi: string;
-  loc_kota: string;
-  loc_kecamatan: string;
-  loc_kelurahan: string;
+  locations: SelectedRegion[];
   budget_min: string;
   budget_max: string;
   luas_min: string;
@@ -173,13 +177,9 @@ export const JENIS_TRANSAKSI_LABEL: Record<JenisTransaksi, string> = {
 };
 
 export const EMPTY_PREFERENSI: PreferensiForm = {
-  tipe_properti:   "",
+  tipe_properti:   [],
   jenis_transaksi: "",
-  lokasi_dicari:   "",
-  loc_provinsi:    "",
-  loc_kota:        "",
-  loc_kecamatan:   "",
-  loc_kelurahan:   "",
+  locations:       [],
   budget_min:      "",
   budget_max:      "",
   luas_min:        "",

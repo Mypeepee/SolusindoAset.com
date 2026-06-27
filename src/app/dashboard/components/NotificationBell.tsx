@@ -294,116 +294,77 @@ export default function NotificationBell() {
     };
   }, []);
 
-  // Load + Pusher realtime — booking Survei Lokasi
+  // Load survei + penawaran secara paralel — keduanya butuh agentId
   useEffect(() => {
     if (!agentId) return;
     let active = true;
 
-    async function loadSurvei() {
+    async function loadAgentInboxes() {
       try {
-        const res = await fetch("/api/survei/inbox", { cache: "no-store" });
-        if (!res.ok) return;
-        const json = await res.json();
-        if (!active || !json?.ok) return;
+        const [surveiRes, penawaranRes] = await Promise.allSettled([
+          fetch("/api/survei/inbox", { cache: "no-store" }),
+          fetch("/api/leads/penawaran/inbox", { cache: "no-store" }),
+        ]);
+        if (!active) return;
 
-        const list = (json.items as SurveiItem[]) || [];
-        if (
-          list.length > seenSurveiCountRef.current &&
-          seenSurveiCountRef.current > 0
-        ) {
-          setPulse(true);
-          window.setTimeout(() => setPulse(false), 2200);
+        if (surveiRes.status === "fulfilled" && surveiRes.value.ok) {
+          const json = await surveiRes.value.json().catch(() => null);
+          if (active && json?.ok) {
+            const list = (json.items as SurveiItem[]) || [];
+            if (list.length > seenSurveiCountRef.current && seenSurveiCountRef.current > 0) {
+              setPulse(true);
+              window.setTimeout(() => setPulse(false), 2200);
+            }
+            seenSurveiCountRef.current = list.length;
+            setSurveiItems(list);
+          }
         }
-        seenSurveiCountRef.current = list.length;
-        setSurveiItems(list);
+
+        if (penawaranRes.status === "fulfilled" && penawaranRes.value.ok) {
+          const json = await penawaranRes.value.json().catch(() => null);
+          if (active && json?.ok) {
+            const list = (json.items as PenawaranItem[]) || [];
+            if (list.length > seenPenawaranCountRef.current && seenPenawaranCountRef.current > 0) {
+              setPulse(true);
+              window.setTimeout(() => setPulse(false), 2200);
+            }
+            seenPenawaranCountRef.current = list.length;
+            setPenawaranItems(list);
+          }
+        }
       } catch {
         // ignore
       }
     }
 
-    loadSurvei();
-    const onFocus = () => loadSurvei();
-    const onVis = () => {
-      if (!document.hidden) loadSurvei();
-    };
+    loadAgentInboxes();
+    const onFocus = () => loadAgentInboxes();
+    const onVis = () => { if (!document.hidden) loadAgentInboxes(); };
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVis);
-    const intv = window.setInterval(loadSurvei, 90_000);
+    const intv = window.setInterval(loadAgentInboxes, 90_000);
 
-    let cleanupPusher: (() => void) | null = null;
+    const cleanupFns: Array<() => void> = [];
     (async () => {
       try {
         const mod = await import("@/lib/pusher-client");
         const pc = mod.pusherClient;
-        const ch = pc.subscribe(`survei-agent-${agentId}`);
-        const onNew = () => loadSurvei();
-        ch.bind("survei:new", onNew);
-        cleanupPusher = () => {
-          ch.unbind("survei:new", onNew);
+
+        const surveiCh = pc.subscribe(`survei-agent-${agentId}`);
+        const onSurvei = () => loadAgentInboxes();
+        surveiCh.bind("survei:new", onSurvei);
+        cleanupFns.push(() => {
+          surveiCh.unbind("survei:new", onSurvei);
           pc.unsubscribe(`survei-agent-${agentId}`);
-        };
-      } catch {
-        /* fallback polling jalan */
-      }
-    })();
+        });
 
-    return () => {
-      active = false;
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onVis);
-      window.clearInterval(intv);
-      if (cleanupPusher) cleanupPusher();
-    };
-  }, [agentId]);
-
-  // Load + Pusher realtime — Penawaran harga dari halaman properti
-  useEffect(() => {
-    if (!agentId) return;
-    let active = true;
-
-    async function loadPenawaran() {
-      try {
-        const res = await fetch("/api/leads/penawaran/inbox", { cache: "no-store" });
-        if (!res.ok) return;
-        const json = await res.json();
-        if (!active || !json?.ok) return;
-
-        const list = (json.items as PenawaranItem[]) || [];
-        if (
-          list.length > seenPenawaranCountRef.current &&
-          seenPenawaranCountRef.current > 0
-        ) {
-          setPulse(true);
-          window.setTimeout(() => setPulse(false), 2200);
-        }
-        seenPenawaranCountRef.current = list.length;
-        setPenawaranItems(list);
-      } catch {
-        // ignore
-      }
-    }
-
-    loadPenawaran();
-    const onFocus = () => loadPenawaran();
-    const onVis = () => {
-      if (!document.hidden) loadPenawaran();
-    };
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onVis);
-    const intv = window.setInterval(loadPenawaran, 90_000);
-
-    let cleanupPusher: (() => void) | null = null;
-    (async () => {
-      try {
-        const mod = await import("@/lib/pusher-client");
-        const pc = mod.pusherClient;
-        const ch = pc.subscribe(`lead-agent-${agentId}`);
-        const onNew = () => loadPenawaran();
-        ch.bind("penawaran:new", onNew);
-        cleanupPusher = () => {
-          ch.unbind("penawaran:new", onNew);
+        const penawaranCh = pc.subscribe(`lead-agent-${agentId}`);
+        const onPenawaran = () => loadAgentInboxes();
+        penawaranCh.bind("penawaran:new", onPenawaran);
+        cleanupFns.push(() => {
+          penawaranCh.unbind("penawaran:new", onPenawaran);
           pc.unsubscribe(`lead-agent-${agentId}`);
-        };
+        });
       } catch {
         /* fallback polling jalan */
       }
@@ -414,11 +375,11 @@ export default function NotificationBell() {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVis);
       window.clearInterval(intv);
-      if (cleanupPusher) cleanupPusher();
+      cleanupFns.forEach((fn) => fn());
     };
   }, [agentId]);
 
-  // Load + Pusher realtime — notifikasi sistem (agent baru, referral, dll)
+  // Load notifikasi sistem (agent baru, referral, dll)
   useEffect(() => {
     if (!idPengguna) return;
     let active = true;
@@ -431,10 +392,7 @@ export default function NotificationBell() {
         if (!active || !json?.ok) return;
 
         const list = ((json.items as SysNotif[]) || []).filter((n) => !n.dibaca);
-        if (
-          list.length > seenSysCountRef.current &&
-          seenSysCountRef.current > 0
-        ) {
+        if (list.length > seenSysCountRef.current && seenSysCountRef.current > 0) {
           setPulse(true);
           window.setTimeout(() => setPulse(false), 2200);
         }
@@ -447,9 +405,7 @@ export default function NotificationBell() {
 
     loadSysNotifs();
     const onFocus = () => loadSysNotifs();
-    const onVis = () => {
-      if (!document.hidden) loadSysNotifs();
-    };
+    const onVis = () => { if (!document.hidden) loadSysNotifs(); };
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVis);
     const intv = window.setInterval(loadSysNotifs, 90_000);

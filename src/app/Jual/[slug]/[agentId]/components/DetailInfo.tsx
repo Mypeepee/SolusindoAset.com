@@ -80,7 +80,10 @@ const buildShareMessage = (data: any) => {
 
   const harga = parseFloat(data?.harga) || 0;
   const hargaPromo = parseFloat(data?.harga_promo) || 0;
-  const hargaFinal = hargaPromo > 0 && hargaPromo < harga ? hargaPromo : harga;
+  const hasPromo = hargaPromo > 0 && hargaPromo < harga;
+  const hargaDisplay = hasPromo
+    ? `~${formatRupiah(harga)}~ → *${formatRupiah(hargaPromo)}* 🔥`
+    : formatRupiah(harga);
 
   const lokasiSingkat =
     data?.kota ||
@@ -101,7 +104,7 @@ const buildShareMessage = (data: any) => {
     `📐 LT ${luasTanah} / LB ${luasBangunan}\n` +
     `🛏️ ${data?.kamar_tidur ?? "-"} KT • 🚿 ${data?.kamar_mandi ?? "-"} KM\n` +
     `📃 Tipe Hak: ${legal}\n` +
-    `💰 Harga: ${formatRupiah(hargaFinal)}\n` +
+    `💰 Harga Jual: ${hargaDisplay}\n` +
     `Kode: ${data?.id_property || "-"}\n\n` +
     `📞 Hubungi kami untuk info lebih lanjut`
   );

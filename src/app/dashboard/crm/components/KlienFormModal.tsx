@@ -3,11 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@iconify/react";
 import {
-  Klien, KlienForm, KlienStatus, MetodePembayaran, PreferensiForm, SumberKlien,
+  Klien, KlienForm, KlienStatus, MetodePembayaran, PreferensiForm, PreferensiKlien, SumberKlien,
   TipeProperti, JenisTransaksi, TujuanBeli,
   EMPTY_PREFERENSI, JENIS_TRANSAKSI_LABEL, TIPE_PROPERTI_LABEL,
 } from "./types";
-import { PremiumSelect, PremiumDateTimePicker, RegionCascadeSelect, type PremiumOption } from "./CrmFormControls";
+import { PremiumSelect, PremiumDateTimePicker, type PremiumOption } from "./CrmFormControls";
+import LocationPicker from "@/components/search/LocationPicker";
+import TypePicker from "@/components/search/TypePicker";
+import { regionKey, type RegionLevel, type SelectedRegion } from "@/lib/regionSearch";
 
 /* Opsi dropdown — dipakai PremiumSelect */
 const SUMBER_OPTIONS: PremiumOption[] = [
@@ -31,12 +34,29 @@ const METODE_OPTIONS: PremiumOption[] = [
   { value: "cash", label: "Cash",             icon: "solar:wallet-money-bold-duotone" },
   { value: "kpr",  label: "KPR",              icon: "solar:card-bold-duotone" },
 ];
-const TUJUAN_OPTIONS: PremiumOption[] = [
+export const TUJUAN_OPTIONS: PremiumOption[] = [
   { value: "",          label: "Belum tahu" },
   { value: "ditempati", label: "Ditempati" },
   { value: "investasi", label: "Investasi" },
   { value: "disewakan", label: "Disewakan" },
 ];
+
+// Icon per tipe properti — sama persis dengan PROPERTY_ICONS di Home/Hero/search.tsx
+export const TIPE_ICONS: Record<string, string> = {
+  "Rumah":         "solar:home-2-bold-duotone",
+  "Apartemen":     "solar:buildings-2-bold-duotone",
+  "Gudang":        "solar:box-minimalistic-bold-duotone",
+  "Tanah":         "solar:map-point-wave-bold-duotone",
+  "Pabrik":        "solar:garage-bold-duotone",
+  "Ruko":          "solar:shop-2-bold-duotone",
+  "Toko":          "solar:shop-bold-duotone",
+  "Hotel & Villa": "solar:bed-bold-duotone",
+};
+export const TIPE_LABELS = Object.values(TIPE_PROPERTI_LABEL);
+// Reverse map: label → enum key
+const LABEL_TO_TIPE = Object.fromEntries(
+  Object.entries(TIPE_PROPERTI_LABEL).map(([k, v]) => [v, k as TipeProperti])
+);
 
 interface Props {
   open: boolean;
@@ -54,38 +74,108 @@ const INITIAL_FORM: KlienForm = {
   preferensi: [],
 };
 
-function formatRupiah(raw: string) {
+export function formatRupiah(raw: string) {
   const num = raw.replace(/\D/g, "");
   if (!num) return "";
   return Number(num).toLocaleString("id-ID");
 }
 
-function unformatRupiah(formatted: string) {
+export function unformatRupiah(formatted: string) {
   return formatted.replace(/\./g, "").replace(/,/g, "");
 }
 
-/** Bangun payload preferensi (lokasi terstruktur + lokasi_dicari ringkas) untuk dikirim ke API. */
-function buildPrefPayload(p: PreferensiForm) {
-  const lokasiText = [
-    p.loc_kelurahan && `Kel. ${p.loc_kelurahan}`,
-    p.loc_kecamatan && `Kec. ${p.loc_kecamatan}`,
-    p.loc_kota,
-  ].filter(Boolean).join(", ");
-  return {
-    tipe_properti:   p.tipe_properti,
+/** Sebuah wilayah terpilih → 4 kolom lokasi terstruktur (isi level terpilih + induknya). */
+export function regionToLocFields(r: SelectedRegion) {
+  const f: { loc_provinsi: string | null; loc_kota: string | null; loc_kecamatan: string | null; loc_kelurahan: string | null } =
+    { loc_provinsi: null, loc_kota: null, loc_kecamatan: null, loc_kelurahan: null };
+  switch (r.level) {
+    case "provinsi":  f.loc_provinsi = r.name; break;
+    case "kota":      f.loc_kota = r.name;      if (r.parent) f.loc_provinsi = r.parent; break;
+    case "kecamatan": f.loc_kecamatan = r.name; if (r.parent) f.loc_kota = r.parent; break;
+    case "kelurahan": f.loc_kelurahan = r.name; if (r.parent) f.loc_kecamatan = r.parent; break;
+  }
+  return f;
+}
+
+/** Kolom lokasi tersimpan → satu wilayah (level terdalam yang terisi) untuk hidrasi picker saat edit. */
+export function locFieldsToRegion(p: {
+  loc_provinsi: string | null; loc_kota: string | null;
+  loc_kecamatan: string | null; loc_kelurahan: string | null;
+}): SelectedRegion | null {
+  const mk = (level: RegionLevel, name: string, parent?: string | null): SelectedRegion =>
+    ({ id: `${level}:${name}`, name, level, ...(parent ? { parent } : {}) });
+  if (p.loc_kelurahan) return mk("kelurahan", p.loc_kelurahan, p.loc_kecamatan);
+  if (p.loc_kecamatan) return mk("kecamatan", p.loc_kecamatan, p.loc_kota);
+  if (p.loc_kota)      return mk("kota", p.loc_kota, p.loc_provinsi);
+  if (p.loc_provinsi)  return mk("provinsi", p.loc_provinsi);
+  return null;
+}
+
+/**
+ * Expand satu kartu form → banyak payload preferensi (satu per kombinasi tipe × lokasi).
+ * Tanpa lokasi → satu baris per tipe (lokasi null = berlaku semua wilayah).
+ */
+export function buildPrefPayloads(p: PreferensiForm) {
+  const shared = {
     jenis_transaksi: p.jenis_transaksi || null,
-    lokasi_dicari:   lokasiText || p.lokasi_dicari.trim() || null,
-    loc_provinsi:    p.loc_provinsi || null,
-    loc_kota:        p.loc_kota || null,
-    loc_kecamatan:   p.loc_kecamatan || null,
-    loc_kelurahan:   p.loc_kelurahan || null,
     budget_min:      p.budget_min ? Number(unformatRupiah(p.budget_min)) : null,
     budget_max:      p.budget_max ? Number(unformatRupiah(p.budget_max)) : null,
-    luas_min:        p.luas_min ? Number(p.luas_min) : null,
-    luas_max:        p.luas_max ? Number(p.luas_max) : null,
+    luas_min:        p.luas_min ? Number(unformatRupiah(p.luas_min)) : null,
+    luas_max:        p.luas_max ? Number(unformatRupiah(p.luas_max)) : null,
     tujuan_beli:     p.tujuan_beli || null,
     catatan:         p.catatan.trim() || null,
   };
+  const locs: (SelectedRegion | null)[] = p.locations.length ? p.locations : [null];
+  const rows: Record<string, unknown>[] = [];
+  for (const tipe of p.tipe_properti) {
+    for (const loc of locs) {
+      rows.push({
+        tipe_properti: tipe,
+        lokasi_dicari: loc ? [loc.name, loc.parent].filter(Boolean).join(", ") : null,
+        ...(loc ? regionToLocFields(loc) : { loc_provinsi: null, loc_kota: null, loc_kecamatan: null, loc_kelurahan: null }),
+        ...shared,
+      });
+    }
+  }
+  return rows;
+}
+
+/**
+ * Grup baris preferensi tersimpan → kartu form. Baris dengan kriteria bersama
+ * yang sama (jenis transaksi, budget, luas, tujuan, catatan) digabung jadi satu
+ * kartu dengan banyak tipe & banyak lokasi.
+ */
+function groupPreferensi(rows: PreferensiKlien[]): PreferensiForm[] {
+  const map = new Map<string, PreferensiForm>();
+  for (const p of rows) {
+    const sig = JSON.stringify([
+      p.jenis_transaksi || "",
+      p.budget_min ?? "", p.budget_max ?? "",
+      p.luas_min ?? "", p.luas_max ?? "",
+      p.tujuan_beli || "", p.catatan || "",
+    ]);
+    let card = map.get(sig);
+    if (!card) {
+      card = {
+        tipe_properti:   [],
+        jenis_transaksi: p.jenis_transaksi || "",
+        locations:       [],
+        budget_min:      p.budget_min ? formatRupiah(String(p.budget_min)) : "",
+        budget_max:      p.budget_max ? formatRupiah(String(p.budget_max)) : "",
+        luas_min:        p.luas_min ? formatRupiah(String(p.luas_min)) : "",
+        luas_max:        p.luas_max ? formatRupiah(String(p.luas_max)) : "",
+        tujuan_beli:     p.tujuan_beli || "",
+        catatan:         p.catatan || "",
+      };
+      map.set(sig, card);
+    }
+    if (!card.tipe_properti.includes(p.tipe_properti)) card.tipe_properti.push(p.tipe_properti);
+    const region = locFieldsToRegion(p);
+    if (region && !card.locations.some(l => regionKey(l) === regionKey(region))) {
+      card.locations.push(region);
+    }
+  }
+  return Array.from(map.values());
 }
 
 /** Nomor WA → tampil per 4 digit dengan tanda "-" (mis. 8812-3456-7890) */
@@ -100,6 +190,7 @@ export default function KlienFormModal({ open, onClose, onSaved, initialData, ed
   const [err, setErr]       = useState<string | null>(null);
   const [shown, setShown]   = useState(false);
   const scrollRef           = useRef<HTMLDivElement>(null);
+  const prefRefs            = useRef<Record<number, HTMLDivElement | null>>({});
 
   const isEdit = Boolean(editTarget);
 
@@ -119,21 +210,7 @@ export default function KlienFormModal({ open, onClose, onSaved, initialData, ed
           catatan:          editTarget.catatan || "",
           tanggal_follow_up: editTarget.tanggal_follow_up
             ? editTarget.tanggal_follow_up.slice(0, 16) : "",
-          preferensi:       editTarget.preferensi.map(p => ({
-            tipe_properti:   p.tipe_properti,
-            jenis_transaksi: p.jenis_transaksi || "",
-            lokasi_dicari:   p.lokasi_dicari || "",
-            loc_provinsi:    p.loc_provinsi || "",
-            loc_kota:        p.loc_kota || "",
-            loc_kecamatan:   p.loc_kecamatan || "",
-            loc_kelurahan:   p.loc_kelurahan || "",
-            budget_min:      p.budget_min ? formatRupiah(String(p.budget_min)) : "",
-            budget_max:      p.budget_max ? formatRupiah(String(p.budget_max)) : "",
-            luas_min:        p.luas_min?.toString() || "",
-            luas_max:        p.luas_max?.toString() || "",
-            tujuan_beli:     p.tujuan_beli || "",
-            catatan:         p.catatan || "",
-          })),
+          preferensi:       groupPreferensi(editTarget.preferensi),
         });
       } else {
         setForm({ ...INITIAL_FORM, ...initialData, preferensi: [] });
@@ -169,8 +246,10 @@ export default function KlienFormModal({ open, onClose, onSaved, initialData, ed
   }
 
   function addPreferensi() {
+    const newIdx = form.preferensi.length;
     setForm(f => ({ ...f, preferensi: [...f.preferensi, { ...EMPTY_PREFERENSI }] }));
-    setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }), 80);
+    // Scroll ke top kartu baru — bukan absolute bottom (yang menampilkan tombol, bukan kartu)
+    setTimeout(() => prefRefs.current[newIdx]?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
   }
 
   function removePreferensi(i: number) {
@@ -208,8 +287,8 @@ export default function KlienFormModal({ open, onClose, onSaved, initialData, ed
         id_lead_asal:     form.id_lead_asal || undefined,
         id_properti_asal: form.id_properti_asal || undefined,
         preferensi: form.preferensi
-          .filter(p => p.tipe_properti)
-          .map(buildPrefPayload),
+          .filter(p => p.tipe_properti.length > 0)
+          .flatMap(buildPrefPayloads),
       };
 
       const url    = isEdit ? `/api/dashboard/klien/${editTarget!.id_klien}` : "/api/dashboard/klien";
@@ -234,13 +313,16 @@ export default function KlienFormModal({ open, onClose, onSaved, initialData, ed
         await Promise.all(old.map(p =>
           fetch(`/api/dashboard/klien/${editTarget!.id_klien}/preferensi/${p.id_preferensi}`, { method: "DELETE" })
         ));
-        // tambah preferensi baru
+        // tambah preferensi baru (expand tiap kartu → baris per tipe × lokasi)
+        const newRows = form.preferensi
+          .filter(p => p.tipe_properti.length > 0)
+          .flatMap(buildPrefPayloads);
         await Promise.all(
-          form.preferensi.filter(p => p.tipe_properti).map(p =>
+          newRows.map(payload =>
             fetch(`/api/dashboard/klien/${editTarget!.id_klien}/preferensi`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(buildPrefPayload(p)),
+              body: JSON.stringify(payload),
             })
           )
         );
@@ -410,13 +492,14 @@ export default function KlienFormModal({ open, onClose, onSaved, initialData, ed
             )}
 
             {form.preferensi.map((pref, i) => (
-              <PreferensiCard
-                key={i}
-                index={i}
-                pref={pref}
-                onChange={(key, val) => setPrefField(i, key, val)}
-                onRemove={() => removePreferensi(i)}
-              />
+              <div key={i} ref={el => { prefRefs.current[i] = el; }}>
+                <PreferensiCard
+                  index={i}
+                  pref={pref}
+                  onChange={(key, val) => setPrefField(i, key, val)}
+                  onRemove={() => removePreferensi(i)}
+                />
+              </div>
             ))}
 
             <button
@@ -511,6 +594,7 @@ function PreferensiCard({
   onChange: <K extends keyof PreferensiForm>(key: K, val: PreferensiForm[K]) => void;
   onRemove: () => void;
 }) {
+  const [openPicker, setOpenPicker] = useState<"type" | "transaksi" | "location" | null>(null);
   return (
     <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 space-y-3">
       <div className="flex items-center justify-between">
@@ -528,15 +612,21 @@ function PreferensiCard({
 
       <div className="grid grid-cols-2 gap-3">
         <Field label="Tipe Properti" required>
-          <PremiumSelect
-            value={pref.tipe_properti}
-            onChange={v => onChange("tipe_properti", v as TipeProperti)}
-            placeholder="-- Pilih --"
-            options={[
-              { value: "", label: "-- Pilih --" },
-              ...(Object.entries(TIPE_PROPERTI_LABEL) as [TipeProperti, string][]).map(([k, v]) => ({ value: k, label: v })),
-            ]}
-          />
+          <div className="h-[42px] rounded-xl border border-white/[0.08] bg-white/[0.03] px-1 transition-all hover:border-white/20">
+            <TypePicker
+              theme="dark"
+              label=""
+              value={pref.tipe_properti.map(k => TIPE_PROPERTI_LABEL[k])}
+              options={TIPE_LABELS}
+              icons={TIPE_ICONS}
+              open={openPicker === "type"}
+              onOpenChange={v => setOpenPicker(v ? "type" : null)}
+              onChange={labels => onChange(
+                "tipe_properti",
+                labels.map(l => LABEL_TO_TIPE[l]).filter(Boolean)
+              )}
+            />
+          </div>
         </Field>
 
         <Field label="Jenis Transaksi">
@@ -544,6 +634,8 @@ function PreferensiCard({
             value={pref.jenis_transaksi}
             onChange={v => onChange("jenis_transaksi", v as JenisTransaksi)}
             placeholder="-- Semua --"
+            open={openPicker === "transaksi"}
+            onOpenChange={v => setOpenPicker(v ? "transaksi" : null)}
             options={[
               { value: "", label: "-- Semua --" },
               ...(Object.entries(JENIS_TRANSAKSI_LABEL) as [JenisTransaksi, string][]).map(([k, v]) => ({ value: k, label: v })),
@@ -553,20 +645,19 @@ function PreferensiCard({
       </div>
 
       <Field label="Lokasi yang Diinginkan">
-        <RegionCascadeSelect
-          value={{
-            provinsi:  pref.loc_provinsi,
-            kota:      pref.loc_kota,
-            kecamatan: pref.loc_kecamatan,
-            kelurahan: pref.loc_kelurahan,
-          }}
-          onChange={v => {
-            onChange("loc_provinsi", v.provinsi);
-            onChange("loc_kota", v.kota);
-            onChange("loc_kecamatan", v.kecamatan);
-            onChange("loc_kelurahan", v.kelurahan);
-          }}
-        />
+        <div className="h-[42px] rounded-xl border border-white/[0.08] bg-white/[0.03] px-1 transition-all hover:border-white/20">
+          <LocationPicker
+            theme="dark"
+            label=""
+            value={pref.locations}
+            onChange={next => onChange("locations", next)}
+            open={openPicker === "location"}
+            onOpenChange={v => setOpenPicker(v ? "location" : null)}
+          />
+        </div>
+        {pref.locations.length === 0 && (
+          <p className="mt-1 text-[10px] text-slate-500">Kosongkan untuk semua wilayah.</p>
+        )}
       </Field>
 
       <div className="grid grid-cols-2 gap-3">
@@ -595,19 +686,21 @@ function PreferensiCard({
       <div className="grid grid-cols-2 gap-3">
         <Field label="Luas Min (m²)">
           <input
-            type="number" min={0}
+            type="text"
+            inputMode="numeric"
             value={pref.luas_min}
-            onChange={e => onChange("luas_min", e.target.value)}
-            placeholder="100"
+            onChange={e => onChange("luas_min", formatRupiah(e.target.value))}
+            placeholder="1.000"
             className={inputCls}
           />
         </Field>
         <Field label="Luas Max (m²)">
           <input
-            type="number" min={0}
+            type="text"
+            inputMode="numeric"
             value={pref.luas_max}
-            onChange={e => onChange("luas_max", e.target.value)}
-            placeholder="500"
+            onChange={e => onChange("luas_max", formatRupiah(e.target.value))}
+            placeholder="5.000"
             className={inputCls}
           />
         </Field>

@@ -4,6 +4,8 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcrypt";
+import { cookies } from "next/headers";
+import { attributeReferral } from "@/lib/referral";
 
 /**
  * ✅ Prisma singleton (dev-safe)
@@ -210,7 +212,7 @@ export const authOptions: AuthOptions = {
         });
 
         if (!existingUser) {
-          await prisma.pengguna.create({
+          const createdGoogleUser = await prisma.pengguna.create({
             data: {
               nama_lengkap: profile?.name || "Pengguna Google",
               email,
@@ -220,7 +222,25 @@ export const authOptions: AuthOptions = {
               status_akun: "AKTIF",
               wa_terverifikasi: true,
             },
+            select: { id_pengguna: true, nama_lengkap: true, email: true },
           });
+
+          // ── ATRIBUSI REFERRAL untuk pendaftar via Google ──
+          // Kode disimpan di cookie `ref_code` saat klien membuka link /r/AG###.
+          // Best-effort: tidak menggagalkan login bila gagal.
+          try {
+            const refCode = cookies().get("ref_code")?.value || "";
+            if (refCode) {
+              await attributeReferral({
+                penggunaId: createdGoogleUser.id_pengguna,
+                code: refCode,
+                nama: createdGoogleUser.nama_lengkap,
+                email: createdGoogleUser.email,
+              });
+            }
+          } catch (e) {
+            console.warn("Google referral attribution failed:", e);
+          }
         } else if (!existingUser.google_id) {
           await prisma.pengguna.update({
             where: { id_pengguna: existingUser.id_pengguna },
@@ -256,8 +276,15 @@ export const authOptions: AuthOptions = {
         if (db) token.id = db.id_pengguna;
       }
 
-      // 3) Kalau sudah ada id, selalu refresh peran + agentId dari DB (setiap request)
-      if (token.id) {
+      // 3) Refresh peran + agentId dari DB — hanya saat login pertama ATAU token sudah
+      //    lebih dari 5 menit. Sebelumnya query ini jalan setiap request (71 route ×
+      //    N fetch per page load = N extra DB hit per detik). Dengan TTL 5 menit,
+      //    perubahan status_akun/peran berlaku dalam max 5 menit — trade-off yang wajar.
+      const REFRESH_INTERVAL = 5 * 60 * 1000;
+      const isLogin = !!user; // user hanya ada saat sign-in event
+      const isStale = Date.now() - ((token._refreshedAt as number) || 0) > REFRESH_INTERVAL;
+
+      if (token.id && (isLogin || isStale)) {
         const dbUser = await prisma.pengguna.findUnique({
           where: { id_pengguna: String(token.id) },
           select: {
@@ -266,6 +293,7 @@ export const authOptions: AuthOptions = {
             email: true,
             peran: true,
             status_akun: true,
+            kode_referral: true,
             agent: { select: { id_agent: true, status_keanggotaan: true, foto_profil_url: true, jabatan: true } },
           },
         });
@@ -274,6 +302,9 @@ export const authOptions: AuthOptions = {
           token.id = dbUser.id_pengguna;
           token.name = dbUser.nama_lengkap || token.name;
           token.email = dbUser.email || token.email;
+
+          // kode referral agent perujuk (untuk monopoli Lelang sisi klien)
+          token.kode_referral = dbUser.kode_referral ?? null;
 
           // ✅ pakai peran sebagai patokan utama
           token.peran = dbUser.peran;
@@ -290,7 +321,6 @@ export const authOptions: AuthOptions = {
           token.status_akun = dbUser.status_akun ?? null;
 
           // foto profil dari tabel agent (kalau ada) — normalisasi ke URL publik
-          // supaya konsumen (next/image di Header dll) tidak dapat raw Drive ID.
           const photoUrl = toPublicPhotoUrl(dbUser.agent?.foto_profil_url);
           if (photoUrl) token.picture = photoUrl;
         } else {
@@ -299,8 +329,10 @@ export const authOptions: AuthOptions = {
           token.role = "USER";
           token.agentId = null;
           token.agentStatus = null;
+          token.kode_referral = null;
         }
-      } else {
+        token._refreshedAt = Date.now();
+      } else if (!token.id) {
         token.peran = token.peran ?? token.role ?? "USER";
         token.role = token.role ?? token.peran ?? "USER";
         token.agentId = token.agentId ?? null;
@@ -328,6 +360,9 @@ export const authOptions: AuthOptions = {
 
         session.user.agentId = token.agentId ?? null;
         session.user.jabatan = token.jabatan ?? null;
+
+        // kode referral agent perujuk (monopoli Lelang sisi klien)
+        session.user.kode_referral = token.kode_referral ?? null;
 
         // optional untuk UI
         session.user.agentStatus = token.agentStatus ?? null;

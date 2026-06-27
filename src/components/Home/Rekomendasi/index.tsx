@@ -1,13 +1,9 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Icon } from "@iconify/react";
-import { motion } from "framer-motion";
-import Slider, { Settings } from "react-slick";
-import "slick-carousel/slick/slick.css";
-import "slick-carousel/slick/slick-theme.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -118,7 +114,7 @@ function MiniGallery({
         alt={alt}
         fill
         className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.05]"
-        sizes="(max-width: 768px) 100vw, 33vw"
+        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
       />
       {images.length > 1 && (
         <>
@@ -169,12 +165,10 @@ function JualCard({ item }: { item: ListingItem }) {
 
   return (
     <div className="bg-[#111111] border border-white/5 rounded-3xl overflow-hidden group transition-all duration-300 flex flex-col h-full hover:border-emerald-400/70 hover:shadow-[0_24px_70px_-30px_rgba(16,185,129,0.7)]">
-      {/* IMAGE */}
       <div className="relative">
         <MiniGallery images={images} alt={item.judul} height="h-64 md:h-72" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/0 pointer-events-none" />
 
-        {/* Badge row */}
         <div className="absolute top-3 left-3 right-3 z-20 flex items-center gap-2">
           <span
             className={`${getBadgeColor(item.jenis_transaksi)} text-white text-[10px] font-semibold px-3 py-1.5 rounded-full shadow-md uppercase tracking-wide inline-flex items-center gap-1`}
@@ -200,7 +194,6 @@ function JualCard({ item }: { item: ListingItem }) {
         )}
       </div>
 
-      {/* CONTENT */}
       <div className="p-5 md:p-6 flex flex-col flex-grow gap-3">
         <div className="space-y-1">
           {hasDiscount ? (
@@ -236,7 +229,6 @@ function JualCard({ item }: { item: ListingItem }) {
           <span className="line-clamp-1">{item.kota}</span>
         </div>
 
-        {/* Specs */}
         <div className="bg-white/5 rounded-2xl p-3 border border-white/5">
           <div className="grid grid-cols-4 gap-2 text-center text-[11px]">
             <div className="flex flex-col gap-0.5">
@@ -268,11 +260,10 @@ function JualCard({ item }: { item: ListingItem }) {
           </div>
         </div>
 
-        {/* Agent */}
         <div className="mt-auto pt-3 flex items-center justify-between gap-3 border-t border-white/5">
           <div className="flex items-center gap-2.5">
             <div className="relative w-8 h-8 rounded-full overflow-hidden border border-white/15 shrink-0">
-              <Image src={item.agent_photo} alt="Agent" fill className="object-cover" />
+              <Image src={item.agent_photo} alt="Agent" fill sizes="32px" className="object-cover" />
             </div>
             <div className="flex flex-col">
               <span className="text-[11px] font-semibold text-gray-100 leading-tight">{item.agent_name}</span>
@@ -356,12 +347,10 @@ function LelangCard({ item }: { item: ListingItem }) {
 
   return (
     <div className="bg-[#050608] border border-white/10 rounded-3xl overflow-hidden group relative flex flex-col h-full shadow-[0_18px_60px_rgba(0,0,0,0.9)] before:content-[''] before:absolute before:inset-px before:rounded-[22px] before:border before:border-white/5 before:pointer-events-none hover:border-emerald-400/60 hover:shadow-[0_22px_70px_rgba(34,197,94,0.3)] transition-all duration-300">
-      {/* IMAGE */}
       <div className="relative after:content-[''] after:absolute after:inset-x-6 after:bottom-0 after:h-px after:bg-gradient-to-r after:from-transparent after:via-emerald-400/40 after:to-transparent after:opacity-70">
         <MiniGallery images={images} alt={item.judul} height="h-64" />
         <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-70 pointer-events-none" />
 
-        {/* Badge kiri: kategori */}
         <div className="absolute top-4 left-4 z-10">
           <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-black/80 text-emerald-300 text-[11px] font-semibold border border-emerald-400/40 backdrop-blur-sm">
             <Icon icon={getPropertyIcon(item.kategori)} className="text-base" />
@@ -369,13 +358,11 @@ function LelangCard({ item }: { item: ListingItem }) {
           </span>
         </div>
 
-        {/* Badge kanan: countdown */}
         <div className="absolute top-4 right-4 z-10">
           <LelangCountdownBadge tanggal_lelang={item.tanggal_lelang} />
         </div>
       </div>
 
-      {/* CONTENT */}
       <div className="p-5 flex flex-col flex-grow bg-gradient-to-b from-slate-900/80 via-slate-950/90 to-black border-t border-slate-800 backdrop-blur-sm">
         <div className="mb-2">
           <h3 className="text-white text-xl font-extrabold tracking-tight truncate">
@@ -397,7 +384,6 @@ function LelangCard({ item }: { item: ListingItem }) {
           </span>
         </div>
 
-        {/* Specs box */}
         <div className="bg-gradient-to-r from-slate-900/90 via-slate-900/80 to-slate-950/90 rounded-2xl p-3 mb-5 border border-slate-700 shadow-[0_12px_35px_rgba(0,0,0,0.8)]">
           <div className="flex justify-between items-center px-1">
             <div className="flex items-center gap-2">
@@ -425,12 +411,11 @@ function LelangCard({ item }: { item: ListingItem }) {
           </div>
         </div>
 
-        {/* Agent + CTA */}
         <div className="mt-auto pt-4 flex items-center justify-between border-t border-slate-800 bg-gradient-to-r from-transparent via-slate-900/70 to-transparent -mx-5 px-5 pb-3 rounded-b-3xl">
           <div className="flex items-center gap-3">
             <div className="relative w-9 h-9 rounded-full p-[1px] bg-gradient-to-tr from-primary to-transparent">
               <div className="w-full h-full rounded-full overflow-hidden border-2 border-[#151515] relative">
-                <Image src={item.agent_photo} alt={item.agent_name} fill className="object-cover" />
+                <Image src={item.agent_photo} alt={item.agent_name} fill sizes="36px" className="object-cover" />
               </div>
             </div>
             <div className="flex flex-col">
@@ -455,7 +440,7 @@ function LelangCard({ item }: { item: ListingItem }) {
 
 function SkeletonCard() {
   return (
-    <div className="bg-[#111111] rounded-3xl border border-white/5 overflow-hidden animate-pulse mx-2">
+    <div className="bg-[#111111] rounded-3xl border border-white/5 overflow-hidden animate-pulse shrink-0 w-[calc(100vw-3rem)] sm:w-[340px] lg:w-[380px]">
       <div className="h-64 bg-white/5" />
       <div className="p-5 space-y-3">
         <div className="h-6 bg-white/10 rounded w-2/3" />
@@ -468,30 +453,65 @@ function SkeletonCard() {
   );
 }
 
-// ─── Slider Arrows ────────────────────────────────────────────────────────────
+// ─── Native scroll carousel ───────────────────────────────────────────────────
 
-const PrevArrow = ({ onClick }: any) => (
-  <button
-    onClick={onClick}
-    className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 md:-translate-x-6 z-30 w-10 h-10 lg:w-14 lg:h-14 rounded-full bg-[#1A1A1A] border border-white/20 text-white hover:bg-primary hover:text-black hover:border-primary transition-all flex items-center justify-center shadow-[0_0_20px_rgba(0,0,0,0.5)] active:scale-90"
-  >
-    <Icon icon="solar:arrow-left-linear" className="text-xl lg:text-2xl" />
-  </button>
-);
+function PropertyCarousel({ listings }: { listings: ListingItem[] }) {
+  const trackRef = useRef<HTMLDivElement>(null);
 
-const NextArrow = ({ onClick }: any) => (
-  <button
-    onClick={onClick}
-    className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-2 md:translate-x-6 z-30 w-10 h-10 lg:w-14 lg:h-14 rounded-full bg-[#1A1A1A] border border-white/20 text-white hover:bg-primary hover:text-black hover:border-primary transition-all flex items-center justify-center shadow-[0_0_20px_rgba(0,0,0,0.5)] active:scale-90"
-  >
-    <Icon icon="solar:arrow-right-linear" className="text-xl lg:text-2xl" />
-  </button>
-);
+  const scroll = useCallback((dir: "prev" | "next") => {
+    const el = trackRef.current;
+    if (!el) return;
+    const cardWidth = el.firstElementChild
+      ? (el.firstElementChild as HTMLElement).offsetWidth + 24
+      : 380;
+    el.scrollBy({ left: dir === "next" ? cardWidth : -cardWidth, behavior: "smooth" });
+  }, []);
+
+  return (
+    <div className="relative">
+      {/* nav buttons */}
+      <button
+        onClick={() => scroll("prev")}
+        aria-label="Sebelumnya"
+        className="hidden sm:flex absolute left-0 top-1/2 -translate-y-1/2 -translate-x-5 z-20 w-10 h-10 lg:w-14 lg:h-14 rounded-full bg-[#1A1A1A] border border-white/20 text-white hover:bg-primary hover:text-black hover:border-primary transition-all items-center justify-center shadow-[0_0_20px_rgba(0,0,0,0.5)] active:scale-90"
+      >
+        <Icon icon="solar:arrow-left-linear" className="text-xl lg:text-2xl" />
+      </button>
+      <button
+        onClick={() => scroll("next")}
+        aria-label="Berikutnya"
+        className="hidden sm:flex absolute right-0 top-1/2 -translate-y-1/2 translate-x-5 z-20 w-10 h-10 lg:w-14 lg:h-14 rounded-full bg-[#1A1A1A] border border-white/20 text-white hover:bg-primary hover:text-black hover:border-primary transition-all items-center justify-center shadow-[0_0_20px_rgba(0,0,0,0.5)] active:scale-90"
+      >
+        <Icon icon="solar:arrow-right-linear" className="text-xl lg:text-2xl" />
+      </button>
+
+      {/* scrollable track */}
+      <div
+        ref={trackRef}
+        className="flex gap-6 overflow-x-auto snap-x snap-mandatory pb-4 hide-scrollbar scroll-smooth"
+      >
+        {listings.map((item) => (
+          <div
+            key={item.id_property}
+            className="snap-start shrink-0 w-[calc(100vw-3rem)] sm:w-[340px] lg:w-[380px] py-4"
+          >
+            <Link href={getDetailUrl(item)} className="block h-full">
+              {item.jenis_transaksi?.toUpperCase() === "LELANG" ? (
+                <LelangCard item={item} />
+              ) : (
+                <JualCard item={item} />
+              )}
+            </Link>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // ─── Main Section ─────────────────────────────────────────────────────────────
 
 const Recommendation = () => {
-  const sliderRef = useRef<Slider>(null);
   const [listings, setListings] = useState<ListingItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -505,109 +525,49 @@ const Recommendation = () => {
       .catch(() => setIsLoading(false));
   }, []);
 
-  const count = listings.length;
-  const useSlider = count > 3;
-
-  const sliderSettings: Settings = {
-    dots: true,
-    infinite: false,
-    speed: 500,
-    slidesToShow: 3,
-    slidesToScroll: 1,
-    arrows: true,
-    nextArrow: <NextArrow />,
-    prevArrow: <PrevArrow />,
-    cssEase: "cubic-bezier(0.87, 0, 0.13, 1)",
-    responsive: [
-      { breakpoint: 1280, settings: { slidesToShow: 3 } },
-      { breakpoint: 1024, settings: { slidesToShow: 2 } },
-      {
-        breakpoint: 640,
-        settings: {
-          slidesToShow: 1,
-          dots: true,
-          arrows: true,
-          nextArrow: <NextArrow />,
-          prevArrow: <PrevArrow />,
-        },
-      },
-    ],
-  };
-
-  const renderCard = (item: ListingItem) => (
-    <Link href={getDetailUrl(item)} className="block h-full">
-      {item.jenis_transaksi?.toUpperCase() === "LELANG" ? (
-        <LelangCard item={item} />
-      ) : (
-        <JualCard item={item} />
-      )}
-    </Link>
-  );
-
   return (
     <section className="py-10 bg-[#0F0F0F] relative overflow-hidden">
       <div className="container mx-auto px-4 lg:max-w-screen-xl relative z-10">
 
         {/* Header */}
-        <div className="mb-10">
-          <motion.span
-            initial={{ opacity: 0, y: 10 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="inline-block py-1 px-3 rounded-full bg-white/5 border border-white/10 text-primary text-[10px] font-bold tracking-widest mb-3 uppercase"
-          >
+        <div className="mb-10" data-aos="fade-up">
+          <span className="inline-block py-1 px-3 rounded-full bg-white/5 border border-white/10 text-primary text-[10px] font-bold tracking-widest mb-3 uppercase">
             Pilihan Editor
-          </motion.span>
+          </span>
 
-          <motion.h2
-            initial={{ opacity: 0, x: -20 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            className="text-white text-3xl md:text-4xl font-extrabold"
-          >
+          <h2 className="text-white text-3xl md:text-4xl font-extrabold">
             Properti{" "}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-green-300">
               Populer
             </span>
-          </motion.h2>
+          </h2>
         </div>
 
         {/* Content */}
         {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="flex gap-6 overflow-hidden">
             {[1, 2, 3].map((i) => <SkeletonCard key={i} />)}
           </div>
         ) : listings.length === 0 ? (
           <div className="text-center py-20 text-gray-500">
             Belum ada hot deal tersedia.
           </div>
-        ) : useSlider ? (
-          /* >3 items → pakai slider */
-          <div className="relative px-4 md:px-8 -mx-4">
-            <Slider ref={sliderRef} {...sliderSettings} className="property-slider">
-              {listings.map((item) => (
-                <div key={item.id_property} className="px-2 md:px-3 h-full py-4">
-                  {renderCard(item)}
-                </div>
-              ))}
-            </Slider>
+        ) : listings.length <= 3 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {listings.map((item) => (
+              <div key={item.id_property} className="py-4">
+                <Link href={getDetailUrl(item)} className="block h-full">
+                  {item.jenis_transaksi?.toUpperCase() === "LELANG" ? (
+                    <LelangCard item={item} />
+                  ) : (
+                    <JualCard item={item} />
+                  )}
+                </Link>
+              </div>
+            ))}
           </div>
         ) : (
-          /* ≤3 items → grid centered, max-width sesuai jumlah card */
-          <div className="flex justify-center">
-            <div
-              className="grid gap-6 w-full"
-              style={{
-                gridTemplateColumns: `repeat(${count}, minmax(0, 380px))`,
-              }}
-            >
-              {listings.map((item) => (
-                <div key={item.id_property} className="py-4">
-                  {renderCard(item)}
-                </div>
-              ))}
-            </div>
-          </div>
+          <PropertyCarousel listings={listings} />
         )}
 
       </div>

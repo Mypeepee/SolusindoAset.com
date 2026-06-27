@@ -4,36 +4,7 @@ import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import { Icon } from "@iconify/react";
 import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
-
-// ===================
-// Helper: Google Drive photo
-// ===================
-const buildDriveImageUrl = (idOrUrl?: string | null) => {
-  if (!idOrUrl) return null;
-
-  // kalau simpan ID saja
-  if (!idOrUrl.includes("http")) {
-    return `https://drive.google.com/uc?export=view&id=${idOrUrl}`;
-  }
-
-  // kalau simpan full URL share
-  try {
-    const url = new URL(idOrUrl);
-    const idFromQuery = url.searchParams.get("id");
-    if (idFromQuery) {
-      return `https://drive.google.com/uc?export=view&id=${idFromQuery}`;
-    }
-
-    const match = url.pathname.match(/\/d\/([^/]+)/);
-    if (match?.[1]) {
-      return `https://drive.google.com/uc?export=view&id=${match[1]}`;
-    }
-  } catch {
-    // ignore
-  }
-
-  return null;
-};
+import { driveImageUrl as buildDriveImageUrl } from "@/lib/utils";
 
 // ===================
 // Animated count-up number
@@ -65,7 +36,7 @@ const StatCard = ({ icon, imageSrc, label, value, colorClass, glowClass, index =
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.4, delay: 0.08 * index, ease: "easeOut" }}
     whileHover={{ y: -3 }}
-    className="relative flex items-center gap-4 p-5 rounded-2xl bg-[#181818] border border-white/5 hover:border-[#86efac]/30 transition-colors group overflow-hidden"
+    className="relative flex flex-col sm:flex-row items-center gap-2 sm:gap-4 p-3 sm:p-5 rounded-2xl bg-[#181818] border border-white/5 hover:border-[#86efac]/30 transition-colors group overflow-hidden"
   >
     {/* Ambient glow on hover */}
     <div
@@ -75,7 +46,7 @@ const StatCard = ({ icon, imageSrc, label, value, colorClass, glowClass, index =
     <motion.div
       whileHover={{ scale: 1.12, rotate: 4 }}
       transition={{ type: "spring", stiffness: 300, damping: 15 }}
-      className={`relative z-10 w-12 h-12 rounded-full flex items-center justify-center text-2xl bg-white/5 ${colorClass} overflow-hidden`}
+      className={`relative z-10 w-9 h-9 sm:w-12 sm:h-12 shrink-0 rounded-full flex items-center justify-center text-lg sm:text-2xl bg-white/5 ${colorClass} overflow-hidden`}
     >
       {/* Pulse ring */}
       <span className="absolute inset-0 rounded-full animate-ping bg-current opacity-10" />
@@ -83,19 +54,19 @@ const StatCard = ({ icon, imageSrc, label, value, colorClass, glowClass, index =
         <Image
           src={imageSrc}
           alt={label}
-          width={32}
-          height={32}
-          className="object-contain relative z-10"
+          width={28}
+          height={28}
+          className="object-contain relative z-10 w-5 h-5 sm:w-7 sm:h-7"
         />
       ) : (
         <Icon icon={icon} className="relative z-10" />
       )}
     </motion.div>
-    <div className="relative z-10">
-      <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">
+    <div className="relative z-10 min-w-0 text-center sm:text-left">
+      <p className="text-[9px] sm:text-xs text-gray-400 font-medium uppercase tracking-wide sm:tracking-wider leading-tight">
         {label}
       </p>
-      <p className="text-xl font-bold text-white mt-1 tabular-nums">
+      <p className="text-base sm:text-xl font-bold text-white mt-0.5 sm:mt-1 tabular-nums">
         <CountUp value={Number(value) || 0} />
       </p>
     </div>
@@ -284,7 +255,7 @@ const ProfileAvatar = ({
 // Stats
 // ===================
 const ProfileStatsUser = ({ stats }: any) => (
-  <div className="grid grid-cols-3 gap-3 flex-[1.5]">
+  <div className="grid grid-cols-3 gap-2 sm:gap-3 flex-[1.5]">
     <StatCard
       index={0}
       icon="solar:heart-bold"
@@ -313,7 +284,7 @@ const ProfileStatsUser = ({ stats }: any) => (
 );
 
 const ProfileStatsAgent = ({ stats }: any) => (
-  <div className="grid grid-cols-3 gap-3 flex-[1.5]">
+  <div className="grid grid-cols-3 gap-2 sm:gap-3 flex-[1.5]">
     <StatCard
       index={0}
       imageSrc="/images/logo/PremierPoints.png"

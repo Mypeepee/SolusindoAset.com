@@ -1,8 +1,23 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { PremiumAgentDashboard } from "./components/agent/premium/PremiumAgentDashboard";
+import dynamic from "next/dynamic";
 import { Icon } from "@iconify/react";
+
+const PremiumAgentDashboard = dynamic(
+  () =>
+    import("./components/agent/premium/PremiumAgentDashboard").then(
+      (m) => ({ default: m.PremiumAgentDashboard })
+    ),
+  {
+    loading: () => (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
+        <div className="w-12 h-12 border-4 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-slate-400">Memuat dashboard...</p>
+      </div>
+    ),
+  }
+);
 
 export default function DashboardAgentPage() {
   const { data: session, status } = useSession();

@@ -49,9 +49,32 @@ type ProjectListItem = {
   } | null;
 };
 
+type WalletData = {
+  totalDana: number;
+  totalDanaLunas: number;
+  totalDanaPending: number;
+  projectAktif: number;
+  jumlahPropertyDidanai: number;
+  pendingPaymentCount: number;
+  pendingProjectCount: number;
+  hasPendingPayment: boolean;
+  realizedProfit: number;
+};
+
+type WalletRow = {
+  total_dana: string;
+  total_lunas: string;
+  total_pending: string;
+  project_aktif: number;
+  pending_payment_count: number;
+  pending_project_count: number;
+  realized_profit: string;
+};
+
 type ProjectListResponse = {
   success: boolean;
   data?: ProjectListItem[];
+  wallet?: WalletData;
   message?: string;
 };
 
@@ -89,6 +112,32 @@ function toNumber(
 
   const parsed = Number(value.toString());
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function extractDriveId(raw: string): string | null {
+  const patterns = [
+    /[?&]id=([^&#]+)/i,
+    /\/file\/d\/([^/]+)/i,
+    /\/d\/([^/]+)/i,
+    /\/thumbnail\?id=([^&#]+)/i,
+  ];
+  for (const p of patterns) {
+    const m = raw.match(p);
+    if (m?.[1]) return m[1];
+  }
+  if (/^[A-Za-z0-9_-]{20,}$/.test(raw)) return raw;
+  return null;
+}
+
+function resolveDriveUrl(raw: string | null | undefined, sz: string): string | null {
+  if (!raw) return null;
+  const t = raw.trim();
+  if (!t) return null;
+  if ((t.startsWith("https://") || t.startsWith("http://")) && !t.includes("drive.google.com")) return t;
+  const id = extractDriveId(t);
+  if (id) return `/api/drive-image?id=${id}&sz=${sz}`;
+  if (t.startsWith("/")) return t;
+  return null;
 }
 
 function toTitleCaseStatus(value?: string | null) {
@@ -151,31 +200,19 @@ export async function GET() {
     const session = (await getServerSession(authOptions as any)) as any;
     const agentId = String(session?.user?.agentId || "").trim();
 
+    const orConditions: Prisma.ProjectWhereInput[] = [
+      { jenis_pendanaan: "terbuka" },
+    ];
+    if (agentId) {
+      orConditions.push({ pembuat: { is: { id_agent: agentId } } });
+      orConditions.push({
+        jenis_pendanaan: "tertutup",
+        investorProject: { some: { id_agent: agentId } },
+      });
+    }
+
     const projects = await prisma.project.findMany({
-      where: {
-        OR: [
-          { jenis_pendanaan: "terbuka" },
-          ...(agentId
-            ? [
-                {
-                  pembuat: {
-                    is: {
-                      id_agent: agentId,
-                    },
-                  },
-                },
-                {
-                  jenis_pendanaan: "tertutup",
-                  investorProject: {
-                    some: {
-                      id_agent: agentId,
-                    },
-                  },
-                },
-              ]
-            : []),
-        ],
-      },
+      where: { OR: orConditions },
       orderBy: [{ dibuat_tanggal: "desc" }],
       select: {
         id_project: true,
@@ -218,6 +255,28 @@ export async function GET() {
 
     const projectIds = projects.map((item) => item.id_project);
 
+    // Fire wallet query concurrently with finishedRows — both are independent
+    const walletPromise = agentId
+      ? prisma.$queryRaw<WalletRow[]>(
+          Prisma.sql`
+            SELECT
+              COALESCE(SUM(pi.nominal_komitmen), 0)::text AS total_dana,
+              COALESCE(SUM(CASE WHEN pi.status = 'lunas' THEN pi.nominal_komitmen ELSE 0 END), 0)::text AS total_lunas,
+              COALESCE(SUM(CASE WHEN pi.status = 'menunggu_pembayaran' THEN pi.nominal_komitmen ELSE 0 END), 0)::text AS total_pending,
+              COUNT(DISTINCT pi.id_project)::int AS project_aktif,
+              COUNT(*) FILTER (WHERE pi.status = 'menunggu_pembayaran')::int AS pending_payment_count,
+              COUNT(DISTINCT CASE WHEN pi.status = 'menunggu_pembayaran' THEN pi.id_project END)::int AS pending_project_count,
+              (
+                SELECT COALESCE(SUM(psi.profit), 0)
+                FROM project_selesai_investor psi
+                WHERE psi.id_agent = ${agentId}
+              )::text AS realized_profit
+            FROM project_investor pi
+            WHERE pi.id_agent = ${agentId}
+          `
+        )
+      : Promise.resolve(null);
+
     let finishedMap = new Map<string, ProjectSelesaiItem>();
 
     if (projectIds.length > 0) {
@@ -250,11 +309,13 @@ export async function GET() {
       );
     }
 
+    const walletRows = await walletPromise;
+
     const data: ProjectListItem[] = projects.map((project) => {
       const jenisPendanaan = project.jenis_pendanaan as "terbuka" | "tertutup";
 
       const sortedInvestorAvatars = project.investorProject
-        .map((item) => item.agent?.foto_profil_url || "")
+        .map((item) => resolveDriveUrl(item.agent?.foto_profil_url, "w96") || "")
         .filter(Boolean);
 
       const myInvestment = agentId
@@ -277,7 +338,7 @@ export async function GET() {
         status: displayStatus,
         jenisPendanaan,
         thumbnail:
-          project.gambar_thumbnail?.trim() ||
+          resolveDriveUrl(project.gambar_thumbnail, "w800") ||
           "https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=1200&q=80",
         targetPendanaan: toNumber(project.target_pendanaan),
         totalPendanaan: toNumber(project.total_pendanaan),
@@ -307,9 +368,33 @@ export async function GET() {
       };
     });
 
+    let wallet: WalletData | undefined;
+    if (walletRows && walletRows.length > 0) {
+      const w = walletRows[0];
+      const totalDana = Number(w.total_dana ?? 0);
+      const totalDanaLunas = Number(w.total_lunas ?? 0);
+      const totalDanaPending = Number(w.total_pending ?? 0);
+      const projectAktif = Number(w.project_aktif ?? 0);
+      const pendingPaymentCount = Number(w.pending_payment_count ?? 0);
+      const pendingProjectCount = Number(w.pending_project_count ?? 0);
+      const realizedProfit = Number(w.realized_profit ?? 0);
+      wallet = {
+        totalDana,
+        totalDanaLunas,
+        totalDanaPending,
+        projectAktif,
+        jumlahPropertyDidanai: projectAktif,
+        pendingPaymentCount,
+        pendingProjectCount,
+        hasPendingPayment: pendingPaymentCount > 0,
+        realizedProfit,
+      };
+    }
+
     return NextResponse.json<ProjectListResponse>({
       success: true,
       data,
+      wallet,
     });
   } catch (error) {
     console.error("[GET_PROJECT_LIST_ERROR]", error);

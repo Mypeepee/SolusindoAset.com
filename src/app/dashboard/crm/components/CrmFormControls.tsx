@@ -73,13 +73,20 @@ export type PremiumOption = { value: string; label: string; icon?: string; dot?:
 
 export function PremiumSelect({
   value, onChange, options, placeholder = "-- Pilih --",
+  open: controlledOpen, onOpenChange,
 }: {
   value: string;
   onChange: (v: string) => void;
   options: PremiumOption[];
   placeholder?: string;
+  /** Opsional: controlled mode — kalau diisi, parent yang pegang state buka/tutup */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen! : internalOpen;
+  const setOpen = (v: boolean) => { isControlled ? onOpenChange?.(v) : setInternalOpen(v); };
   const anchorRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const style = useAnchoredPanel(open, anchorRef, 300);
@@ -92,7 +99,7 @@ export function PremiumSelect({
       <button
         type="button"
         ref={anchorRef}
-        onClick={() => setOpen(o => !o)}
+        onClick={() => setOpen(!open)}
         aria-haspopup="listbox"
         aria-expanded={open}
         className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5 text-sm transition-all duration-300 ${
@@ -171,43 +178,67 @@ export function PremiumDateTimePicker({
   onChange: (v: string) => void;
   placeholder?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const anchorRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const hourListRef = useRef<HTMLDivElement>(null);
-  const minListRef = useRef<HTMLDivElement>(null);
-  const style = useAnchoredPanel(open, anchorRef, 440);
-  useDismiss(open, () => setOpen(false), anchorRef, panelRef);
+  const [open, setOpen]         = useState(false);
+  const [shown, setShown]       = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const anchorRef     = useRef<HTMLButtonElement>(null);
+  const panelRef      = useRef<HTMLDivElement>(null);
+  const hourScrollRef = useRef<HTMLDivElement>(null);
+  const minScrollRef  = useRef<HTMLDivElement>(null);
+  const panelStyle    = useAnchoredPanel(open && !isMobile, anchorRef, 460);
 
-  const selected = value ? new Date(value) : null;
-  const valid = selected && !isNaN(selected.getTime());
-  const [view, setView] = useState<Date>(() => (valid ? selected! : new Date()));
+  function close() {
+    setShown(false);
+    setTimeout(() => setOpen(false), 280);
+  }
+
+  useDismiss(open, close, anchorRef, panelRef);
 
   useEffect(() => {
-    if (open) setView(valid ? selected! : new Date());
+    const check = () => setIsMobile(window.innerWidth < 640);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  const selected = value ? new Date(value) : null;
+  const valid    = selected && !isNaN(selected.getTime());
+  const [view, setView] = useState<Date>(() => valid ? selected! : new Date());
+
+  useEffect(() => {
+    if (open) {
+      setView(valid ? selected! : new Date());
+      requestAnimationFrame(() => setShown(true));
+    } else {
+      setShown(false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const hour = valid ? selected!.getHours() : 9;
+  const hour   = valid ? selected!.getHours()  : 9;
   const minute = valid ? selected!.getMinutes() : 0;
 
-  // auto-scroll time columns to current selection
   useEffect(() => {
     if (!open) return;
     const t = setTimeout(() => {
-      hourListRef.current?.querySelector<HTMLElement>("[data-active='true']")
-        ?.scrollIntoView({ block: "center" });
-      minListRef.current?.querySelector<HTMLElement>("[data-active='true']")
-        ?.scrollIntoView({ block: "center" });
-    }, 30);
+      const scrollCenter = (ref: React.RefObject<HTMLDivElement | null>) => {
+        const el = ref.current?.querySelector<HTMLElement>("[data-active='true']");
+        if (el && ref.current) {
+          const p = ref.current;
+          p.scrollTo({ left: el.offsetLeft - p.clientWidth / 2 + el.clientWidth / 2, behavior: "smooth" });
+        }
+      };
+      scrollCenter(hourScrollRef);
+      scrollCenter(minScrollRef);
+    }, 80);
     return () => clearTimeout(t);
   }, [open]);
 
-  const year = view.getFullYear();
-  const month = view.getMonth();
-  const firstDow = new Date(year, month, 1).getDay();
+  const year        = view.getFullYear();
+  const month       = view.getMonth();
+  const firstDow    = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const today = new Date();
+  const today       = new Date();
 
   const cells: (number | null)[] = [
     ...Array(firstDow).fill(null),
@@ -215,9 +246,7 @@ export function PremiumDateTimePicker({
   ];
 
   function emit(d: Date) { onChange(toValue(d)); }
-  function pickDay(day: number) {
-    emit(new Date(year, month, day, hour, minute));
-  }
+  function pickDay(day: number) { emit(new Date(year, month, day, hour, minute)); }
   function setTime(h: number, m: number) {
     const base = valid ? selected! : new Date(year, month, today.getDate());
     emit(new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m));
@@ -228,15 +257,134 @@ export function PremiumDateTimePicker({
     ? `${HARI[selected!.getDay()]}, ${selected!.getDate()} ${BULAN[selected!.getMonth()].slice(0, 3)} ${selected!.getFullYear()} · ${pad(hour)}:${pad(minute)}`
     : placeholder;
 
-  const hours = Array.from({ length: 24 }, (_, i) => i);
-  const minutes = Array.from({ length: 12 }, (_, i) => i * 5);
+  const hours24   = Array.from({ length: 24 }, (_, i) => i);
+  const minutes12 = Array.from({ length: 12 }, (_, i) => i * 5);
+
+  const pickerInner = (
+    <>
+      {/* ── Calendar ── */}
+      <div className="px-4 pt-1 pb-3">
+        <div className="mb-2 flex items-center justify-between">
+          <button type="button" onClick={() => moveMonth(-1)}
+            className="grid h-8 w-8 place-items-center rounded-xl text-slate-400 transition-all hover:bg-white/[0.07] hover:text-white active:scale-90">
+            <Icon icon="solar:alt-arrow-left-bold" className="text-sm" />
+          </button>
+          <span className="text-[13px] font-bold tracking-wide text-white">{BULAN[month]} {year}</span>
+          <button type="button" onClick={() => moveMonth(1)}
+            className="grid h-8 w-8 place-items-center rounded-xl text-slate-400 transition-all hover:bg-white/[0.07] hover:text-white active:scale-90">
+            <Icon icon="solar:alt-arrow-right-bold" className="text-sm" />
+          </button>
+        </div>
+        <div className="mb-1 grid grid-cols-7">
+          {HARI.map(d => (
+            <span key={d} className="grid place-items-center text-[9.5px] font-bold uppercase tracking-wider text-slate-600">{d}</span>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-y-[3px]">
+          {cells.map((day, i) => {
+            if (day === null) return <span key={`e${i}`} />;
+            const d      = new Date(year, month, day);
+            const isToday = sameDay(d, today);
+            const isSel   = valid && sameDay(d, selected!);
+            return (
+              <button key={day} type="button" onClick={() => pickDay(day)}
+                className={`relative mx-auto flex h-8 w-8 items-center justify-center rounded-lg text-[12.5px] font-semibold transition-all duration-100 active:scale-90 ${
+                  isSel     ? "bg-gradient-to-br from-emerald-500 to-emerald-400 text-[#04130d] shadow-[0_0_18px_rgba(16,185,129,0.55)]"
+                  : isToday ? "ring-1 ring-emerald-400/50 text-emerald-300"
+                  :           "text-slate-300 hover:bg-white/[0.08] hover:text-white"
+                }`}
+              >
+                {day}
+                {isToday && !isSel && (
+                  <span className="absolute bottom-0.5 left-1/2 h-[3px] w-[3px] -translate-x-1/2 rounded-full bg-emerald-400" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Time horizontal strips ── */}
+      <div className="border-t border-white/[0.05] px-4 py-3">
+        <div className="mb-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <Icon icon="solar:clock-circle-bold-duotone" className="text-sm text-emerald-400" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Waktu</span>
+          </div>
+          {valid && (
+            <span className="font-mono text-[15px] font-bold tabular-nums tracking-widest text-emerald-300">
+              {pad(hour)}<span className="opacity-50">:</span>{pad(minute)}
+            </span>
+          )}
+        </div>
+
+        <div className="mb-2.5">
+          <p className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-600">Jam</p>
+          <div ref={hourScrollRef} className="flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {hours24.map(h => {
+              const active = h === hour;
+              return (
+                <button key={h} type="button" data-active={active} onClick={() => setTime(h, minute)}
+                  className={`shrink-0 flex h-9 w-[38px] items-center justify-center rounded-xl text-[12px] font-bold tabular-nums transition-all duration-100 active:scale-90 ${
+                    active
+                      ? "bg-gradient-to-b from-emerald-500/30 to-emerald-600/10 ring-1 ring-emerald-400/70 text-emerald-200 shadow-[0_0_14px_rgba(16,185,129,0.3)]"
+                      : "text-slate-500 hover:bg-white/[0.07] hover:text-slate-200"
+                  }`}
+                >
+                  {pad(h)}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-600">Menit</p>
+          <div ref={minScrollRef} className="flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {minutes12.map(m => {
+              const active = m === minute;
+              return (
+                <button key={m} type="button" data-active={active} onClick={() => setTime(hour, m)}
+                  className={`shrink-0 flex h-9 w-[38px] items-center justify-center rounded-xl text-[12px] font-bold tabular-nums transition-all duration-100 active:scale-90 ${
+                    active
+                      ? "bg-gradient-to-b from-emerald-500/30 to-emerald-600/10 ring-1 ring-emerald-400/70 text-emerald-200 shadow-[0_0_14px_rgba(16,185,129,0.3)]"
+                      : "text-slate-500 hover:bg-white/[0.07] hover:text-slate-200"
+                  }`}
+                >
+                  {pad(m)}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Footer ── */}
+      <div className="flex items-center justify-between gap-2 border-t border-white/[0.05] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <button type="button" onClick={() => { onChange(""); close(); }}
+          className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-[11.5px] font-semibold text-slate-400 transition-colors hover:bg-white/[0.05] hover:text-rose-300">
+          <Icon icon="solar:trash-bin-minimalistic-line-duotone" className="text-sm" />
+          Hapus
+        </button>
+        <div className="flex items-center gap-2">
+          <button type="button"
+            onClick={() => { const n = new Date(); emit(new Date(n.getFullYear(), n.getMonth(), n.getDate(), 9, 0)); }}
+            className="rounded-xl border border-white/[0.08] px-3 py-2 text-[11.5px] font-semibold text-slate-200 transition-all hover:border-emerald-400/30 hover:bg-emerald-500/[0.07]">
+            Hari ini
+          </button>
+          <button type="button" onClick={close}
+            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-400 px-4 py-2 text-[11.5px] font-bold text-[#04130d] transition-all hover:shadow-[0_4px_16px_-4px_rgba(16,185,129,0.8)] active:scale-95">
+            <Icon icon="solar:check-circle-bold" className="text-sm" />
+            Selesai
+          </button>
+        </div>
+      </div>
+    </>
+  );
 
   return (
     <>
-      <button
-        type="button"
-        ref={anchorRef}
-        onClick={() => setOpen(o => !o)}
+      <button type="button" ref={anchorRef} onClick={() => open ? close() : setOpen(true)}
         className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5 text-sm transition-all duration-300 ${
           open
             ? "border-emerald-400/50 bg-white/[0.05] ring-2 ring-emerald-400/30"
@@ -247,144 +395,38 @@ export function PremiumDateTimePicker({
           <Icon icon="solar:calendar-bold-duotone" className={`shrink-0 text-base ${valid ? "text-emerald-300" : "text-slate-400"}`} />
           <span className={`truncate ${valid ? "font-medium text-white" : "text-slate-500"}`}>{label}</span>
         </span>
-        <Icon
-          icon="solar:alt-arrow-down-line-duotone"
-          className={`shrink-0 text-base text-slate-400 transition-transform duration-300 ${open ? "rotate-180 text-emerald-300" : ""}`}
-        />
+        <Icon icon="solar:alt-arrow-down-line-duotone"
+          className={`shrink-0 text-base text-slate-400 transition-transform duration-300 ${open ? "rotate-180 text-emerald-300" : ""}`} />
       </button>
 
       {open && createPortal(
-        <div ref={panelRef} style={style} className="crm-pop">
-          <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#0c0e14]/95 shadow-[0_28px_70px_-15px_rgba(0,0,0,0.92)] backdrop-blur-2xl">
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/70 to-transparent" />
-            <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-emerald-500/15 blur-2xl" />
-
-            <div className="relative flex flex-col sm:flex-row">
-              {/* Calendar */}
-              <div className="p-3 sm:border-r sm:border-white/[0.06]">
-                {/* Month nav */}
-                <div className="mb-2 flex items-center justify-between">
-                  <button type="button" onClick={() => moveMonth(-1)}
-                    className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 transition-colors hover:bg-white/[0.07] hover:text-white">
-                    <Icon icon="solar:alt-arrow-left-line-duotone" className="text-base" />
-                  </button>
-                  <span className="text-[12.5px] font-bold text-white">{BULAN[month]} {year}</span>
-                  <button type="button" onClick={() => moveMonth(1)}
-                    className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 transition-colors hover:bg-white/[0.07] hover:text-white">
-                    <Icon icon="solar:alt-arrow-right-line-duotone" className="text-base" />
-                  </button>
-                </div>
-                {/* Weekday header */}
-                <div className="mb-1 grid grid-cols-7 gap-0.5">
-                  {HARI.map(d => (
-                    <span key={d} className="grid h-6 place-items-center text-[10px] font-bold uppercase tracking-wide text-slate-500">{d}</span>
-                  ))}
-                </div>
-                {/* Days */}
-                <div className="grid grid-cols-7 gap-0.5">
-                  {cells.map((day, i) => {
-                    if (day === null) return <span key={`e${i}`} />;
-                    const d = new Date(year, month, day);
-                    const isToday = sameDay(d, today);
-                    const isSel = valid && sameDay(d, selected!);
-                    return (
-                      <button
-                        key={day}
-                        type="button"
-                        onClick={() => pickDay(day)}
-                        className={`relative grid h-8 w-8 place-items-center rounded-lg text-[12px] font-semibold transition-all duration-150 ${
-                          isSel
-                            ? "bg-gradient-to-br from-emerald-500 to-emerald-400 text-[#04130d] shadow-[0_4px_14px_-3px_rgba(16,185,129,0.8)]"
-                            : "text-slate-300 hover:bg-white/[0.08] hover:text-white"
-                        }`}
-                      >
-                        {day}
-                        {isToday && !isSel && (
-                          <span className="absolute bottom-1 h-1 w-1 rounded-full bg-emerald-400" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Time */}
-              <div className="flex w-full flex-col p-3 sm:w-[150px]">
-                <div className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                  <Icon icon="solar:clock-circle-bold-duotone" className="text-[13px] text-emerald-300" />
-                  Waktu
-                </div>
-                <div className="flex flex-1 gap-2">
-                  {/* Hours */}
-                  <div ref={hourListRef} className="max-h-[168px] flex-1 space-y-0.5 overflow-y-auto pr-1 [scrollbar-width:thin]">
-                    {hours.map(h => {
-                      const active = h === hour;
-                      return (
-                        <button
-                          key={h}
-                          type="button"
-                          data-active={active}
-                          onClick={() => setTime(h, minute)}
-                          className={`w-full rounded-lg py-1.5 text-center text-[12px] font-semibold tabular-nums transition-colors ${
-                            active ? "bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-400/40" : "text-slate-300 hover:bg-white/[0.06]"
-                          }`}
-                        >
-                          {pad(h)}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {/* Minutes */}
-                  <div ref={minListRef} className="max-h-[168px] flex-1 space-y-0.5 overflow-y-auto pr-1 [scrollbar-width:thin]">
-                    {minutes.map(m => {
-                      const active = m === minute;
-                      return (
-                        <button
-                          key={m}
-                          type="button"
-                          data-active={active}
-                          onClick={() => setTime(hour, m)}
-                          className={`w-full rounded-lg py-1.5 text-center text-[12px] font-semibold tabular-nums transition-colors ${
-                            active ? "bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-400/40" : "text-slate-300 hover:bg-white/[0.06]"
-                          }`}
-                        >
-                          {pad(m)}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer actions */}
-            <div className="relative flex items-center justify-between gap-2 border-t border-white/[0.06] px-3 py-2">
-              <button
-                type="button"
-                onClick={() => { onChange(""); setOpen(false); }}
-                className="rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-rose-300"
-              >
-                Hapus
-              </button>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => { const n = new Date(); emit(new Date(n.getFullYear(), n.getMonth(), n.getDate(), 9, 0)); }}
-                  className="rounded-lg border border-white/[0.08] px-2.5 py-1.5 text-[11px] font-semibold text-slate-300 transition-colors hover:border-white/20 hover:bg-white/[0.06]"
-                >
-                  Hari ini
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setOpen(false)}
-                  className="rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-400 px-3 py-1.5 text-[11px] font-bold text-[#04130d] transition-all hover:shadow-[0_6px_18px_-4px_rgba(16,185,129,0.8)]"
-                >
-                  Selesai
-                </button>
-              </div>
+        isMobile ? (
+          /* ── MOBILE: bottom sheet ── */
+          <div className="fixed inset-0 z-[100]">
+            <div
+              className={`absolute inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-300 ${shown ? "opacity-100" : "opacity-0"}`}
+              onClick={close}
+            />
+            <div
+              ref={panelRef}
+              className={`absolute inset-x-0 bottom-0 overflow-hidden rounded-t-[28px] border-t border-white/[0.08] bg-[#09090d] shadow-[0_-24px_60px_rgba(0,0,0,0.85)] transition-transform duration-300 ease-out ${shown ? "translate-y-0" : "translate-y-full"}`}
+            >
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/60 to-transparent" />
+              <div className="pointer-events-none absolute -right-8 top-0 h-24 w-24 rounded-full bg-emerald-500/10 blur-2xl" />
+              <div className="mx-auto mb-1 mt-3 h-1 w-10 rounded-full bg-white/[0.15]" />
+              {pickerInner}
             </div>
           </div>
-        </div>,
+        ) : (
+          /* ── DESKTOP: anchored dropdown ── */
+          <div ref={panelRef} style={panelStyle} className="crm-pop">
+            <div className={`relative overflow-hidden rounded-2xl border border-white/[0.08] bg-[#09090d]/98 shadow-[0_28px_70px_-15px_rgba(0,0,0,0.92)] backdrop-blur-2xl transition-opacity duration-150 ${shown ? "opacity-100" : "opacity-0"}`}>
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/70 to-transparent" />
+              <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-emerald-500/10 blur-2xl" />
+              {pickerInner}
+            </div>
+          </div>
+        ),
         document.body,
       )}
     </>

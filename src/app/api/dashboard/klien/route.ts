@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
 import { prisma } from "@/lib/prisma";
+import { syncFollowUpAcara } from "./_syncFollowUp";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -91,6 +92,11 @@ export async function POST(req: Request) {
     },
     include: { preferensi: true },
   });
+
+  // Sinkron follow-up ke kalender acara (non-blocking — jangan gagalkan create)
+  if (klienData.tanggal_follow_up) {
+    syncFollowUpAcara(agentId, klien.id_klien, klien.nama, klienData.tanggal_follow_up).catch(() => {});
+  }
 
   return NextResponse.json({ ok: true, data: serializeKlien(klien) }, { status: 201 });
 }

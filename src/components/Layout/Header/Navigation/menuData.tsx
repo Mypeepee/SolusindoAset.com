@@ -47,7 +47,7 @@ export const headerData: HeaderItem[] = [
       {
         label: "Lihat Daftar Agent",
         href: "/agent",
-        description: "Jelajahi 1.200+ agent profesional kami",
+        description: "Temukan agent terbaik kami",
         icon: "solar:users-group-rounded-bold",
       },
       {

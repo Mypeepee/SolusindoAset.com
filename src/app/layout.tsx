@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import dynamic from "next/dynamic";
 
 import "./globals.css";
 
-import Header from "@/components/Layout/Header";
+import HeaderWrapper from "@/components/Layout/Header/HeaderWrapper";
 import FooterWrapper from "@/components/Layout/Footer/FooterWrapper";
 
 import { ThemeProvider } from "next-themes";
-import ScrollToTop from "@/components/ScrollToTop";
 import Aoscompo from "@/utils/aos";
 
 import ChatWidgetWrapper from "@/components/Chat/ChatWidgetWrapper";
@@ -17,6 +17,8 @@ import { Toaster } from "sonner";
 import LoadingBar from "@/components/LoadingBar";
 
 import "@/lib/cron";
+
+const ScrollToTop = dynamic(() => import("@/components/ScrollToTop"), { ssr: false });
 
 const dmSans = localFont({
   src: "../../public/fonts/DMSans_24pt-Bold.ttf",
@@ -43,7 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <NextAuthProvider>
             <ChatProvider>
               <Aoscompo>
-                <Header />
+                <HeaderWrapper />
                 {children}
                 <FooterWrapper />
               </Aoscompo>

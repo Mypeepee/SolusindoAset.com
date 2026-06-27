@@ -718,8 +718,9 @@ function PremiumKpiTile({
 
 /* — Specialized tiles — */
 
-function PendapatanTile() {
-  const { loading, data } = useAgentKpiCards();
+type KpiProps = { loading: boolean; data: ReturnType<typeof useAgentKpiCards>["data"] };
+
+function PendapatanTile({ loading, data }: KpiProps) {
   const [showModal, setShowModal] = useState(false);
 
   const value = loading ? null : formatIDRCompact(data?.totalPendapatan ?? 0);
@@ -760,8 +761,7 @@ function PendapatanTile() {
   );
 }
 
-function TransaksiTile() {
-  const { loading, data } = useAgentKpiCards();
+function TransaksiTile({ loading, data }: KpiProps) {
   const router = useRouter();
   const bulanIni = data?.transaksiBulanIni ?? 0;
   const bulanLalu = data?.transaksiBulanLalu ?? 0;
@@ -792,8 +792,7 @@ function TransaksiTile() {
   );
 }
 
-function ListingTile() {
-  const { loading, data } = useAgentKpiCards();
+function ListingTile({ loading, data }: KpiProps) {
   const router = useRouter();
   return (
     <PremiumKpiTile
@@ -837,8 +836,7 @@ function scrollToHotLeads() {
   }, 600);
 }
 
-function LeadsTile() {
-  const { loading, data } = useAgentKpiCards();
+function LeadsTile({ loading, data }: KpiProps) {
   const bulanIni = data?.leadBulanIni ?? 0;
   const bulanLalu = data?.leadBulanLalu ?? 0;
   const rawDelta = loading ? null : data?.leadDelta ?? null;
@@ -3612,16 +3610,21 @@ function VolumeServiceCard() {
    ──────────────────────────────────────────────────────────────────── */
 
 export function PremiumAgentDashboard() {
+  // Dipanggil sekali di sini lalu di-pass sebagai props ke 4 tile.
+  // Sebelumnya setiap tile memanggil hook sendiri → 4 request paralel ke
+  // /api/dashboard/agent/kpi-cards. Sekarang cukup 1 request.
+  const kpi = useAgentKpiCards();
+
   return (
     <div className="space-y-6">
       {/* ROW 1 — KPI STRIP: 4 uniform premium tiles
          Mobile: 2 kolom (2x2 grid, bukan vertikal)
          Desktop: 4 kolom sebaris */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <PendapatanTile />
-        <TransaksiTile />
-        <ListingTile />
-        <LeadsTile />
+        <PendapatanTile loading={kpi.loading} data={kpi.data} />
+        <TransaksiTile loading={kpi.loading} data={kpi.data} />
+        <ListingTile loading={kpi.loading} data={kpi.data} />
+        <LeadsTile loading={kpi.loading} data={kpi.data} />
       </div>
 
 

@@ -12,7 +12,12 @@ function toNum(v: any): number {
 function extractFirstImage(raw: string | null | undefined): string {
   if (!raw) return "";
   const first = raw.split(",")[0]?.trim();
-  return first || "";
+  if (!first) return "";
+  // Bare Drive ID — resolve to thumbnail
+  if (!first.includes("/") && !first.includes(".") && /^[a-zA-Z0-9_-]{10,}$/.test(first)) {
+    return `/api/drive-image?id=${first}&sz=w400`;
+  }
+  return first;
 }
 
 export async function GET(req: Request) {

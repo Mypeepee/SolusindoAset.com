@@ -2,11 +2,22 @@
 
 import { Suspense, useState, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { Icon } from "@iconify/react";
 import { suratTemplates, type SuratTemplate } from "./components/data";
-import { SuratTemplateModal } from "./components/SuratTemplateModal";
-import { InvoiceModal } from "./components/InvoiceModal";
-import { KuitansiModal } from "./components/KuitansiModal";
+
+const SuratTemplateModal = dynamic(
+  () => import("./components/SuratTemplateModal").then(m => ({ default: m.SuratTemplateModal })),
+  { ssr: false }
+);
+const InvoiceModal = dynamic(
+  () => import("./components/InvoiceModal").then(m => ({ default: m.InvoiceModal })),
+  { ssr: false }
+);
+const KuitansiModal = dynamic(
+  () => import("./components/KuitansiModal").then(m => ({ default: m.KuitansiModal })),
+  { ssr: false }
+);
 
 // ── Folder definitions ────────────────────────────────────────────────────────
 

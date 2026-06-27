@@ -7,6 +7,7 @@ import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { id as localeId } from "date-fns/locale";
 import toast from "react-hot-toast";
+import ReferralShareCard from "@/components/referral/ReferralShareCard";
 
 // =============================================================================
 // TIPE DATA & UTIL
@@ -260,34 +261,6 @@ const ProfileForm = ({ formData, setFormData, isLoading, onSave }: Props) => {
     }
 
     setFormData({ ...formData, kode_referral: `AG${finalCode}` });
-  };
-
-  const referralHint =
-    "Bagikan kode ini ke klien. Jika mereka daftar atau transaksi dengan kode ini, klien akan terhubung ke akunmu dan aktivitas properti mereka akan tercatat untukmu.";
-
-  const handleShareReferral = async () => {
-    if (!agentReferralCode) return;
-
-    const fullCode = agentReferralCode;
-    const shareText = `Kode referral saya di Solusindo Aset: ${fullCode}`;
-
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: "Kode Referral Agent",
-          text: shareText,
-        });
-      } catch (err) {
-        console.error(err);
-      }
-    } else {
-      try {
-        await navigator.clipboard.writeText(shareText);
-        toast.success("Kode referral disalin ke clipboard.");
-      } catch {
-        toast.error("Tidak dapat menyalin kode referral.");
-      }
-    }
   };
 
   return (
@@ -599,44 +572,13 @@ const ProfileForm = ({ formData, setFormData, isLoading, onSave }: Props) => {
               <label className={labelClass}>Kode Referral</label>
 
               {isAgent ? (
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-3">
-                    <div className="relative flex flex-1">
-                      <span className="inline-flex items-center px-3 sm:px-4 rounded-l-xl bg-[#0F0F0F] border border-r-0 border-white/10 text-xs sm:text-sm font-semibold text-gray-300 whitespace-nowrap">
-                        AG
-                      </span>
-                      <input
-                        type="text"
-                        value={
-                          (agentReferralCode || "")
-                            .toUpperCase()
-                            .replace(/^AG/, "") || ""
-                        }
-                        disabled
-                        className={`${inputClass} rounded-l-none bg-[#222] cursor-not-allowed`}
-                      />
-                      <Icon
-                        icon="solar:ticket-sale-linear"
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none"
-                      />
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleShareReferral}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#0F0F0F] border border-white/10 text-[11px] sm:text-xs text-gray-100 hover:bg-white/10 hover:border-[#86efac]/50 hover:text-[#86efac] transition-colors whitespace-nowrap"
-                    >
-                      <Icon
-                        icon="solar:share-bold"
-                        className="text-sm"
-                      />
-                      <span>Bagikan</span>
-                    </button>
-                  </div>
-                  <p className="mt-1 text-[11px] text-gray-400 leading-relaxed">
-                    {referralHint}
+                agentReferralCode ? (
+                  <ReferralShareCard code={agentReferralCode} />
+                ) : (
+                  <p className="text-[11px] text-gray-400">
+                    Kode referral kamu akan muncul setelah keanggotaan agent aktif.
                   </p>
-                </div>
+                )
               ) : (
                 <div className="space-y-1.5">
                   <div className="relative flex">

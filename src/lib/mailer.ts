@@ -201,16 +201,7 @@ function renderEmailShell(opts: { title: string; preheader: string; content: str
 
           <!-- brand header -->
           <tr><td bgcolor="${E.card}" align="center" style="padding:30px 40px 6px;background-color:${E.card};">
-            <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-              <td valign="middle" width="50" style="width:50px;">
-                <div style="width:48px;height:48px;line-height:48px;text-align:center;border-radius:14px;background-color:${E.emerald};background-image:linear-gradient(145deg,${E.emeraldBright},${E.emerald});color:${E.btnText};font-size:17px;font-weight:800;letter-spacing:0.5px;">SA</div>
-              </td>
-              <td width="13" style="width:13px;">&nbsp;</td>
-              <td valign="middle" align="left">
-                <div class="em-ink" style="font-size:18px;font-weight:800;color:${E.ink};line-height:1.1;">Solusindo <span class="em-mint" style="color:${E.mint};">Aset</span></div>
-                <div class="em-mute" style="font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:${E.inkMute};margin-top:4px;">Property &amp; Asset Platform</div>
-              </td>
-            </tr></table>
+            <img src="${BASE_URL}/images/logo/LogoSolusindoPremier.png" alt="Solusindo Aset" width="180" height="auto" style="display:block;height:auto;max-width:180px;border:0;" />
           </td></tr>
 
           ${opts.content}
@@ -433,7 +424,276 @@ export async function sendNewAgentEmail(
 }
 
 /* ===========================================================================
- *  EMAIL 2: KEPUTUSAN PENDAFTARAN  →  AGENT (diterima / ditolak)
+ *  EMAIL 2: USER BARU MENDAFTAR  →  OWNER SAJA
+ * ========================================================================= */
+
+export type NewUserEmailOpts = {
+  recipientName?: string | null;
+  userName: string;
+  userEmail?: string | null;
+  userPhone?: string | null;
+  registeredAt?: Date | null;
+  dashboardUrl: string;
+};
+
+export function newUserEmailHtml(o: NewUserEmailOpts) {
+  const name = esc(o.userName || "Member Baru");
+  const initials = esc(initialsOf(o.userName));
+  const joined = esc(formatJoinedAt(o.registeredAt));
+  const emailDisplay = esc(o.userEmail || "-");
+  const phoneDisplay = esc(o.userPhone || "-");
+  const dashboard = esc(o.dashboardUrl);
+  const greet = o.recipientName ? `Halo, ${esc(o.recipientName)}` : "Halo";
+
+  const strong = (t: string) =>
+    `<strong class="em-mint" style="color:${E.mint};font-weight:700;">${t}</strong>`;
+
+  const lead = `${strong(name)} baru saja membuat akun baru di platform ${strong(esc(SITE))}.`;
+
+  const content = `
+          <!-- pill -->
+          <tr><td bgcolor="${E.card}" align="center" style="padding:20px 40px 0;background-color:${E.card};">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" bgcolor="${E.panel}" style="background-color:${E.panel};border:1px solid ${E.panelBorder};border-radius:999px;">
+              <tr><td class="em-mint" style="padding:7px 16px 7px 14px;font-size:10.5px;letter-spacing:2.5px;text-transform:uppercase;color:${E.mint};font-weight:800;">
+                <span style="color:${E.emeraldBright};">&#9679;</span>&nbsp;&nbsp;Member Baru Bergabung
+              </td></tr>
+            </table>
+          </td></tr>
+
+          <!-- hero -->
+          <tr><td bgcolor="${E.card}" align="center" style="padding:16px 40px 0;background-color:${E.card};">
+            <h1 class="em-ink" style="margin:0;font-size:24px;line-height:1.3;font-weight:800;color:${E.ink};letter-spacing:-0.2px;">${greet}! Ada member baru<br>di platform Anda &#128075;</h1>
+            <p class="em-soft" style="margin:13px auto 0;font-size:14.5px;line-height:1.65;color:${E.inkSoft};max-width:430px;">${lead}</p>
+          </td></tr>
+
+          <!-- profile card -->
+          <tr><td bgcolor="${E.card}" style="padding:24px 40px 0;background-color:${E.card};">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${E.panel}" class="em-panel" style="background-color:${E.panel};border:1px solid ${E.panelBorder};border-radius:18px;">
+              <tr><td style="padding:22px 22px 16px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+                  <td valign="middle" width="64" style="width:64px;">
+                    <div style="width:60px;height:60px;line-height:60px;text-align:center;border-radius:16px;background-color:${E.teal};background-image:linear-gradient(145deg,${E.mint},${E.teal});color:${E.btnText};font-size:22px;font-weight:800;">${initials}</div>
+                  </td>
+                  <td width="15" style="width:15px;">&nbsp;</td>
+                  <td valign="middle" align="left">
+                    <div class="em-ink" style="font-size:17px;font-weight:800;color:${E.ink};line-height:1.25;">${name}</div>
+                    <div style="margin-top:7px;">
+                      <span style="display:inline-block;font-size:10px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:${E.green};background-color:${E.greenBg};border:1px solid ${E.greenBorder};border-radius:7px;padding:4px 9px;">&#10003;&nbsp; Aktif</span>
+                    </div>
+                  </td>
+                </tr></table>
+              </td></tr>
+              <tr><td style="padding:0 22px 8px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                  ${o.userEmail ? dataRow("Email", emailDisplay, { href: `mailto:${esc(o.userEmail)}` }) : dataRow("No. HP", phoneDisplay)}
+                  ${dataRow("Waktu Daftar", joined)}
+                </table>
+              </td></tr>
+            </table>
+          </td></tr>
+
+          <!-- CTA -->
+          <tr><td bgcolor="${E.card}" align="center" style="padding:24px 40px 4px;background-color:${E.card};">
+            ${ctaButton(dashboard, "Lihat Data Member")}
+            <div class="em-mute" style="margin-top:13px;font-size:11.5px;color:${E.inkMute};line-height:1.6;">Buka <strong style="color:${E.inkSoft};font-weight:700;">Dashboard</strong> untuk melihat seluruh daftar member terdaftar.</div>
+          </td></tr>
+
+          <!-- info note -->
+          <tr><td bgcolor="${E.card}" style="padding:22px 40px 0;background-color:${E.card};">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${E.greenBg}" style="background-color:${E.greenBg};border:1px solid ${E.greenBorder};border-radius:14px;">
+              <tr>
+                <td valign="top" width="40" style="padding:14px 0 14px 16px;font-size:17px;">&#9989;</td>
+                <td class="em-soft" style="padding:14px 16px 14px 8px;font-size:12.5px;line-height:1.65;color:${E.inkSoft};">
+                  <strong style="color:${E.green};font-weight:700;">Akun langsung aktif.</strong><br>Member baru ini sudah dapat login dan menggunakan platform tanpa perlu verifikasi tambahan.
+                </td>
+              </tr>
+            </table>
+          </td></tr>
+          ${helpRow()}`;
+
+  return renderEmailShell({
+    title: `${BRAND} — Member Baru Mendaftar`,
+    preheader: `${o.userName} baru saja membuat akun di ${SITE} · akun langsung aktif.`,
+    content,
+  });
+}
+
+export async function sendNewUserEmail(
+  to: string,
+  opts: NewUserEmailOpts
+): Promise<{ delivered: boolean }> {
+  if (!isMailConfigured()) {
+    console.warn(
+      `\n📧 [DEV] SMTP belum dikonfigurasi. Email "user baru" untuk ${to} tidak dikirim.\n` +
+        `   User: ${opts.userName} — email ${opts.userEmail || "-"} · HP ${opts.userPhone || "-"}.\n`
+    );
+    return { delivered: false };
+  }
+
+  try {
+    await getTransport().sendMail({
+      from: `"${BRAND}" <${GMAIL_USER}>`,
+      to,
+      subject: `👋 Member baru: ${opts.userName} baru saja mendaftar · ${BRAND}`,
+      text:
+        `Member Baru Bergabung — ${BRAND}\n\n` +
+        `${opts.userName} baru saja membuat akun di ${SITE}.\n\n` +
+        (opts.userEmail ? `Email           : ${opts.userEmail}\n` : `No. HP          : ${opts.userPhone || "-"}\n`) +
+        `Waktu daftar    : ${formatJoinedAt(opts.registeredAt)}\n` +
+        `Status          : AKTIF (langsung dapat digunakan)\n\n` +
+        `Lihat data member di: ${opts.dashboardUrl}\n\n` +
+        `Butuh bantuan? WhatsApp ${SUPPORT_WA} · email ${SUPPORT_EMAIL}\n` +
+        `© ${new Date().getFullYear()} ${LEGAL} · ${SITE}`,
+      html: newUserEmailHtml(opts),
+    });
+    return { delivered: true };
+  } catch (err) {
+    console.error("❌ Gagal mengirim email 'user baru':", err);
+    return { delivered: false };
+  }
+}
+
+/* ===========================================================================
+ *  EMAIL 3: REFERRAL KLIEN BERHASIL  →  AGENT PERUJUK
+ * ========================================================================= */
+
+export type ReferralKlienEmailOpts = {
+  agentName?: string | null;
+  klienName: string;
+  klienEmail?: string | null;
+  klienPhone?: string | null;
+  kodeReferral: string;
+  poin: number;
+  registeredAt?: Date | null;
+  crmUrl: string;
+};
+
+export function referralKlienEmailHtml(o: ReferralKlienEmailOpts) {
+  const agentGreet = o.agentName ? `Halo, ${esc(o.agentName)}` : "Halo";
+  const klien = esc(o.klienName || "Klien Baru");
+  const initials = esc(initialsOf(o.klienName));
+  const kode = esc(o.kodeReferral);
+  const poinStr = esc(o.poin.toLocaleString("id-ID"));
+  const joined = esc(formatJoinedAt(o.registeredAt));
+  const emailDisplay = esc(o.klienEmail || "");
+  const phoneDisplay = esc(o.klienPhone || "");
+  const crmUrl = esc(o.crmUrl);
+
+  const strong = (t: string) =>
+    `<strong class="em-mint" style="color:${E.mint};font-weight:700;">${t}</strong>`;
+
+  const contactRow = o.klienEmail
+    ? dataRow("Email", emailDisplay, { href: `mailto:${esc(o.klienEmail)}` })
+    : o.klienPhone
+      ? dataRow("No. HP", phoneDisplay)
+      : "";
+
+  const content = `
+          <!-- pill -->
+          <tr><td bgcolor="${E.card}" align="center" style="padding:20px 40px 0;background-color:${E.card};">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" bgcolor="${E.greenBg}" style="background-color:${E.greenBg};border:1px solid ${E.greenBorder};border-radius:999px;">
+              <tr><td style="padding:7px 16px 7px 14px;font-size:10.5px;letter-spacing:2.5px;text-transform:uppercase;color:${E.green};font-weight:800;">
+                <span style="color:${E.green};">&#9679;</span>&nbsp;&nbsp;Referral Klien Berhasil
+              </td></tr>
+            </table>
+          </td></tr>
+
+          <!-- hero -->
+          <tr><td bgcolor="${E.card}" align="center" style="padding:16px 40px 0;background-color:${E.card};">
+            <h1 class="em-ink" style="margin:0;font-size:24px;line-height:1.3;font-weight:800;color:${E.ink};letter-spacing:-0.2px;">${agentGreet}! Ada klien baru<br>pakai kode referral kamu &#127881;</h1>
+            <p class="em-soft" style="margin:13px auto 0;font-size:14.5px;line-height:1.65;color:${E.inkSoft};max-width:430px;">${strong(klien)} baru saja mendaftar menggunakan kode referral ${strong(kode)} milikmu. Kamu mendapat ${strong("+" + poinStr + " poin")}!</p>
+          </td></tr>
+
+          <!-- klien card -->
+          <tr><td bgcolor="${E.card}" style="padding:24px 40px 0;background-color:${E.card};">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${E.panel}" class="em-panel" style="background-color:${E.panel};border:1px solid ${E.panelBorder};border-radius:18px;">
+              <tr><td style="padding:22px 22px 16px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+                  <td valign="middle" width="64" style="width:64px;">
+                    <div style="width:60px;height:60px;line-height:60px;text-align:center;border-radius:16px;background-color:${E.teal};background-image:linear-gradient(145deg,${E.mint},${E.teal});color:${E.btnText};font-size:22px;font-weight:800;">${initials}</div>
+                  </td>
+                  <td width="15" style="width:15px;">&nbsp;</td>
+                  <td valign="middle" align="left">
+                    <div class="em-ink" style="font-size:17px;font-weight:800;color:${E.ink};line-height:1.25;">${klien}</div>
+                    <div style="margin-top:7px;">
+                      <span style="display:inline-block;font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:11px;color:${E.mint};background-color:#082018;border:1px solid ${E.panelBorder};border-radius:7px;padding:3px 9px;letter-spacing:0.5px;">${kode}</span>
+                      <span style="display:inline-block;font-size:10px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:${E.green};background-color:${E.greenBg};border:1px solid ${E.greenBorder};border-radius:7px;padding:4px 9px;margin-left:4px;">+${poinStr} poin</span>
+                    </div>
+                  </td>
+                </tr></table>
+              </td></tr>
+              <tr><td style="padding:0 22px 8px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                  ${contactRow}
+                  ${dataRow("Waktu Daftar", joined)}
+                </table>
+              </td></tr>
+            </table>
+          </td></tr>
+
+          <!-- CTA -->
+          <tr><td bgcolor="${E.card}" align="center" style="padding:24px 40px 4px;background-color:${E.card};">
+            ${ctaButton(crmUrl, "Lihat di CRM")}
+            <div class="em-mute" style="margin-top:13px;font-size:11.5px;color:${E.inkMute};line-height:1.6;">Klien ini sudah otomatis masuk ke <strong style="color:${E.inkSoft};font-weight:700;">CRM</strong> kamu dengan status <em>lead baru</em>.</div>
+          </td></tr>
+
+          <!-- info note -->
+          <tr><td bgcolor="${E.card}" style="padding:22px 40px 0;background-color:${E.card};">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${E.greenBg}" style="background-color:${E.greenBg};border:1px solid ${E.greenBorder};border-radius:14px;">
+              <tr>
+                <td valign="top" width="40" style="padding:14px 0 14px 16px;font-size:17px;">&#128176;</td>
+                <td class="em-soft" style="padding:14px 16px 14px 8px;font-size:12.5px;line-height:1.65;color:${E.inkSoft};">
+                  <strong style="color:${E.green};font-weight:700;">Poin sudah masuk.</strong><br>+${poinStr} poin telah ditambahkan ke akun kamu. Terus bagikan kode referralmu dan kumpulkan lebih banyak poin!
+                </td>
+              </tr>
+            </table>
+          </td></tr>
+          ${helpRow()}`;
+
+  return renderEmailShell({
+    title: `${BRAND} — Referral Klien Berhasil`,
+    preheader: `${o.klienName} mendaftar pakai kode referral ${o.kodeReferral} milikmu · +${o.poin.toLocaleString("id-ID")} poin masuk ke akunmu.`,
+    content,
+  });
+}
+
+export async function sendReferralKlienEmail(
+  to: string,
+  opts: ReferralKlienEmailOpts
+): Promise<{ delivered: boolean }> {
+  if (!isMailConfigured()) {
+    console.warn(
+      `\n📧 [DEV] SMTP belum dikonfigurasi. Email referral klien untuk ${to} tidak dikirim.\n` +
+        `   Klien: ${opts.klienName} — kode ${opts.kodeReferral} — +${opts.poin} poin.\n`
+    );
+    return { delivered: false };
+  }
+
+  try {
+    await getTransport().sendMail({
+      from: `"${BRAND}" <${GMAIL_USER}>`,
+      to,
+      subject: `🎉 Klien baru pakai kode referral kamu · ${BRAND}`,
+      text:
+        `Referral Klien Berhasil — ${BRAND}\n\n` +
+        `${opts.klienName} baru saja mendaftar menggunakan kode referral ${opts.kodeReferral} milikmu.\n\n` +
+        (opts.klienEmail ? `Email klien    : ${opts.klienEmail}\n` : opts.klienPhone ? `HP klien       : ${opts.klienPhone}\n` : "") +
+        `Waktu daftar   : ${formatJoinedAt(opts.registeredAt)}\n` +
+        `Poin didapat   : +${opts.poin.toLocaleString("id-ID")} poin\n\n` +
+        `Lihat klien di CRM: ${opts.crmUrl}\n\n` +
+        `Butuh bantuan? WhatsApp ${SUPPORT_WA} · email ${SUPPORT_EMAIL}\n` +
+        `© ${new Date().getFullYear()} ${LEGAL} · ${SITE}`,
+      html: referralKlienEmailHtml(opts),
+    });
+    return { delivered: true };
+  } catch (err) {
+    console.error("❌ Gagal mengirim email referral klien:", err);
+    return { delivered: false };
+  }
+}
+
+/* ===========================================================================
+ *  EMAIL 4: KEPUTUSAN PENDAFTARAN  →  AGENT (diterima / ditolak)
  * ========================================================================= */
 
 export type AgentDecisionEmailOpts = {

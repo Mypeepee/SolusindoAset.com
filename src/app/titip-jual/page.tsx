@@ -1,13 +1,18 @@
 import type { Metadata } from "next";
+import dynamic from "next/dynamic";
+
+// Above-fold: eager
 import ScrollProgress from "./components/ScrollProgress";
 import Hero from "./components/Hero";
-import TrustPillars from "./components/TrustPillars";
-import Process from "./components/Process";
-import Guarantees from "./components/Guarantees";
-import Commission from "./components/Commission";
-import ConsignmentForm from "./components/ConsignmentForm";
-import FAQ from "./components/FAQ";
-import ContactCTA from "./components/ContactCTA";
+
+// Below-fold: lazy JS chunks (HTML still SSR'd for SEO)
+const TrustPillars   = dynamic(() => import("./components/TrustPillars"));
+const Process        = dynamic(() => import("./components/Process"));
+const Guarantees     = dynamic(() => import("./components/Guarantees"));
+const Commission     = dynamic(() => import("./components/Commission"));
+const ConsignmentForm = dynamic(() => import("./components/ConsignmentForm"));
+const FAQ            = dynamic(() => import("./components/FAQ"));
+const ContactCTA     = dynamic(() => import("./components/ContactCTA"));
 
 export const metadata: Metadata = {
   title:

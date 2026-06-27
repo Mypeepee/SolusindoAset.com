@@ -106,10 +106,10 @@ async function uploadKtpToDrive(params: {
 }): Promise<string> {
   const { base64Image, filename, folderName } = params;
 
-  const parentFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-  if (!parentFolderId) {
-    throw new Error("GOOGLE_DRIVE_FOLDER_ID belum diset");
-  }
+  const parentFolderId =
+    process.env.GDRIVE_PARENT_FOLDER_ID ||
+    process.env.GOOGLE_DATA_AGENT_FOLDER_ID ||
+    "1u8faFug3GV3lB6y0L2TbwEX48IPAUtiQ";
 
   const accessToken = await getDriveAccessToken();
 

@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 /* ────────────────────────────────────────────────────────────────────
    /api/dashboard/agent/listing-performance
@@ -46,8 +44,8 @@ function resolveFirstImage(raw: string | null | undefined): string | null {
   ) {
     return first;
   }
-  // Bare Drive ID — wrap dengan thumbnail endpoint
-  return `https://drive.google.com/thumbnail?id=${first}&sz=w400`;
+  // Bare Drive ID — wrap dengan thumbnail proxy
+  return `/api/drive-image?id=${first}&sz=w400`;
 }
 
 const KATEGORI_LABEL: Record<string, string> = {
@@ -243,7 +241,5 @@ export async function GET() {
       { error: "Gagal memuat performa listing" },
       { status: 500 },
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }

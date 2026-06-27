@@ -39,26 +39,60 @@ export async function GET() {
       );
     }
 
-    // ── Aggregate stats seluruh jaringan via recursive CTE ──
-    // Prisma tidak support recursive CTE natively, pakai $queryRaw.
-    // CTE mulai dari direct downlines agent ini, lalu rekursif ke bawah.
-    const rawStats = await prisma.$queryRaw<RawNetworkStats[]>`
-      WITH RECURSIVE network AS (
-        SELECT id_agent, status_keanggotaan, jumlah_closing, total_omset
-        FROM agent
-        WHERE id_upline = ${agentId}
-        UNION ALL
-        SELECT a.id_agent, a.status_keanggotaan, a.jumlah_closing, a.total_omset
-        FROM agent a
-        INNER JOIN network n ON a.id_upline = n.id_agent
-      )
-      SELECT
-        COUNT(*)                                                     AS total_network,
-        COUNT(*) FILTER (WHERE status_keanggotaan = 'AKTIF')        AS total_active,
-        COALESCE(SUM(jumlah_closing), 0)                            AS total_closing_network,
-        COALESCE(SUM(total_omset),    0)                            AS total_omset_network
-      FROM network
-    `;
+    // Run recursive CTE (aggregate stats) and direct downlines fetch in parallel.
+    const [rawStats, directDownlines] = await Promise.all([
+      prisma.$queryRaw<RawNetworkStats[]>`
+        WITH RECURSIVE network AS (
+          SELECT id_agent, status_keanggotaan, jumlah_closing, total_omset
+          FROM agent
+          WHERE id_upline = ${agentId}
+          UNION ALL
+          SELECT a.id_agent, a.status_keanggotaan, a.jumlah_closing, a.total_omset
+          FROM agent a
+          INNER JOIN network n ON a.id_upline = n.id_agent
+        )
+        SELECT
+          COUNT(*)                                                     AS total_network,
+          COUNT(*) FILTER (WHERE status_keanggotaan = 'AKTIF')        AS total_active,
+          COALESCE(SUM(jumlah_closing), 0)                            AS total_closing_network,
+          COALESCE(SUM(total_omset),    0)                            AS total_omset_network
+        FROM network
+      `,
+      prisma.agent.findMany({
+        where: { id_upline: agentId },
+        select: {
+          id_agent: true,
+          jabatan: true,
+          kota_area: true,
+          status_keanggotaan: true,
+          tanggal_gabung: true,
+          jumlah_closing: true,
+          total_omset: true,
+          poin: true,
+          foto_profil_url: true,
+          pengguna: { select: { nama_lengkap: true, nomor_telepon: true } },
+          _count: { select: { downlines: true } },
+          downlines: {
+            select: {
+              id_agent: true,
+              jabatan: true,
+              kota_area: true,
+              status_keanggotaan: true,
+              tanggal_gabung: true,
+              jumlah_closing: true,
+              total_omset: true,
+              poin: true,
+              foto_profil_url: true,
+              pengguna: { select: { nama_lengkap: true } },
+              _count: { select: { downlines: true } },
+            },
+            orderBy: [{ jumlah_closing: "desc" }, { tanggal_gabung: "asc" }],
+            take: 5,
+          },
+        },
+        orderBy: [{ jumlah_closing: "desc" }, { tanggal_gabung: "asc" }],
+      }),
+    ]);
 
     const s = rawStats[0] ?? {
       total_network: 0n,
@@ -66,42 +100,6 @@ export async function GET() {
       total_closing_network: 0n,
       total_omset_network: 0n,
     };
-
-    // ── Direct downlines (level 1) + sub-downlines (level 2) untuk tree UI ──
-    const directDownlines = await prisma.agent.findMany({
-      where: { id_upline: agentId },
-      select: {
-        id_agent: true,
-        jabatan: true,
-        kota_area: true,
-        status_keanggotaan: true,
-        tanggal_gabung: true,
-        jumlah_closing: true,
-        total_omset: true,
-        poin: true,
-        foto_profil_url: true,
-        pengguna: { select: { nama_lengkap: true, nomor_telepon: true } },
-        _count: { select: { downlines: true } },
-        downlines: {
-          select: {
-            id_agent: true,
-            jabatan: true,
-            kota_area: true,
-            status_keanggotaan: true,
-            tanggal_gabung: true,
-            jumlah_closing: true,
-            total_omset: true,
-            poin: true,
-            foto_profil_url: true,
-            pengguna: { select: { nama_lengkap: true } },
-            _count: { select: { downlines: true } },
-          },
-          orderBy: [{ jumlah_closing: "desc" }, { tanggal_gabung: "asc" }],
-          take: 5,
-        },
-      },
-      orderBy: [{ jumlah_closing: "desc" }, { tanggal_gabung: "asc" }],
-    });
 
     return NextResponse.json({
       ok: true,

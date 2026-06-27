@@ -52,8 +52,8 @@ const RedeemPoints = ({ userPoints = 0 }: { userPoints: number }) => {
         <div className="absolute top-0 right-0 w-32 h-32 bg-[#86efac]/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
         
         <div className="flex items-center gap-4 z-10">
-          <div className="w-14 h-14 rounded-full bg-yellow-500/20 flex items-center justify-center text-yellow-500 border border-yellow-500/30 shadow-[0_0_15px_rgba(234,179,8,0.3)]">
-            <Icon icon="solar:crown-star-bold" className="text-3xl" />
+          <div className="w-14 h-14 rounded-full bg-yellow-500/20 flex items-center justify-center border border-yellow-500/30 shadow-[0_0_15px_rgba(234,179,8,0.3)]">
+            <Image src="/images/logo/PremierPoints.png" alt="SiPoin" width={36} height={36} className="object-contain" />
           </div>
           <div>
             <p className="text-sm text-gray-400">Saldo SiPoin Anda</p>

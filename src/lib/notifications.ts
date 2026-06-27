@@ -1,6 +1,6 @@
 import prisma from "@/lib/prisma";
 import { pusherServer } from "@/lib/pusher-server";
-import { sendNewAgentEmail } from "@/lib/mailer";
+import { sendNewAgentEmail, sendNewUserEmail, sendReferralKlienEmail } from "@/lib/mailer";
 import { jabatan_agent_enum, status_agent_enum } from "@prisma/client";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://solusindoaset.com";
@@ -210,6 +210,160 @@ export async function notifyNewAgentRegistration(params: {
         .catch((e) => console.warn("pusher trigger notif:new failed:", e)),
     ),
   );
+}
+
+/**
+ * Dipanggil saat user baru berhasil mendaftar (peran USER).
+ * Mengirim email notifikasi hanya ke semua OWNER aktif.
+ * Best-effort: tidak melempar error.
+ */
+export async function notifyNewUserRegistration(params: {
+  nama: string;
+  email: string | null;
+  phone: string | null;
+  registeredAt?: Date;
+}) {
+  try {
+    const { nama, email, phone, registeredAt } = params;
+    const dashboardUrl = `${BASE_URL}/dashboard`;
+
+    const owners = await prisma.agent.findMany({
+      where: {
+        jabatan: jabatan_agent_enum.OWNER,
+        status_keanggotaan: status_agent_enum.AKTIF,
+      },
+      select: {
+        pengguna: { select: { email: true, nama_lengkap: true } },
+      },
+    });
+
+    await Promise.all(
+      owners
+        .filter((o) => o.pengguna?.email)
+        .map((o) =>
+          sendNewUserEmail(o.pengguna!.email!, {
+            recipientName: o.pengguna?.nama_lengkap ?? null,
+            userName: nama,
+            userEmail: email,
+            userPhone: phone,
+            registeredAt: registeredAt ?? new Date(),
+            dashboardUrl,
+          }).catch((e) => console.warn("sendNewUserEmail failed:", e))
+        )
+    );
+  } catch (e) {
+    console.warn("notifyNewUserRegistration failed:", e);
+  }
+}
+
+/**
+ * Dipanggil saat seorang KLIEN baru mendaftar memakai kode referral milik agent.
+ * Mengirim notifikasi in-app (+ realtime) ke agent perujuk.
+ * Best-effort: tidak melempar error agar tidak mengganggu alur pendaftaran.
+ */
+export async function notifyNewReferralKlien(params: {
+  id_agent: string;
+  id_pengguna: string; // id_pengguna milik agent perujuk (penerima notif)
+  nama_klien: string;
+  kode: string;
+  klienEmail?: string | null;
+  klienPhone?: string | null;
+  poin?: number;
+  registeredAt?: Date;
+}) {
+  const { id_agent, id_pengguna, nama_klien, kode } = params;
+
+  try {
+    const link = `/dashboard/crm`;
+
+    const n = await prisma.notifikasi.create({
+      data: {
+        id_pengguna,
+        tipe: "KLIEN_REFERRAL",
+        judul: "Klien baru lewat referral! 🎉",
+        pesan: `${nama_klien} mendaftar memakai kode referral ${kode} milikmu. Kamu mendapat +10.000 poin & klien ini otomatis masuk CRM-mu.`,
+        link,
+        id_agent_ref: id_agent,
+      },
+    });
+
+    await pusherServer
+      .trigger(`notif-pengguna-${n.id_pengguna}`, "notif:new", {
+        id_notifikasi: n.id_notifikasi.toString(),
+        tipe: n.tipe,
+        judul: n.judul,
+        pesan: n.pesan,
+        link: n.link,
+        dibuat_pada: n.dibuat_pada.toISOString(),
+      })
+      .catch((e) => console.warn("pusher trigger notif:new failed:", e));
+
+    // Email ke agent perujuk (best-effort).
+    const agentPengguna = await prisma.pengguna.findUnique({
+      where: { id_pengguna },
+      select: { email: true, nama_lengkap: true },
+    });
+    if (agentPengguna?.email) {
+      sendReferralKlienEmail(agentPengguna.email, {
+        agentName: agentPengguna.nama_lengkap ?? null,
+        klienName: nama_klien,
+        klienEmail: params.klienEmail ?? null,
+        klienPhone: params.klienPhone ?? null,
+        kodeReferral: kode,
+        poin: params.poin ?? 10_000,
+        registeredAt: params.registeredAt ?? new Date(),
+        crmUrl: `${BASE_URL}/dashboard/crm`,
+      }).catch((e) => console.warn("sendReferralKlienEmail failed:", e));
+    }
+  } catch (e) {
+    console.warn("notifyNewReferralKlien failed:", e);
+  }
+}
+
+/**
+ * Dipanggil saat seorang downline agent RESMI diverifikasi (PENDING -> AKTIF)
+ * lewat kode referral upline. Memberi tahu upline bahwa ia mendapat reward poin.
+ * Best-effort: tidak melempar error.
+ */
+export async function notifyAgentReferralReward(params: {
+  id_upline_agent: string;
+  id_downline_agent: string;
+  nama_downline: string;
+  poin: number;
+}) {
+  const { id_upline_agent, id_downline_agent, nama_downline, poin } = params;
+
+  try {
+    const upline = await prisma.agent.findUnique({
+      where: { id_agent: id_upline_agent },
+      select: { id_pengguna: true },
+    });
+    if (!upline) return;
+
+    const n = await prisma.notifikasi.create({
+      data: {
+        id_pengguna: upline.id_pengguna,
+        tipe: "AGENT_REFERRAL",
+        judul: "Downline kamu resmi jadi agent! 🎉",
+        pesan: `${nama_downline} (${id_downline_agent}) telah diverifikasi menjadi agent lewat referralmu. Kamu mendapat +${poin.toLocaleString("id-ID")} poin.`,
+        link: "/dashboard",
+        id_agent_ref: id_downline_agent,
+      },
+    });
+
+    await pusherServer
+      .trigger(`notif-pengguna-${n.id_pengguna}`, "notif:new", {
+        id_notifikasi: n.id_notifikasi.toString(),
+        tipe: n.tipe,
+        judul: n.judul,
+        pesan: n.pesan,
+        link: n.link,
+        dibuat_pada: n.dibuat_pada.toISOString(),
+      })
+      .catch((e) => console.warn("pusher trigger notif:new failed:", e));
+  } catch (e) {
+    console.warn("notifyAgentReferralReward failed:", e);
+  }
 }
 
 /**

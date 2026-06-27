@@ -666,12 +666,18 @@ export default function LocationPicker({
   // ---- posisi panel desktop (fixed, ter-clamp ke viewport) ----
   const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
-  const PANEL_W = Math.min(440, vw - 16);
-  const desktopTop = rect ? rect.bottom + 10 : 0;
-  const desktopLeft = rect
-    ? Math.max(8, Math.min(rect.left, vw - PANEL_W - 8))
-    : 8;
-  const desktopMaxH = Math.max(260, Math.min(460, vh - desktopTop - 16));
+  // Lebar panel = lebar trigger (min 320px, max 440px) — BUKAN berbasis viewport
+  const PANEL_W = Math.min(440, Math.max(rect?.width ?? 320, 320));
+  const rawLeft = rect ? rect.left : 8;
+  const desktopLeft = Math.max(8, rawLeft + PANEL_W > vw - 8 ? vw - PANEL_W - 8 : rawLeft);
+  // Buka ke atas jika ruang bawah < 300px dan ruang atas lebih banyak
+  const spaceBelow = rect ? vh - rect.bottom - 16 : 400;
+  const spaceAbove = rect ? rect.top - 16 : 400;
+  const openUpward = spaceBelow < 300 && spaceAbove > spaceBelow;
+  const desktopMaxH = Math.max(260, Math.min(480, openUpward ? spaceAbove : spaceBelow));
+  const desktopTop = openUpward
+    ? (rect?.top ?? 0) - desktopMaxH - 8
+    : (rect?.bottom ?? 0) + 8;
 
   // Portal selalu ter-mount (begitu `mounted`), kondisi `open` ada DI DALAM
   // AnimatePresence supaya animasi exit (tutup) ikut diputar, bukan hanya open.
@@ -685,9 +691,9 @@ export default function LocationPicker({
                   <motion.div
                     key="popover"
                     data-search-portal="true"
-                    initial={{ opacity: 0, y: 8 }}
+                    initial={{ opacity: 0, y: openUpward ? -8 : 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 8 }}
+                    exit={{ opacity: 0, y: openUpward ? -8 : 8 }}
                     transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
                     onMouseDown={(e) => e.stopPropagation()}
                     style={{
@@ -761,11 +767,13 @@ export default function LocationPicker({
         className="cursor-pointer h-full flex flex-col justify-center group"
         onClick={() => onOpenChange(!open)}
       >
-        <label
-          className={`text-[10px] font-extrabold tracking-wider uppercase mb-1 block transition-colors ${t.triggerLabel}`}
-        >
-          {label}
-        </label>
+        {label ? (
+          <label
+            className={`text-[10px] font-extrabold tracking-wider uppercase mb-1 block transition-colors ${t.triggerLabel}`}
+          >
+            {label}
+          </label>
+        ) : null}
         <div className="flex items-center gap-2 w-full">
           <Icon
             icon="solar:map-point-bold-duotone"

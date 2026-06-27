@@ -38,6 +38,7 @@ export function OwnerSidebar() {
               alt="Logo Premier"
               width={40}
               height={40}
+              priority
               className="relative z-10 w-10 h-10 object-contain transition-transform duration-300 group-hover:scale-105"
             />
           </div>

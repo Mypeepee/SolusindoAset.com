@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
 import { prisma } from "@/lib/prisma";
+import { syncFollowUpAcara } from "../_syncFollowUp";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,7 +60,8 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if (body.metode_pembayaran !== undefined) data.metode_pembayaran = body.metode_pembayaran || null;
   if (body.bank_kpr         !== undefined) data.bank_kpr         = body.bank_kpr || null;
   if (body.tenor_kpr        !== undefined) data.tenor_kpr        = body.tenor_kpr ? Number(body.tenor_kpr) : null;
-  if (body.tanggal_follow_up !== undefined)
+  const followUpChanged = body.tanggal_follow_up !== undefined;
+  if (followUpChanged)
     data.tanggal_follow_up = body.tanggal_follow_up ? new Date(body.tanggal_follow_up) : null;
   if (body.tanggal_kontak_terakhir !== undefined)
     data.tanggal_kontak_terakhir = body.tanggal_kontak_terakhir
@@ -102,6 +104,17 @@ export async function PATCH(req: Request, { params }: Ctx) {
         console.warn("[klien PATCH] gagal sinkron ke lead:", e);
       }
     }
+  }
+
+  // Sinkron follow-up ke kalender acara jika tanggal follow up berubah
+  if (followUpChanged) {
+    const newFollowUp = data.tanggal_follow_up as Date | null | undefined;
+    syncFollowUpAcara(
+      agentId,
+      params.id,
+      updated.nama,
+      newFollowUp ?? null,
+    ).catch(() => {});
   }
 
   return NextResponse.json({ ok: true, data: serializeKlien(updated) });

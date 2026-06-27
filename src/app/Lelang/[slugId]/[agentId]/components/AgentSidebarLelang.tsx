@@ -817,12 +817,26 @@ function OfferModal({ isOpen, onClose, agentName, propertyTitle, agentPhone, ask
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN SIDEBAR
 // ─────────────────────────────────────────────────────────────────────────────
+interface PresentingAgent {
+  id_agent: string;
+  nama: string;
+  kantor: string;
+  rating: number;
+  whatsapp: string;
+  kota_area: string;
+  foto_url: string;
+}
+
 interface AgentSidebarProps {
   data: any;
   currentAgentId?: string | null;
+  /** Agent Penyaji dari kode di URL — meng-override identitas & nomor yang dilihat klien. */
+  presentingAgent?: PresentingAgent | null;
+  /** Dipanggil saat tombol Bagikan ditekan — modal dirender di level atas (DetailClient). */
+  onShareOpen?: () => void;
 }
 
-export default function AgentSidebar({ data, currentAgentId }: AgentSidebarProps) {
+export default function AgentSidebar({ data, currentAgentId, presentingAgent = null, onShareOpen }: AgentSidebarProps) {
   const { data: session } = useSession();
   const [offerOpen,  setOfferOpen]  = useState(false);
   const [surveyOpen, setSurveyOpen] = useState(false);
@@ -877,7 +891,9 @@ export default function AgentSidebar({ data, currentAgentId }: AgentSidebarProps
   }, [decisionToast]);
 
   const owner = data.owner || {};
-  const rawAvatar: string = owner.avatar || data.agent?.foto_url || data.agent_photo || "";
+  // Agent Penyaji (kode di URL) diutamakan; kalau tidak ada -> fallback ke owner listing.
+  const presenter = presentingAgent;
+  const rawAvatar: string = presenter?.foto_url || owner.avatar || data.agent?.foto_url || data.agent_photo || "";
   const avatarSrc =
     rawAvatar.startsWith("http") || rawAvatar.startsWith("/")
       ? rawAvatar
@@ -885,12 +901,12 @@ export default function AgentSidebar({ data, currentAgentId }: AgentSidebarProps
   const hasAvatar = !!avatarSrc;
 
   const agentData = {
-    id:     owner.id_agent || owner.id || data.id_agent || currentAgentId || "",
-    name:   owner.name   || "Agent Premier",
-    phone:  owner.phone  || "628123456789",
-    office: owner.office || "Solusindo Aset",
-    rating: Number(owner.rating ?? 5.0),
-    area:   owner.area   || "Indonesia",
+    id:     presenter?.id_agent || owner.id_agent || owner.id || data.id_agent || currentAgentId || "",
+    name:   presenter?.nama   || owner.name   || "Agent Premier",
+    phone:  presenter?.whatsapp || owner.phone  || "628123456789",
+    office: presenter?.kantor || owner.office || "Solusindo Aset",
+    rating: Number(presenter?.rating ?? owner.rating ?? 5.0),
+    area:   presenter?.kota_area || owner.area   || "Indonesia",
   };
 
   const fmt = (n: number) =>
@@ -1069,9 +1085,16 @@ export default function AgentSidebar({ data, currentAgentId }: AgentSidebarProps
         <div className="px-6 py-5 space-y-2.5">
           {isOwnerViewer ? (
             <>
+              {onShareOpen && (
+                <button onClick={onShareOpen}
+                  className="w-full active:scale-[0.98] font-extrabold text-sm py-3.5 rounded-xl transition-all flex justify-center items-center gap-2.5"
+                  style={{ background:"linear-gradient(135deg,#86efac,#34d399)", color:"#000", boxShadow:"0 8px 28px rgba(52,211,153,0.28)" }}>
+                  <Icon icon="solar:share-bold-duotone" className="text-xl" />
+                  Bagikan Listing Ini
+                </button>
+              )}
               <Link href={editPropertyHref}
-                className="w-full bg-[#86efac] hover:bg-[#6ee7a8] active:scale-[0.98] text-black font-extrabold text-sm py-3.5 rounded-xl transition-all flex justify-center items-center gap-2.5"
-                style={{ boxShadow:"0 8px 32px rgba(134,239,172,0.22)" }}>
+                className="w-full bg-white/[0.04] border border-white/[0.09] hover:bg-white/[0.08] active:scale-[0.98] text-white/70 hover:text-white font-bold text-sm py-3.5 rounded-xl transition-all flex justify-center items-center gap-2.5">
                 <Icon icon="solar:pen-2-bold-duotone" className="text-xl" />
                 Edit Properti
               </Link>
@@ -1174,11 +1197,19 @@ export default function AgentSidebar({ data, currentAgentId }: AgentSidebarProps
           <div className="flex gap-2">
             {isOwnerViewer ? (
               <>
+                {onShareOpen && (
+                  <button onClick={onShareOpen}
+                    className="flex-[2] flex items-center justify-center gap-2 active:scale-[0.98] font-extrabold text-[13px] py-3 rounded-2xl transition-all"
+                    style={{ background:"linear-gradient(135deg,#86efac,#34d399)", color:"#000", boxShadow:"0 6px 20px rgba(52,211,153,0.28)" }}>
+                    <Icon icon="solar:share-bold-duotone" className="text-[18px] shrink-0" />
+                    Bagikan
+                  </button>
+                )}
                 <Link href={editPropertyHref}
-                  className="flex-[2] flex items-center justify-center gap-2 bg-[#86efac] hover:bg-[#6ee7a8] active:scale-[0.98] text-black font-extrabold text-[13px] py-3 rounded-2xl transition-all"
-                  style={{ boxShadow:"0 6px 20px rgba(134,239,172,0.22)" }}>
-                  <Icon icon="solar:pen-2-bold-duotone" className="text-[18px] shrink-0" />
-                  Edit Properti
+                  className={`${onShareOpen ? "flex-1" : "flex-[2]"} flex flex-col items-center justify-center gap-[3px] rounded-2xl transition-all active:scale-[0.96]`}
+                  style={{ background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.09)" }}>
+                  <Icon icon="solar:pen-2-bold-duotone" className="text-white/70 text-[18px] shrink-0" />
+                  <span className="text-[8px] font-black text-white/35 uppercase tracking-widest">Edit</span>
                 </Link>
                 <button onClick={handleDownloadBrosur} disabled={isDownloadingBrosur}
                   className="flex-1 flex flex-col items-center justify-center gap-[3px] rounded-2xl transition-all active:scale-[0.96] disabled:opacity-60"

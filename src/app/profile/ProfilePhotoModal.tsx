@@ -60,24 +60,31 @@ const ProfilePhotoModal: React.FC<ProfilePhotoModalProps> = ({
     setIsSubmitting(true);
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+      });
 
-      // Endpoint untuk update foto agent
       const res = await fetch("/api/profile/photo", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cropped_profile_image: base64 }),
       });
 
       if (!res.ok) {
-        throw new Error("Gagal mengunggah foto");
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as any)?.error || "Gagal mengunggah foto");
       }
 
       toast.success("Foto profil berhasil diperbarui.");
       onClose();
     } catch (err) {
       console.error(err);
-      toast.error("Terjadi kesalahan saat mengunggah foto.");
+      toast.error(
+        err instanceof Error ? err.message : "Terjadi kesalahan saat mengunggah foto."
+      );
     } finally {
       setIsSubmitting(false);
     }

@@ -214,19 +214,6 @@ export async function POST(req: Request) {
 
     const accessToken = await getDriveAccessToken();
 
-    // kalau picture lama berupa fileId pendek seperti di Laravel, hapus
-    if (agent.foto_profil_url && agent.foto_profil_url.length < 100) {
-      await fetch(
-        `https://www.googleapis.com/drive/v3/files/${agent.foto_profil_url}`,
-        {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }
-      ).catch((e) =>
-        console.warn("Gagal hapus foto profil lama di Drive:", e)
-      );
-    }
-
     // nama folder: slug dari nama agent atau fallback id_pengguna
     const nama =
       (agent.nama && agent.nama.trim().length > 0
@@ -242,6 +229,7 @@ export async function POST(req: Request) {
 
     const filename = `agent_profile_${Date.now()}.jpg`;
 
+    // Upload foto baru DULU sebelum hapus yang lama
     const fileId = await uploadProfileToDrive({
       base64Image: cropped_profile_image,
       filename,
@@ -254,6 +242,40 @@ export async function POST(req: Request) {
         foto_profil_url: fileId,
       },
     });
+
+    // Setelah DB berhasil disimpan, baru hapus foto lama dari Drive
+    const oldUrl = agent.foto_profil_url;
+    if (oldUrl) {
+      let oldFileId: string | null = null;
+      if (oldUrl.length < 100) {
+        // sudah berupa raw Drive fileId
+        oldFileId = oldUrl;
+      } else {
+        // coba ekstrak fileId dari URL (https://drive.google.com/...?id=XXX)
+        try {
+          const parsed = new URL(oldUrl);
+          oldFileId = parsed.searchParams.get("id");
+          if (!oldFileId) {
+            const m = parsed.pathname.match(/\/d\/([^/]+)/);
+            oldFileId = m?.[1] ?? null;
+          }
+        } catch {
+          // bukan URL valid, lewati
+        }
+      }
+
+      if (oldFileId) {
+        await fetch(
+          `https://www.googleapis.com/drive/v3/files/${oldFileId}`,
+          {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${accessToken}` },
+          }
+        ).catch((e) =>
+          console.warn("Gagal hapus foto profil lama di Drive:", e)
+        );
+      }
+    }
 
     return NextResponse.json({
       success: true,

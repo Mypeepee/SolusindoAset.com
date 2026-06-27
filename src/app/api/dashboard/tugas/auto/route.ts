@@ -65,63 +65,87 @@ export async function GET() {
     const in7Days     = new Date(todayStart);
     in7Days.setDate(todayStart.getDate() + 7);
 
-    // ── 1. Leads (new / hot / contacted) ──────────────────────────────
-    const leads = await prisma.lead.findMany({
-      where: { id_agent: agentId, status: { in: ["new", "contacted", "hot"] } },
-      select: {
-        id_lead: true, status: true,
-        client_name: true, client_phone: true,
-        last_activity: true, created_at: true,
-        listing: { select: { judul: true, kota: true } },
-      },
-      orderBy: { created_at: "desc" },
-      take: 30,
-    });
-
-    // ── 2. Titip Jual yang diklaim oleh agent ini ──────────────────────
-    const titipList = await prisma.propertyTitip.findMany({
-      where: { diklaim_oleh_agent: agentId, status: "terklaim" },
-      select: {
-        id_titip: true,
-        pengirim_nama: true, pengirim_phone: true,
-        jenis_properti: true, alamat_lengkap: true, kota: true,
-        estimasi_harga: true, diklaim_pada: true,
-      },
-      orderBy: { diklaim_pada: "asc" },
-      take: 10,
-    });
-
-    // ── 3. Acara 7 hari ke depan ───────────────────────────────────────
-    const acara = await prisma.acara.findMany({
-      where: {
-        OR: [
-          { id_agent: agentId },
-          { undangan: { some: { id_agent: agentId } } },
-        ],
-        tanggal_mulai: { gte: todayStart, lte: in7Days },
-        status_acara: { in: ["PUBLISHED", "SCHEDULED", "ONGOING", "OPEN_REGISTRATION", "REGISTRATION_CLOSED"] },
-        tipe_acara:   { in: ["SITE_VISIT", "BUYER_MEETING", "CLOSING", "FOLLOW_UP", "OPEN_HOUSE"] },
-      },
-      select: {
-        id_acara: true, judul_acara: true,
-        tipe_acara: true, tanggal_mulai: true,
-        lokasi: true,
-        listing: { select: { judul: true } },
-      },
-      orderBy: { tanggal_mulai: "asc" },
-      take: 10,
-    });
-
-    // ── 4. Listing aktif (konten promosi) ─────────────────────────────
-    const listings = await prisma.listing.findMany({
-      where: { id_agent: agentId, status_tayang: "TERSEDIA" },
-      select: {
-        id_property: true, judul: true, kota: true,
-        kategori: true, jenis_transaksi: true, harga: true,
-      },
-      orderBy: { tanggal_diupdate: "desc" },
-      take: 5,
-    });
+    // ── 1-6. Semua sumber data diambil secara paralel ─────────────────
+    const [leads, titipList, acara, listings, penawaranLeads, cobrokeLeads] = await Promise.all([
+      // 1. Leads (new / hot / contacted)
+      prisma.lead.findMany({
+        where: { id_agent: agentId, status: { in: ["new", "contacted", "hot"] } },
+        select: {
+          id_lead: true, status: true,
+          client_name: true, client_phone: true,
+          last_activity: true, created_at: true,
+          listing: { select: { judul: true, kota: true } },
+        },
+        orderBy: { created_at: "desc" },
+        take: 30,
+      }),
+      // 2. Titip Jual yang diklaim oleh agent ini
+      prisma.propertyTitip.findMany({
+        where: { diklaim_oleh_agent: agentId, status: "terklaim" },
+        select: {
+          id_titip: true,
+          pengirim_nama: true, pengirim_phone: true,
+          jenis_properti: true, alamat_lengkap: true, kota: true,
+          estimasi_harga: true, diklaim_pada: true,
+        },
+        orderBy: { diklaim_pada: "asc" },
+        take: 10,
+      }),
+      // 3. Acara 7 hari ke depan
+      prisma.acara.findMany({
+        where: {
+          OR: [
+            { id_agent: agentId },
+            { undangan: { some: { id_agent: agentId } } },
+          ],
+          tanggal_mulai: { gte: todayStart, lte: in7Days },
+          status_acara: { in: ["PUBLISHED", "SCHEDULED", "ONGOING", "OPEN_REGISTRATION", "REGISTRATION_CLOSED"] },
+          tipe_acara:   { in: ["SITE_VISIT", "BUYER_MEETING", "CLOSING", "FOLLOW_UP", "OPEN_HOUSE"] },
+        },
+        select: {
+          id_acara: true, judul_acara: true,
+          tipe_acara: true, tanggal_mulai: true,
+          lokasi: true,
+          listing: { select: { judul: true } },
+        },
+        orderBy: { tanggal_mulai: "asc" },
+        take: 10,
+      }),
+      // 4. Listing aktif (konten promosi)
+      prisma.listing.findMany({
+        where: { id_agent: agentId, status_tayang: "TERSEDIA" },
+        select: {
+          id_property: true, judul: true, kota: true,
+          kategori: true, jenis_transaksi: true, harga: true,
+        },
+        orderBy: { tanggal_diupdate: "desc" },
+        take: 5,
+      }),
+      // 5. Penawaran pending (perlu ditindaklanjuti)
+      prisma.lead.findMany({
+        where: { id_agent: agentId, status_penawaran: "pending" },
+        select: {
+          id_lead: true, client_name: true, client_phone: true,
+          penawaran: true, listing: { select: { judul: true, kota: true } },
+        },
+        take: 20,
+      }),
+      // 6. Cobroke dengan agent partner
+      prisma.lead.findMany({
+        where: { id_agent: agentId, id_agent_cobroke: { not: null } },
+        select: {
+          id_lead: true, client_name: true, client_phone: true,
+          listing: { select: { judul: true, kota: true } },
+          agentCobroke: {
+            select: {
+              nama_kantor: true, nomor_whatsapp: true,
+              pengguna: { select: { nama_lengkap: true } },
+            },
+          },
+        },
+        take: 20,
+      }),
+    ]);
 
     // ── Build ──────────────────────────────────────────────────────────
     const tasks: object[] = [];
@@ -311,14 +335,6 @@ export async function GET() {
     }
 
     // ── 5. Penawaran pending (perlu ditindaklanjuti) ───────────────────
-    const penawaranLeads = await prisma.lead.findMany({
-      where: { id_agent: agentId, status_penawaran: "pending" },
-      select: {
-        id_lead: true, client_name: true, client_phone: true,
-        penawaran: true, listing: { select: { judul: true, kota: true } },
-      },
-      take: 20,
-    });
     for (const lead of penawaranLeads) {
       const prop = lead.listing ? `${lead.listing.judul}, ${lead.listing.kota}` : "Properti";
       tasks.push({
@@ -336,20 +352,6 @@ export async function GET() {
     }
 
     // ── 6. Cobroke dengan agent partner ────────────────────────────────
-    const cobrokeLeads = await prisma.lead.findMany({
-      where: { id_agent: agentId, id_agent_cobroke: { not: null } },
-      select: {
-        id_lead: true, client_name: true, client_phone: true,
-        listing: { select: { judul: true, kota: true } },
-        agentCobroke: {
-          select: {
-            nama_kantor: true, nomor_whatsapp: true,
-            pengguna: { select: { nama_lengkap: true } },
-          },
-        },
-      },
-      take: 20,
-    });
     for (const lead of cobrokeLeads) {
       const prop = lead.listing ? `${lead.listing.judul}, ${lead.listing.kota}` : "Properti";
       const co = lead.agentCobroke;

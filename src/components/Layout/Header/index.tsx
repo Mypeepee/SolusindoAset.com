@@ -576,6 +576,48 @@ const Header: React.FC = () => {
       isSignInOpen || isSignUpOpen || isForgotOpen ? "hidden" : "";
   }, [isSignInOpen, isSignUpOpen, isForgotOpen]);
 
+  // ── Capture referral klien ─────────────────────────────────────────────
+  // Link /r/AG### -> redirect ke "/?ref=AG###&daftar=1". Di sini kita:
+  //  1) simpan kode ke localStorage + cookie (prefill modal daftar, 3 hari)
+  //  2) buka modal Daftar otomatis (hanya untuk pengunjung yang belum login)
+  //  3) bersihkan query agar tidak terbuka lagi saat refresh / di-share
+  useEffect(() => {
+    if (typeof window === "undefined" || status === "loading") return;
+
+    let params: URLSearchParams;
+    try {
+      params = new URLSearchParams(window.location.search);
+    } catch {
+      return;
+    }
+
+    const ref = params.get("ref");
+    const wantDaftar = params.get("daftar") === "1";
+
+    if (ref) {
+      const code = ref.trim().toUpperCase();
+      try {
+        localStorage.setItem("ref_code", code);
+        document.cookie = `ref_code=${encodeURIComponent(code)}; path=/; max-age=${60 * 60 * 24 * 3}; samesite=lax`;
+      } catch {
+        /* ignore */
+      }
+    }
+
+    if ((ref || wantDaftar) && status !== "authenticated") {
+      setIsSignUpOpen(true);
+    }
+
+    if (params.has("ref") || params.has("daftar")) {
+      params.delete("ref");
+      params.delete("daftar");
+      const qs = params.toString();
+      const newUrl =
+        window.location.pathname + (qs ? `?${qs}` : "") + window.location.hash;
+      window.history.replaceState(null, "", newUrl);
+    }
+  }, [status]);
+
   const handleLogout = () => {
     signOut({ callbackUrl: "/" });
     setProfileDropdownOpen(false);

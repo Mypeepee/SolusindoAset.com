@@ -4,12 +4,14 @@ import React, { useState } from "react";
 import { Icon } from "@iconify/react";
 import Link from "next/link";
 import { downloadPropertyImages } from "@/lib/downloadPropertyImages";
-
 interface KeperluanAgentProps {
   data: any;
   currentAgentId?: string | null;
   currentJabatan?: string | null;
   stokerPhone?: string | null;
+  canEdit?: boolean;
+  /** Dipanggil saat tombol Bagikan ditekan — modal dirender di level atas (DetailClient). */
+  onShareOpen?: () => void;
 }
 
 const formatMoney = (value: number): string => {
@@ -56,7 +58,7 @@ const formatTanggalLelang = (val?: string | null): string => {
   });
 };
 
-export default function KeperluanAgent({ data, currentAgentId, currentJabatan, stokerPhone }: KeperluanAgentProps) {
+export default function KeperluanAgent({ data, currentAgentId, currentJabatan, stokerPhone, onShareOpen }: KeperluanAgentProps) {
   const rawLimit =
     data?.nilai_limit_lelang || data?.harga || data?.priceRates?.monthly || 0;
 
@@ -76,7 +78,8 @@ export default function KeperluanAgent({ data, currentAgentId, currentJabatan, s
   const propertyId = data?.id_property || data?.id || "";
 
   const [isDownloadingImages, setIsDownloadingImages] = useState(false);
-  const [isDownloadingVideo, setIsDownloadingVideo] = useState(false);
+
+  const canShare = !!onShareOpen;
 
   // ✅ STOKER sendiri -> pilih kontak PIC manual (nomor PIC rahasia, tak ada di DB).
   //    Role lain (Owner, Agent, Admin, Principal, dst) -> pesan dikirim ke nomor STOKER.
@@ -87,48 +90,6 @@ export default function KeperluanAgent({ data, currentAgentId, currentJabatan, s
     await downloadPropertyImages(urls, setIsDownloadingImages);
   };
 
-  const handleDownloadVideos = async () => {
-    if (!data?.id_property || isDownloadingVideo) return;
-
-    setIsDownloadingVideo(true);
-    try {
-      const res = await fetch(`/api/property/${data.id_property}/download-videos`);
-      if (!res.ok) {
-        let msg = "Gagal membuat video.";
-        try {
-          const j = await res.json();
-          if (j?.error) msg = j.error;
-        } catch {}
-        throw new Error(msg);
-      }
-      const blob = await res.blob();
-      const fileName = `properti-${data?.slug || data.id_property}.mp4`;
-      const file = new File([blob], fileName, { type: "video/mp4" });
-
-      // Mobile: bagikan via share sheet (bisa langsung simpan / kirim WA / IG)
-      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-      if (isMobile && typeof navigator.share === "function" && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: "Video Properti" });
-        return;
-      }
-
-      const objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = objectUrl;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(objectUrl);
-    } catch (err: any) {
-      if (err?.name !== "AbortError") {
-        alert(err?.message || "Gagal membuat video. Silakan coba lagi.");
-      }
-    } finally {
-      setIsDownloadingVideo(false);
-    }
-  };
-
   const handleAskStock = () => {
     const kodeProperti =
       data?.kode_properti && data.kode_properti !== "-"
@@ -136,17 +97,20 @@ export default function KeperluanAgent({ data, currentAgentId, currentJabatan, s
         : data?.id_property || "-";
     const alamat = data?.alamat_lengkap || data?.address || "-";
     const tanggalLelang = formatTanggalLelang(data?.tanggal_lelang);
-    const vendor = data?.vendor || "-";
-    const agentName = data?.agent?.nama || "-";
+    const slugId = data?.slug && data?.id_property
+      ? `${data.slug}-${data.id_property}`
+      : String(data?.id_property || kodeProperti);
+    const propertyUrl = `${window.location.origin}/Lelang/${slugId}`;
 
     const text =
-      `\u{1F50E} *Konfirmasi Stok Properti*\n\n` +
-      `\u{1F194} *ID:* ${kodeProperti}\n` +
-      `\u{1F4CD} *Lokasi:* ${alamat}\n` +
-      `\u{1F4C5} *Tanggal Lelang:* ${tanggalLelang}\n` +
-      `\u{1F3E6} *Vendor:* ${vendor}\n` +
-      `\u{1F464} *Agent:* ${agentName}\n\n` +
-      `Apakah aset ini masih tersedia atau sudah terjual? Ada respon dari klien kami yang menanyakan. \u{1F64F}`;
+      `🔍 *Konfirmasi Stok Properti*\n\n` +
+      `🆔 *ID:* ${kodeProperti}\n` +
+      `📍 *Lokasi:* ${alamat}\n` +
+      `📅 *Tanggal Lelang:* ${tanggalLelang}\n\n` +
+      `❓ Apakah aset ini masih *TERSEDIA* atau sudah *TERJUAL*?\n\n` +
+      `Ada respon dari klien kami yang sedang menanyakan. Mohon konfirmasi segera. 🙏\n\n` +
+      `🔗 *Lihat detail properti:*\n` +
+      `${propertyUrl}`;
 
     // Stoker/Owner -> pilih kontak PIC manual (nomor PIC rahasia, tak ada di DB).
     // Role lain -> langsung ke nomor stoker dari DB.
@@ -244,6 +208,33 @@ export default function KeperluanAgent({ data, currentAgentId, currentJabatan, s
         {/* TOMBOL AKSI */}
         <div className="px-5 pb-3 pt-2 bg-slate-950/95 border-t border-white/5">
           <div className="flex flex-col gap-1.5">
+            {/* TOMBOL BAGIKAN — CTA utama: link membawa kode agent ini */}
+            {canShare && (
+              <button
+                onClick={() => onShareOpen?.()}
+                className="group w-full flex items-center justify-between px-4 py-3 rounded-2xl
+                  bg-gradient-to-r from-[#86efac] to-[#34d399] text-black
+                  shadow-[0_8px_28px_rgba(52,211,153,0.28)] hover:shadow-[0_10px_34px_rgba(52,211,153,0.4)]
+                  transition-all active:scale-[0.98]"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-black/10 flex items-center justify-center">
+                    <Icon icon="solar:share-bold-duotone" className="text-black text-lg" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-[12px] font-extrabold">Bagikan Listing</p>
+                    <p className="text-[10px] font-semibold text-black/55">
+                      Lead masuk ke nomor &amp; profil kamu
+                    </p>
+                  </div>
+                </div>
+                <Icon
+                  icon="solar:arrow-right-linear"
+                  className="text-black/60 text-base group-hover:translate-x-1 transition-transform"
+                />
+              </button>
+            )}
+
             {/* ✅ TOMBOL EDIT - HANYA UNTUK OWNER - UPDATED LINK */}
             {isOwner && propertyId && (
               <Link
@@ -328,40 +319,6 @@ export default function KeperluanAgent({ data, currentAgentId, currentJabatan, s
             </button>
 
             <button
-              onClick={handleDownloadVideos}
-              disabled={isDownloadingVideo}
-              className="w-full flex items-center justify-between px-4 py-2 rounded-2xl
-                bg-white/[0.03] border border-white/10 hover:border-purple-400/60
-                hover:bg-purple-500/5 transition-all active:scale-[0.99]
-                disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-purple-500/15 border border-purple-400/40 flex items-center justify-center">
-                  <Icon
-                    icon={isDownloadingVideo ? "solar:spinner-bold" : "solar:videocamera-record-bold-duotone"}
-                    className={`text-purple-300 text-lg${isDownloadingVideo ? " animate-spin" : ""}`}
-                  />
-                </div>
-                <div className="text-left">
-                  <p className="text-[11px] font-semibold text-white">
-                    {isDownloadingVideo ? "Membuat Video..." : "Download Video"}
-                  </p>
-                  <p className="text-[10px] text-gray-400">
-                    {isDownloadingVideo
-                      ? "Tunggu ±10-20 detik, sedang dirender."
-                      : "Video 12 detik untuk sosial media."}
-                  </p>
-                </div>
-              </div>
-              {!isDownloadingVideo && (
-                <Icon
-                  icon="solar:arrow-right-up-linear"
-                  className="text-gray-500 text-sm"
-                />
-              )}
-            </button>
-
-            <button
               onClick={handleAskStock}
               className="w-full flex items-center justify-between px-4 py-2 rounded-2xl
                 bg-emerald-500/14 border border-emerald-400/70 hover:bg-emerald-500/24
@@ -433,6 +390,20 @@ export default function KeperluanAgent({ data, currentAgentId, currentJabatan, s
           </div>
         </div>
 
+        {canShare && (
+          <div className="px-4 pt-2.5">
+            <button
+              onClick={() => onShareOpen?.()}
+              className="w-full flex items-center justify-center gap-2 rounded-xl
+                bg-gradient-to-r from-[#86efac] to-[#34d399] text-black font-extrabold text-[12px] py-2.5
+                shadow-[0_6px_20px_rgba(52,211,153,0.3)] active:scale-[0.98] transition-all"
+            >
+              <Icon icon="solar:share-bold-duotone" className="text-base" />
+              Bagikan — lead ke nomor kamu
+            </button>
+          </div>
+        )}
+
         <div className="px-4 py-2.5 flex gap-2">
           {/* ✅ TOMBOL EDIT DI MOBILE - UPDATED LINK */}
           {isOwner && propertyId && (
@@ -472,18 +443,6 @@ export default function KeperluanAgent({ data, currentAgentId, currentJabatan, s
           </button>
 
           <button
-            onClick={handleDownloadVideos}
-            disabled={isDownloadingVideo}
-            className="flex-1 bg-purple-500/20 border border-purple-400/60 text-purple-50 font-semibold text-[11px] py-2.5 rounded-xl hover:bg-purple-500/30 transition-all active:scale-[0.97] flex justify-center items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            <Icon
-              icon={isDownloadingVideo ? "solar:spinner-bold" : "solar:videocamera-record-bold-duotone"}
-              className={`text-base${isDownloadingVideo ? " animate-spin" : ""}`}
-            />
-            {isDownloadingVideo ? "..." : "Video"}
-          </button>
-
-          <button
             onClick={handleAskStock}
             className="flex-1 bg-emerald-500 text-black font-semibold text-[11px] py-2.5 rounded-xl hover:bg-emerald-400 transition-all active:scale-[0.97] flex justify-center items-center gap-1.5"
           >
@@ -492,6 +451,7 @@ export default function KeperluanAgent({ data, currentAgentId, currentJabatan, s
           </button>
         </div>
       </div>
+
     </>
   );
 }

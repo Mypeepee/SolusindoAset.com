@@ -7,7 +7,7 @@ const Aoscompo = ({children}:any) => {
     useEffect(() => {
         AOS.init({
             duration: 800,
-            once: false,
+            once: true,
         })
     }, [])
   return (

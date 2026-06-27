@@ -171,7 +171,8 @@ const formatTanggalLelang = (val?: string | null) => {
 // Template soft selling
 const buildShareMessage = (data: PropertyData) => {
   const judul = data?.judul || "Listing Properti";
-  const harga = formatRupiah(data?.harga);
+  const hargaLelang = data?.nilai_limit_lelang ?? data?.harga ?? 0;
+  const harga = formatRupiah(hargaLelang);
   const lokasiSingkat =
     data?.kota ||
     data?.alamat_lengkap ||
@@ -181,6 +182,10 @@ const buildShareMessage = (data: PropertyData) => {
 
   const luasTanah = data?.luas_tanah ? `${data.luas_tanah} m²` : "-";
   const legal = data?.legalitas || "-";
+  const kode =
+    data?.kode_properti && data.kode_properti !== "-"
+      ? data.kode_properti
+      : data?.id_property || "-";
 
   const headerLelang = data?.tanggal_lelang
     ? `🔥 SEGERA LELANG, ${formatTanggalLelang(data.tanggal_lelang)} 🔥`
@@ -194,8 +199,8 @@ const buildShareMessage = (data: PropertyData) => {
     (data?.alamat_lengkap ? `📍 ${data.alamat_lengkap}\n` : "") +
     `📐 LT ${luasTanah}\n` +
     `📃 Tipe Hak: ${legal}\n` +
-    `💰 Harga: ${harga}\n` +
-    `Kode: ${data?.kode_properti || "-"}\n\n` +
+    `💰 Harga Limit: ${harga}\n` +
+    `Kode: ${kode}\n\n` +
     `✨ Kenapa Beli Lelang Menarik?\n` +
     `• Harga jauh di bawah pasar, lebih murah dibanding rumah primary & secondary.\n` +
     `• Potensi capital gain tinggi, bisa dijual kembali mendekati harga pasar.\n` +

@@ -25,7 +25,7 @@ function normalizeImages(raw?: string | null): string[] {
     .map((s) =>
       s.startsWith("http://") || s.startsWith("https://") || s.startsWith("/")
         ? s
-        : `https://drive.google.com/thumbnail?id=${s}`,
+        : `https://drive.google.com/thumbnail?id=${s}&sz=w800`,
     );
 }
 
@@ -139,7 +139,7 @@ export async function getSimilarItems(current: any): Promise<PropertyItem[]> {
       ? await prisma.listing.findMany({
           where: { ...baseWhere, kota: { contains: kotaTerm, mode: "insensitive" } },
           select: SELECT,
-          take: 400,
+          take: 50,
           orderBy: [{ is_hot_deal: "desc" }, { tanggal_dibuat: "desc" }],
         })
       : [];
@@ -151,7 +151,7 @@ export async function getSimilarItems(current: any): Promise<PropertyItem[]> {
         const more = await prisma.listing.findMany({
           where: { ...baseWhere, provinsi: { contains: provTerm, mode: "insensitive" } },
           select: SELECT,
-          take: 200,
+          take: 30,
           orderBy: [{ is_hot_deal: "desc" }, { tanggal_dibuat: "desc" }],
         });
         const seen = new Set(pool.map((p) => String(p.id_property)));

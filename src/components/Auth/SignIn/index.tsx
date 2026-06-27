@@ -220,6 +220,7 @@ const Signin = ({ closeModal, openSignupModal, openForgotModal, skipRedirect, on
                 alt="Premier"
                 fill
                 priority
+                sizes="36px"
                 className="object-contain"
               />
             </div>

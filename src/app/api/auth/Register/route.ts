@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcrypt";
+import { attributeReferral } from "@/lib/referral";
+import { notifyNewUserRegistration } from "@/lib/notifications";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -83,6 +85,7 @@ export async function POST(request: Request) {
     const password = String(body?.password || "");
     const emailRaw = String(body?.email || "");
     const phoneRaw = String(body?.phone || "");
+    const kodeReferralRaw = String(body?.kode_referral || "");
 
     // login_mode boleh kosong -> autodetect
     let login_mode = body?.login_mode as LoginMode | undefined;
@@ -227,6 +230,27 @@ export async function POST(request: Request) {
         status_akun: true,
       },
     });
+
+    // ── NOTIF EMAIL KE OWNER (best-effort, tidak menggagalkan registrasi) ──
+    notifyNewUserRegistration({
+      nama: created.nama_lengkap,
+      email: created.email,
+      phone: created.nomor_telepon,
+      registeredAt: new Date(),
+    }).catch((e) => console.warn("notifyNewUserRegistration failed:", e));
+
+    // ── ATRIBUSI REFERRAL (best-effort, tidak menggagalkan registrasi) ──
+    // Kalau pendaftar memakai kode referral agent yang valid & AKTIF:
+    // set kode_referral, buat Klien di CRM agent, beri +10.000 poin & notif.
+    if (kodeReferralRaw.trim()) {
+      await attributeReferral({
+        penggunaId: created.id_pengguna,
+        code: kodeReferralRaw,
+        nama: created.nama_lengkap,
+        email: created.email,
+        phone: created.nomor_telepon,
+      });
+    }
 
     return json(201, {
       ok: true,

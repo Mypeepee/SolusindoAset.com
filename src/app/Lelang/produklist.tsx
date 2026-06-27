@@ -42,6 +42,11 @@ interface PaginationData {
 interface ProductListProps {
   initialData: PropertyDB[];
   pagination: PaginationData;
+  /**
+   * Kode agent perujuk untuk klien referral (monopoli Lelang).
+   * Bila ada, link tiap kartu mengarah ke /Lelang/<slug>/<presentingAgentId>.
+   */
+  presentingAgentId?: string | null;
 }
 
 // --- UTILS ---
@@ -72,11 +77,16 @@ const daysUntil = (date?: string | null) => {
 };
 
 // --- URL DETAIL LELANG ---
-const getPropertyUrl = (property: PropertyDB): string => {
+const getPropertyUrl = (
+  property: PropertyDB,
+  presentingAgentId?: string | null,
+): string => {
   const baseSlug = property.slug || "property";
   const id = String(property.id_property);
   const slugWithId = `${baseSlug}-${id}`;
-  return `/Lelang/${slugWithId}`;
+  return presentingAgentId
+    ? `/Lelang/${slugWithId}/${presentingAgentId}`
+    : `/Lelang/${slugWithId}`;
 };
 
 // --- CARD LELANG ---
@@ -356,6 +366,7 @@ const PropertyCard = ({ item }: { item: PropertyDB }) => {
                   src={item.agent_photo || "/images/user/user-01.png"}
                   alt={item.agent_name}
                   fill
+                  sizes="36px"
                   className="object-cover"
                 />
               </div>
@@ -391,7 +402,7 @@ const PropertyCard = ({ item }: { item: PropertyDB }) => {
 };
 
 // --- MAIN COMPONENT ---
-const ProductList = ({ initialData, pagination }: ProductListProps) => {
+const ProductList = ({ initialData, pagination, presentingAgentId }: ProductListProps) => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const productListRef = useRef<HTMLDivElement>(null);
@@ -428,7 +439,7 @@ const ProductList = ({ initialData, pagination }: ProductListProps) => {
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.25 }}
               >
-                <Link href={getPropertyUrl(item)} className="block h-full">
+                <Link href={getPropertyUrl(item, presentingAgentId)} className="block h-full">
                   <PropertyCard item={item} />
                 </Link>
               </motion.div>

@@ -5,8 +5,6 @@ import {
   motion,
   useScroll,
   useTransform,
-  useMotionValue,
-  useSpring,
 } from "framer-motion";
 import { Icon } from "@iconify/react";
 import { AmbientBackdrop } from "../../about/company-profile/components/_shared";
@@ -53,21 +51,20 @@ const RevealWords: React.FC<{
 
 const Hero: React.FC = () => {
   const ref = useRef<HTMLElement | null>(null);
+  const spotlightRef = useRef<HTMLDivElement>(null);
   const { scrollY } = useScroll();
   const bgY = useTransform(scrollY, [0, 600], [0, 80]);
   const bgOpacity = useTransform(scrollY, [0, 500], [1, 0.35]);
   const contentY = useTransform(scrollY, [0, 400], [0, -30]);
 
-  // Cursor spotlight
-  const mx = useMotionValue(50);
-  const my = useMotionValue(50);
-  const smx = useSpring(mx, { stiffness: 80, damping: 20, mass: 0.6 });
-  const smy = useSpring(my, { stiffness: 80, damping: 20, mass: 0.6 });
-
+  // Cursor spotlight — direct DOM write avoids React re-renders + spring physics
   const onMouseMove = (e: React.MouseEvent<HTMLElement>) => {
+    if (!spotlightRef.current) return;
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    mx.set(((e.clientX - r.left) / r.width) * 100);
-    my.set(((e.clientY - r.top) / r.height) * 100);
+    const x = ((e.clientX - r.left) / r.width) * 100;
+    const y = ((e.clientY - r.top) / r.height) * 100;
+    spotlightRef.current.style.background =
+      `radial-gradient(420px circle at ${x}% ${y}%, rgba(52,211,153,0.10), transparent 55%)`;
   };
 
   return (
@@ -76,16 +73,10 @@ const Hero: React.FC = () => {
       onMouseMove={onMouseMove}
       className="relative w-full overflow-hidden bg-[#05070D] pt-16 sm:pt-20 lg:pt-24 pb-10 sm:pb-12 lg:pb-16"
     >
-      {/* Cursor spotlight */}
-      <motion.div
+      {/* Cursor spotlight — updated via direct DOM write on mousemove */}
+      <div
+        ref={spotlightRef}
         className="hidden md:block pointer-events-none absolute inset-0 z-[2] opacity-70"
-        style={{
-          background: useTransform(
-            [smx, smy],
-            ([x, y]) =>
-              `radial-gradient(420px circle at ${x}% ${y}%, rgba(52,211,153,0.10), transparent 55%)`
-          ),
-        }}
       />
 
       {/* Parallax ambient */}
@@ -96,34 +87,32 @@ const Hero: React.FC = () => {
         <AmbientBackdrop variant="emerald" intensity="high" />
       </motion.div>
 
-      {/* Concentric rings */}
-      <motion.div
-        className="hidden lg:flex absolute inset-0 z-[1] items-center justify-center pointer-events-none"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.5, duration: 1.4 }}
-      >
+      {/* Concentric rings — CSS animation, no JS physics */}
+      <div className="hidden lg:flex absolute inset-0 z-[1] items-center justify-center pointer-events-none animate-[fadeIn_1.4s_0.5s_both]">
         <div className="relative h-[40rem] w-[40rem]">
           {[0, 1, 2].map((i) => (
-            <motion.div
+            <div
               key={i}
-              className="absolute inset-0 rounded-full border border-emerald-400/[0.06]"
+              className="absolute inset-0"
               style={{ transform: `scale(${1 - i * 0.18})` }}
-              animate={{ rotate: i % 2 === 0 ? 360 : -360 }}
-              transition={{
-                duration: 80 + i * 24,
-                repeat: Infinity,
-                ease: "linear",
-              }}
             >
-              <span
-                className="absolute h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.9)]"
-                style={{ top: "-4px", left: "50%" }}
-              />
-            </motion.div>
+              <div
+                className="absolute inset-0 rounded-full border border-emerald-400/[0.06] animate-spin"
+                style={{
+                  animationDuration: `${80 + i * 24}s`,
+                  animationDirection: i % 2 !== 0 ? "reverse" : "normal",
+                  animationTimingFunction: "linear",
+                }}
+              >
+                <span
+                  className="absolute h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.9)]"
+                  style={{ top: "-4px", left: "50%" }}
+                />
+              </div>
+            </div>
           ))}
         </div>
-      </motion.div>
+      </div>
 
       {/* Vertical beam */}
       <div className="hidden lg:block pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-gradient-to-b from-transparent via-emerald-400/15 to-transparent" />

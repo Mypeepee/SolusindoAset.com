@@ -1,14 +1,13 @@
-// src/lib/prisma.ts
 import { PrismaClient } from '@prisma/client';
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
 export const prisma =
   globalForPrisma.prisma ||
-  new PrismaClient({
-    log: ['query'], // Opsional: Untuk melihat query SQL di terminal
-  });
+  new PrismaClient(
+    process.env.NODE_ENV !== 'production' ? { log: ['query'] } : {}
+  );
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+globalForPrisma.prisma = prisma;
 
 export default prisma;

@@ -11,6 +11,7 @@ import BookingSidebar from "./[agentId]/components/AgentSidebarLelang";
 import SimilarProperties from "./[agentId]/components/SimilarPropertiesLelang";
 import type { PropertyItem } from "@/app/properti/[slug]/types";
 import KeperluanAgent from "./[agentId]/components/KeperluanAgent";
+import ShareListingModal from "./[agentId]/components/ShareListingModal";
 
 interface ProductData {
   id_property: string;
@@ -72,6 +73,20 @@ interface ProductData {
   } | null;
 }
 
+export interface PresentingAgent {
+  id_agent: string;
+  nama: string;
+  kantor: string;
+  rating: number;
+  jumlah_closing: number;
+  whatsapp: string;
+  telepon: string;
+  kota_area: string;
+  jabatan: string;
+  foto_url: string;
+  email: string;
+}
+
 interface DetailClientProps {
   product: ProductData;
   fotoArray: string[];
@@ -80,6 +95,10 @@ interface DetailClientProps {
   currentRole?: "AGENT" | "OWNER" | "USER" | string | null;
   currentJabatan?: string | null;
   stokerPhone?: string | null;
+  /** Agent yang kodenya ada di URL — identitas & nomor yang dilihat klien. */
+  presentingAgent?: PresentingAgent | null;
+  /** Profil agent yang sedang login — untuk preview di modal "Bagikan". */
+  selfAgent?: PresentingAgent | null;
 }
 
 export default function DetailClient({
@@ -90,12 +109,16 @@ export default function DetailClient({
   currentRole,
   currentJabatan,
   stokerPhone,
+  presentingAgent = null,
+  selfAgent = null,
 }: DetailClientProps) {
   useEffect(() => {
     if (!product?.id_property) return;
-
     const id = product.id_property;
+    const key = `viewed_${id}`;
+    if (sessionStorage.getItem(key)) return;
     fetch(`/api/listing/${id}/dilihat`, { method: "POST" }).catch(() => {});
+    sessionStorage.setItem(key, "true");
   }, [product?.id_property]);
 
   const convertToNumber = (value: any): number => {
@@ -242,6 +265,7 @@ export default function DetailClient({
   };
 
   const [selectedRoom, setSelectedRoom] = useState(minimalRoom);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const ownerId: string = (propertyData as any).owner?.id || "";
 
@@ -250,6 +274,23 @@ export default function DetailClient({
     (currentRole === "AGENT" && !!currentAgentId && currentAgentId === ownerId);
 
   const isAgent = currentRole === "AGENT";
+
+  // Siapapun yang login sebagai agent atau owner bisa share.
+  const canShare = !!(currentAgentId);
+
+  const shareSlugId =
+    (product.slug && product.id_property)
+      ? `${product.slug}-${product.id_property}`
+      : String(product.id_property || "");
+
+  const shareLocation =
+    product.area_lokasi ||
+    [product.kecamatan, product.kota].filter(Boolean).join(", ") ||
+    product.kota ||
+    "";
+
+  const shareCoverImage =
+    fotoArray[0] || undefined;
 
   return (
     <div className="text-white font-sans bg-[#0F0F0F]">
@@ -299,17 +340,35 @@ export default function DetailClient({
               currentJabatan={currentJabatan}
               stokerPhone={stokerPhone}
               canEdit={canEdit}
+              onShareOpen={canShare ? () => setShareOpen(true) : undefined}
             />
           ) : (
             <BookingSidebar
               data={propertyData as any}
               currentAgentId={currentAgentId}
+              presentingAgent={presentingAgent}
+              onShareOpen={canShare ? () => setShareOpen(true) : undefined}
             />
           )}
         </div>
       </div>
 
       <SimilarProperties items={similarProperties} />
+
+      {/* Modal share — dirender di level atas untuk bebas dari overflow/stacking context apapun */}
+      <ShareListingModal
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        agentCode={currentAgentId || ""}
+        selfAgent={selfAgent}
+        propertyTitle={product.judul}
+        propertyPrice={nilaiLimitLelang || hargaPromo || harga}
+        priceLabel={nilaiLimitLelang ? "HARGA LIMIT" : hargaPromo ? "HARGA PROMO" : "HARGA"}
+        propertyLocation={shareLocation}
+        slugId={shareSlugId}
+        posterImages={fotoArray}
+        coverImage={shareCoverImage}
+      />
     </div>
   );
 }

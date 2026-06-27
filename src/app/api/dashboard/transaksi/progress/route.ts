@@ -8,6 +8,10 @@ const { sql } = Prisma;
 
 // ── Image helpers ─────────────────────────────────────────────────────────────
 
+function sanitizeDriveId(id: string): string {
+  return (id || "").trim().replace(/_+$/g, "");
+}
+
 function normalizeUrl(url: string): string {
   const raw = url.trim();
   if (!raw) return "";
@@ -15,7 +19,7 @@ function normalizeUrl(url: string): string {
     raw.match(/drive\.google\.com\/file\/d\/([^/]+)/) ??
     raw.match(/drive\.google\.com\/open\?id=([^&]+)/) ??
     raw.match(/drive\.google\.com\/uc\?.*id=([^&]+)/);
-  if (driveMatch?.[1]) return `https://drive.google.com/uc?export=view&id=${driveMatch[1]}`;
+  if (driveMatch?.[1]) return `/api/drive-image?id=${sanitizeDriveId(driveMatch[1])}&sz=w400`;
   return raw;
 }
 
@@ -23,11 +27,20 @@ function extractFirstImageUrl(raw: unknown): string {
   if (!raw) return "";
   const str = String(raw).trim();
   if (!str) return "";
-  const candidates = str
-    .split(",")
-    .map((x) => normalizeUrl(x))
-    .filter((u) => u.startsWith("http://") || u.startsWith("https://") || u.startsWith("/"));
-  return candidates[0] ?? "";
+
+  // Try comma-separated list first
+  for (const part of str.split(",")) {
+    const normalized = normalizeUrl(part.trim());
+    if (normalized.startsWith("http://") || normalized.startsWith("https://") || normalized.startsWith("/")) {
+      return normalized;
+    }
+    // Bare Drive ID (no http, no slash) — resolve to proxy
+    const bare = part.trim();
+    if (bare && !bare.includes("/") && !bare.includes(".") && /^[a-zA-Z0-9_-]{10,}$/.test(bare)) {
+      return `/api/drive-image?id=${sanitizeDriveId(bare)}&sz=w400`;
+    }
+  }
+  return "";
 }
 
 function toProxyImg(url: string): string {
@@ -42,17 +55,21 @@ function resolveAgentFoto(raw: string | null | undefined): string {
   if (!raw) return "";
   const s = raw.trim();
   if (!s) return "";
+
+  // Full Drive URL — extract ID
   const driveMatch =
     s.match(/drive\.google\.com\/file\/d\/([^/?]+)/) ??
-    s.match(/drive\.google\.com\/thumbnail\?id=([^&]+)/);
+    s.match(/drive\.google\.com\/thumbnail\?id=([^&]+)/) ??
+    s.match(/drive\.google\.com\/uc\?.*id=([^&]+)/);
   if (driveMatch?.[1]) {
-    const thumb = `https://drive.google.com/thumbnail?id=${driveMatch[1]}&sz=w200`;
-    return `/api/img?url=${encodeURIComponent(thumb)}`;
+    return `/api/drive-image?id=${sanitizeDriveId(driveMatch[1])}&sz=w96`;
   }
+
+  // Bare Drive ID (long alphanumeric, no dots or slashes)
   if (!s.includes("://") && !s.includes(".") && /^[a-zA-Z0-9_-]{20,}$/.test(s)) {
-    const thumb = `https://drive.google.com/thumbnail?id=${s}&sz=w200`;
-    return `/api/img?url=${encodeURIComponent(thumb)}`;
+    return `/api/drive-image?id=${sanitizeDriveId(s)}&sz=w96`;
   }
+
   if (s.startsWith("http")) return `/api/img?url=${encodeURIComponent(s)}`;
   return "";
 }
@@ -65,6 +82,16 @@ function toNum(v: unknown): number {
 }
 
 // ── GET ───────────────────────────────────────────────────────────────────────
+
+const CLOSING_STATUS_SET = new Set([
+  "closing", "pengurusan_balik_nama", "balik_nama_selesai",
+  "pengurusan_risalah_lelang", "risalah_lelang_selesai",
+  "mediasi", "mediasi_gagal", "permohonan_eksekusi",
+  "aanmaning", "penetapan", "rakor",
+  "pelaksanaan_eksekusi", "serah_terima_kunci", "selesai",
+]);
+
+const CLOSING_STATUS_LIST = Array.from(CLOSING_STATUS_SET);
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -87,14 +114,6 @@ export async function GET(req: Request) {
   const statusFilter = (searchParams.get("status") ?? "").trim().toLowerCase();
   const jenisFilter  = (searchParams.get("jenis")  ?? "").trim().toUpperCase();
 
-  const CLOSING_STATUS_SET = new Set([
-    "closing", "pengurusan_balik_nama", "balik_nama_selesai",
-    "pengurusan_risalah_lelang", "risalah_lelang_selesai",
-    "mediasi", "mediasi_gagal", "permohonan_eksekusi",
-    "aanmaning", "penetapan", "rakor",
-    "pelaksanaan_eksekusi", "serah_terima_kunci", "selesai",
-  ]);
-
   // Build dynamic WHERE fragments
   const agentFragment = isPrivileged ? sql`` : sql`AND m.id_agent = ${agentId}`;
   const searchFragment = q
@@ -109,66 +128,94 @@ export async function GET(req: Request) {
       : sql`AND m.status::text = ${statusFilter}`
     : sql``;
 
-  // Use $queryRaw to bypass Prisma ORM UTF-8 encoding issue
-  const rows = await prisma.$queryRaw<any[]>`
-    SELECT
-      m.id::text                            AS id,
-      m.id_transaksi,
-      m.status,
-      m.jenis_transaksi::text               AS jenis_transaksi,
-      m.tipe_komisi,
-      m.harga_deal::text                    AS harga_deal,
-      m.maksimum_bidding::text              AS maksimum_bidding,
-      m.harga_limit::text                   AS harga_limit,
-      m.persentase_komisi::text             AS persentase_komisi,
-      m.biaya_baliknama::text               AS biaya_baliknama,
-      m.biaya_pengosongan::text             AS biaya_pengosongan,
-      m.mou_generated,
-      m.invoice_utm_generated,
-      m.dibuat_pada,
-      m.diperbarui_pada,
-      a.id_agent                            AS agent_id,
-      a.nama_kantor                         AS agent_kantor,
-      a.foto_profil_url                     AS agent_foto,
-      pa.nama_lengkap                       AS agent_nama,
-      pk.nama_lengkap                       AS klien_nama,
-      l.id_property::text                   AS listing_id,
-      l.judul                               AS listing_judul,
-      l.gambar                              AS listing_gambar,
-      l.kota                                AS listing_kota,
-      l.kecamatan                           AS listing_kecamatan,
-      l.kelurahan                           AS listing_kelurahan,
-      l.alamat_lengkap                      AS listing_alamat,
-      t.status_transaksi::text              AS trx_status,
-      t.harga_bidding::text                 AS trx_bidding,
-      t.cobroke_fee::text                   AS trx_cobroke,
-      t.pendapatan_bersih_kantor::text      AS trx_pendapatan,
-      t.thc_agent::text                     AS trx_thc,
-      t.tanggal_transaksi                   AS trx_tanggal,
-      t.rating                              AS trx_rating,
-      t.comment                             AS trx_comment,
-      t.catatan                             AS trx_catatan,
-      t.biaya_baliknama::text               AS trx_biaya_bn,
-      t.biaya_pengosongan::text             AS trx_biaya_eks,
-      m.agent_luar_nama                     AS luar_nama,
-      m.agent_luar_kantor                   AS luar_kantor,
-      m.agent_luar_telepon                  AS luar_telepon
-    FROM mou m
-    JOIN listing l ON l.id_property = m.id_listing
-    JOIN agent a ON a.id_agent = m.id_agent
-    JOIN pengguna pa ON pa.id_pengguna = a.id_pengguna
-    LEFT JOIN pengguna pk ON pk.id_pengguna = m.id_klien
-    LEFT JOIN transaksi t ON t.id_transaksi = m.id_transaksi
-    WHERE 1=1
-    ${agentFragment}
-    ${searchFragment}
-    ${jenisFragment}
-    ${statusFragment}
-    ORDER BY m.diperbarui_pada DESC
-    LIMIT ${take} OFFSET ${skip}
-  `;
+  const agentBaseWhere = isPrivileged ? sql`` : sql`AND m.id_agent = ${agentId}`;
 
-  // Fetch detail per transaksi secara terpisah
+  // Run main listing query + stats queries in parallel
+  const [rows, statsResult] = await Promise.all([
+    prisma.$queryRaw<any[]>`
+      SELECT
+        m.id::text                            AS id,
+        m.id_transaksi,
+        m.status,
+        m.jenis_transaksi::text               AS jenis_transaksi,
+        m.tipe_komisi,
+        m.harga_deal::text                    AS harga_deal,
+        m.maksimum_bidding::text              AS maksimum_bidding,
+        m.harga_limit::text                   AS harga_limit,
+        m.persentase_komisi::text             AS persentase_komisi,
+        m.biaya_baliknama::text               AS biaya_baliknama,
+        m.biaya_pengosongan::text             AS biaya_pengosongan,
+        m.mou_generated,
+        m.invoice_utm_generated,
+        m.dibuat_pada,
+        m.diperbarui_pada,
+        a.id_agent                            AS agent_id,
+        a.nama_kantor                         AS agent_kantor,
+        a.foto_profil_url                     AS agent_foto,
+        pa.nama_lengkap                       AS agent_nama,
+        pk.nama_lengkap                       AS klien_nama,
+        l.id_property::text                   AS listing_id,
+        l.judul                               AS listing_judul,
+        l.gambar                              AS listing_gambar,
+        l.kota                                AS listing_kota,
+        l.kecamatan                           AS listing_kecamatan,
+        l.kelurahan                           AS listing_kelurahan,
+        l.alamat_lengkap                      AS listing_alamat,
+        t.status_transaksi::text              AS trx_status,
+        t.harga_bidding::text                 AS trx_bidding,
+        t.cobroke_fee::text                   AS trx_cobroke,
+        t.pendapatan_bersih_kantor::text      AS trx_pendapatan,
+        t.thc_agent::text                     AS trx_thc,
+        t.tanggal_transaksi                   AS trx_tanggal,
+        t.rating                              AS trx_rating,
+        t.comment                             AS trx_comment,
+        t.catatan                             AS trx_catatan,
+        t.biaya_baliknama::text               AS trx_biaya_bn,
+        t.biaya_pengosongan::text             AS trx_biaya_eks,
+        m.agent_luar_nama                     AS luar_nama,
+        m.agent_luar_kantor                   AS luar_kantor,
+        m.agent_luar_telepon                  AS luar_telepon
+      FROM mou m
+      JOIN listing l ON l.id_property = m.id_listing
+      JOIN agent a ON a.id_agent = m.id_agent
+      JOIN pengguna pa ON pa.id_pengguna = a.id_pengguna
+      LEFT JOIN pengguna pk ON pk.id_pengguna = m.id_klien
+      LEFT JOIN transaksi t ON t.id_transaksi = m.id_transaksi
+      WHERE 1=1
+      ${agentFragment}
+      ${searchFragment}
+      ${jenisFragment}
+      ${statusFragment}
+      ORDER BY m.diperbarui_pada DESC
+      LIMIT ${take} OFFSET ${skip}
+    `,
+    // SQL aggregate for total nilai — replaces unbounded findMany + JS reduce
+    prisma.$queryRaw<{ total_count: bigint; selesai_count: bigint; total_nilai: string }[]>`
+      SELECT
+        COUNT(*)::bigint AS total_count,
+        COUNT(*) FILTER (WHERE t.status_transaksi = 'selesai')::bigint AS selesai_count,
+        COALESCE(SUM(
+          CASE
+            WHEN m.tipe_komisi = 'PERSENTASE' AND t.status_transaksi::text = ANY(${CLOSING_STATUS_LIST}) THEN
+              COALESCE(t.harga_bidding, m.maksimum_bidding, 0)
+            WHEN m.tipe_komisi = 'PERSENTASE' THEN
+              COALESCE(m.maksimum_bidding, 0)
+            ELSE
+              COALESCE(m.harga_deal, 0)
+          END
+        ), 0)::text AS total_nilai
+      FROM mou m
+      LEFT JOIN transaksi t ON t.id_transaksi = m.id_transaksi
+      WHERE 1=1 ${agentBaseWhere}
+    `,
+  ]);
+
+  const statsRow = statsResult[0];
+  const total       = Number(statsRow?.total_count  ?? 0);
+  const selesaiCount = Number(statsRow?.selesai_count ?? 0);
+  const totalNilai  = Number(statsRow?.total_nilai  ?? 0);
+
+  // Fetch detail per transaksi
   const trxIds = rows
     .filter((r: any) => r.trx_status && r.id_transaksi)
     .map((r: any) => r.id_transaksi as string);
@@ -193,36 +240,6 @@ export async function GET(req: Request) {
       });
     }
   }
-
-  // Stats
-  const agentBaseWhere = isPrivileged ? {} : { id_agent: agentId };
-  const [total, selesaiCount, allForStats] = await Promise.all([
-    prisma.mou.count({ where: agentBaseWhere }),
-    prisma.mou.count({
-      where: { ...agentBaseWhere, transaksi: { status_transaksi: "selesai" as any } },
-    }),
-    prisma.mou.findMany({
-      where: agentBaseWhere,
-      select: {
-        tipe_komisi: true,
-        harga_deal: true,
-        maksimum_bidding: true,
-        transaksi: {
-          select: { status_transaksi: true, harga_bidding: true },
-        },
-      },
-    }),
-  ]);
-
-  const totalNilai = allForStats.reduce((sum, m) => {
-    const isPersen = m.tipe_komisi.toUpperCase() === "PERSENTASE";
-    const trxStatus = (m.transaksi?.status_transaksi as string | undefined) ?? "";
-    const isClosing = CLOSING_STATUS_SET.has(trxStatus);
-    const persenValue = isClosing
-      ? toNum(m.transaksi?.harga_bidding) || toNum(m.maksimum_bidding)
-      : toNum(m.maksimum_bidding);
-    return sum + (isPersen ? persenValue : toNum(m.harga_deal));
-  }, 0);
 
   const data = rows.map((m: any) => {
     const isPersen = (m.tipe_komisi ?? "").toUpperCase() === "PERSENTASE";
@@ -340,7 +357,6 @@ export async function PATCH(req: Request) {
         WHERE id = ${mou.id}
       `;
 
-      // Pastikan record transaksi ada jika status closing
       if (status.toLowerCase() === "closing" && mou.id_transaksi) {
         await prisma.$executeRaw`
           INSERT INTO transaksi (id_transaksi, tanggal_transaksi, status_transaksi)

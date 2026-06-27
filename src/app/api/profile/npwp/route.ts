@@ -99,10 +99,10 @@ async function uploadNpwpToDrive(params: {
 }): Promise<string> {
   const { base64Image, filename, folderName } = params;
 
-  const parentFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-  if (!parentFolderId) {
-    throw new Error("GOOGLE_DRIVE_FOLDER_ID belum diset");
-  }
+  const parentFolderId =
+    process.env.GDRIVE_PARENT_FOLDER_ID ||
+    process.env.GOOGLE_DATA_AGENT_FOLDER_ID ||
+    "1u8faFug3GV3lB6y0L2TbwEX48IPAUtiQ";
 
   const accessToken = await getDriveAccessToken();
   const targetFolderId = await getOrCreateFolder(
@@ -190,9 +190,9 @@ export async function POST(req: Request) {
       cropped_image_npwp?: string;
     };
 
-    if (!nomor_npwp) {
+    if (!nomor_npwp && !cropped_image_npwp) {
       return NextResponse.json(
-        { error: "nomor_npwp wajib diisi" },
+        { error: "nomor_npwp atau foto NPWP wajib diisi" },
         { status: 400 }
       );
     }
@@ -227,9 +227,8 @@ export async function POST(req: Request) {
         id_pengguna: session.user.id,
       },
       data: {
-        // simpan nomor dan fileId (jika ada)
-        nomor_npwp: nomor_npwp,
-        foto_npwp_url: fileId ?? undefined,
+        ...(nomor_npwp ? { nomor_npwp } : {}),
+        ...(fileId ? { foto_npwp_url: fileId } : {}),
         diperbarui_pada: new Date(),
       },
     });

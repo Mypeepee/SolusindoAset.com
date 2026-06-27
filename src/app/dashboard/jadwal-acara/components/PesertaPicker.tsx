@@ -71,8 +71,8 @@ function normalizeDriveUrl(url: string | null | undefined): string | null {
   ) {
     return trimmed;
   }
-  // Bare Drive ID → wrap thumbnail
-  return `https://drive.google.com/thumbnail?id=${trimmed}&sz=w80`;
+  // Bare Drive ID → proxy lokal (avoid 429 dari Drive CDN)
+  return `/api/drive-image?id=${trimmed}&sz=w64`;
 }
 
 function initialsOf(name: string): string {

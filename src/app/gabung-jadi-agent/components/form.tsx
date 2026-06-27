@@ -12,6 +12,8 @@ type AppSessionUser = {
   email?: string | null;
   phone?: string | null;
   nomor_telepon?: string | null;
+  /** Kode agent yang dulu mereferal user ini saat daftar sebagai klien. */
+  kode_referral?: string | null;
 };
 
 type Step = 0 | 1 | 2;
@@ -290,6 +292,8 @@ export default function AgentApplyForm({
   );
 
   const [refCode, setRefCode] = useState("");
+  // true kalau refCode otomatis terisi dari kode referral klien (upline bawaan).
+  const [refAutoFilled, setRefAutoFilled] = useState(false);
 
   // lock flags: berdasarkan data akun
   const [lockFromAccount, setLockFromAccount] = useState({
@@ -674,6 +678,31 @@ export default function AgentApplyForm({
     [isFormLocked]
   );
 
+  // (D) Auto-assign UPLINE dari kode referral klien.
+  // Kalau user dulu daftar memakai kode referral agent (mis. AG108), saat ia
+  // mengajukan diri jadi agent, kode itu otomatis jadi upline default (tetap bisa
+  // diubah). Prioritas: draft/ketikan sebelumnya > kode referral akun.
+  const refPrefillDone = React.useRef(false);
+  React.useEffect(() => {
+    if (refPrefillDone.current) return;
+    if (!isAuthed || showPendingScreen || isFormLocked) return;
+
+    const draft = safeParseDraft(
+      typeof window !== "undefined" ? localStorage.getItem(draftKey(user?.id)) : null
+    );
+    const draftRef = draft?.refCode ? normalizeAgentCode(draft.refCode) : "";
+    const accountRef = normalizeAgentCode(String(user?.kode_referral ?? ""));
+
+    const finalRef = draftRef || accountRef;
+    if (!finalRef) return;
+
+    refPrefillDone.current = true;
+    setRefCode((prev) => prev || finalRef);
+    setRefAutoFilled(!draftRef && Boolean(accountRef));
+    lookupReferral(finalRef);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthed, showPendingScreen, isFormLocked, user?.id, user?.kode_referral]);
+
   async function onSubmit() {
     setError(null);
 
@@ -992,12 +1021,20 @@ export default function AgentApplyForm({
                     />
                   </Field>
 
-                  <Field label="Kode Referal (Upline)">
+                  <Field
+                    label="Kode Referal (Upline)"
+                    hint={
+                      refAutoFilled
+                        ? "Otomatis diisi dari kode referral saat kamu daftar dulu. Bisa diubah."
+                        : "Isi kode agent yang mengajakmu (opsional)."
+                    }
+                  >
                     <input
                       value={refCode}
                       onChange={(e) => {
                         const v = e.target.value;
                         setRefCode(v);
+                        setRefAutoFilled(false);
                         setUplineError(null);
                         setUplineInfo(null);
                         lookupReferral(v);

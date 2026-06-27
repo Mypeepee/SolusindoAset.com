@@ -127,7 +127,7 @@ function extractGoogleDriveId(rawUrl: string) {
   return null;
 }
 
-function getImageCandidates(url?: string | null, size = 1600): string[] {
+function getImageCandidates(url?: string | null, size = 800): string[] {
   if (!url) return [];
 
   const trimmed = String(url).trim();
@@ -136,11 +136,7 @@ function getImageCandidates(url?: string | null, size = 1600): string[] {
   const driveId = extractGoogleDriveId(trimmed);
 
   if (driveId) {
-    return [
-      `https://drive.google.com/thumbnail?id=${driveId}&sz=w${size}`,
-      `https://drive.google.com/uc?export=view&id=${driveId}`,
-      `https://drive.google.com/uc?id=${driveId}`,
-    ];
+    return [`/api/drive-image?id=${driveId}&sz=w${size}`];
   }
 
   if (
@@ -332,7 +328,7 @@ function SmartImage({
   src,
   alt,
   className,
-  size = 1600,
+  size = 800,
 }: {
   src?: string | null;
   alt: string;

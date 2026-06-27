@@ -1,4 +1,5 @@
 import React from "react";
+import { cache } from "react";
 import { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
@@ -91,7 +92,7 @@ function serializeListing(listing: any) {
 }
 
 // --------- DB HELPERS ----------
-async function getProperty(id: bigint) {
+const getProperty = cache(async (id: bigint) => {
   const product = await prisma.listing.findUnique({
     where: { id_property: id },
     include: {
@@ -103,13 +104,12 @@ async function getProperty(id: bigint) {
           nomor_whatsapp: true,
           kota_area: true,
           jabatan: true,
-          foto_profil_url: true, // avatar agent disimpan di Agent
+          foto_profil_url: true,
           pengguna: {
             select: {
               nama_lengkap: true,
               nomor_telepon: true,
               email: true,
-              // ⬅️ foto_profil_url TIDAK ada di model Pengguna Jual, jadi jangan select di sini
             },
           },
         },
@@ -121,7 +121,7 @@ async function getProperty(id: bigint) {
   if (product.status_tayang !== "TERSEDIA") return null;
 
   return product;
-}
+});
 
 
 // --------- METADATA ----------

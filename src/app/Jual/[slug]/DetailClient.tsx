@@ -10,6 +10,7 @@ import ImageGallery from "./[agentId]/components/ImageGallery";
 import DetailInfo from "./[agentId]/components/DetailInfo";
 import BookingSidebar from "./[agentId]/components/AgentSidebar";
 import SimilarProperties from "./[agentId]/components/SimilarProperties";
+import ShareListingModal from "@/app/Lelang/[slugId]/[agentId]/components/ShareListingModal";
 import type { PropertyItem } from "@/app/properti/[slug]/types";
 
 // ================== INTERFACE ==================
@@ -101,6 +102,13 @@ export default function DetailClient({
   }, [product?.id_property]);
 
   // ================== HELPER ==================
+  const normalizePhoto = (v?: string | null): string => {
+    if (!v || v.trim() === "") return "";
+    const t = v.trim();
+    if (t.startsWith("http://") || t.startsWith("https://") || t.startsWith("/")) return t;
+    return `https://drive.google.com/thumbnail?id=${t}&sz=w200`;
+  };
+
   const convertToNumber = (value: any): number => {
     if (typeof value === "number") return value;
     if (typeof value === "string") {
@@ -170,7 +178,7 @@ export default function DetailClient({
           whatsapp: product.agent.nomor_whatsapp || "",
           email: product.agent.pengguna?.email,
           kantor: product.agent.nama_kantor || "Solusindo Aset",
-          foto_url: product.agent.foto_profil_url || "",
+          foto_url: normalizePhoto(product.agent.foto_profil_url),
           rating: product.agent.rating || 5,
           jumlah_closing: product.agent.jumlah_closing || 0,
           kota_area: product.agent.kota_area || "",
@@ -182,7 +190,7 @@ export default function DetailClient({
       ? {
           id_agent: String(product.id_agent || currentAgentId || ""),
           name: product.agent.pengguna?.nama_lengkap || "Agent Premier",
-          avatar: product.agent.foto_profil_url || "",
+          avatar: normalizePhoto(product.agent.foto_profil_url),
           phone: product.agent.nomor_whatsapp || "",
           office: product.agent.nama_kantor || "Solusindo Aset",
           rating: product.agent.rating || 5.0,
@@ -216,6 +224,28 @@ export default function DetailClient({
   };
 
   const [selectedRoom, setSelectedRoom] = useState(minimalRoom);
+  const [shareOpen, setShareOpen] = useState(false);
+
+  const canShare = !!currentAgentId;
+  const shareSlugId = product.slug && product.id_property
+    ? `${product.slug}-${product.id_property}`
+    : String(product.id_property || "");
+  const sharePrice = hargaPromo || harga;
+  const sharePriceLabel = hargaPromo ? "HARGA PROMO" : "HARGA";
+  const shareLocation = product.area_lokasi ||
+    [product.kecamatan, product.kota].filter(Boolean).join(", ") ||
+    product.kota || "";
+  const shareCoverImage = (product.foto_list && product.foto_list[0]) ||
+    product.gambar_utama_url || undefined;
+  const selfAgent = currentAgentId && product.agent ? {
+    id_agent: currentAgentId,
+    nama: product.agent.pengguna?.nama_lengkap || "Agent Premier",
+    kantor: product.agent.nama_kantor || "Solusindo Aset",
+    whatsapp: product.agent.nomor_whatsapp || "",
+    foto_url: normalizePhoto(product.agent.foto_profil_url),
+    rating: product.agent.rating || 5,
+    kota_area: product.agent.kota_area || "",
+  } : null;
 
   const jenisLabel =
     product.jenis_transaksi === "JUAL"
@@ -270,11 +300,29 @@ export default function DetailClient({
             setSelectedRoom={setSelectedRoom}
             currentAgentId={currentAgentId}
           />
-          <BookingSidebar data={propertyData as any} />
+          <BookingSidebar
+            data={propertyData as any}
+            onShareOpen={canShare ? () => setShareOpen(true) : undefined}
+          />
         </div>
       </div>
 
       <SimilarProperties items={similarProperties} />
+
+      <ShareListingModal
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        agentCode={currentAgentId || ""}
+        selfAgent={selfAgent}
+        propertyTitle={product.judul}
+        propertyPrice={sharePrice}
+        priceLabel={sharePriceLabel}
+        propertyLocation={shareLocation}
+        slugId={shareSlugId}
+        urlPrefix="/Jual/"
+        posterImages={product.foto_list || []}
+        coverImage={shareCoverImage}
+      />
     </div>
   );
 }

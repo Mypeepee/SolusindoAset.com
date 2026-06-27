@@ -117,12 +117,14 @@ body {
 
 /* Cegah iOS Safari auto-zoom saat fokus ke input pencarian.
    iOS hanya zoom kalau font-size < 16px, jadi paksa 16px di layar kecil.
-   Discope ke `.zoom-safe` agar tidak mengubah input rapat di dashboard. */
+   Discope ke `.zoom-safe` agar tidak mengubah input rapat di dashboard.
+   !important wajib karena Tailwind utility (.text-sm) bisa tabrakan order
+   di CSS chunks Next.js App Router. */
 @media (max-width: 640px) {
   .zoom-safe input:not([type="checkbox"]):not([type="radio"]),
   .zoom-safe select,
   .zoom-safe textarea {
-    font-size: 16px;
+    font-size: 16px !important;
   }
 }
 
@@ -835,6 +837,11 @@ section {
 @keyframes dp-slide-right {
   from { transform: translateX(-20px); opacity: 0; }
   to   { transform: translateX(0);     opacity: 1; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 /* ── CRM header: living aurora + CTA sheen ── */

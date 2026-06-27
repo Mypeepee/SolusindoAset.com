@@ -1,5 +1,6 @@
 // app/Lelang/[slugId]/page.tsx
 import React from "react";
+import { cache } from "react";
 import { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
@@ -89,7 +90,7 @@ function normalizeListingImages(gambar: string | null | undefined): string[] {
 }
 
 // --- QUERY DETAIL ---
-async function getProperty(id: bigint) {
+const getProperty = cache(async (id: bigint) => {
   const product = await prisma.listing.findUnique({
     where: { id_property: id },
     include: {
@@ -119,7 +120,7 @@ async function getProperty(id: bigint) {
   if (product.status_tayang !== "TERSEDIA") return null;
 
   return product;
-}
+});
 
 // --- METADATA ---
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -142,11 +143,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     };
   }
 
+  // Lelang: harga utama ada di nilai_limit_lelang, bukan harga (yang bisa 0).
+  const hargaAngka = Number(product.nilai_limit_lelang ?? product.harga ?? 0) || Number(product.harga ?? 0);
   const hargaFormatted = new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",
     maximumFractionDigits: 0,
-  }).format(Number(product.harga));
+  }).format(hargaAngka);
 
   const namaAgent =
     product.agent?.pengguna?.nama_lengkap || "Agent Premier";
@@ -239,22 +242,33 @@ export default async function DetailPage({ params }: Props) {
 
   const session = await getServerSession(authOptions);
   const currentAgentId = (session?.user as any)?.agentId || null;
+  const role = (session?.user as any)?.role || (session?.user as any)?.peran || null;
+  const referralCode = (session?.user as any)?.kode_referral || null;
+  const isAgentUser = Boolean(currentAgentId) || role === "AGENT";
+
+  // Agent penyaji efektif:
+  //  - agent yang login  -> dirinya sendiri (perilaku normal agent)
+  //  - klien referral     -> agent perujuk (MONOPOLI Lelang). Kalau kode tak valid,
+  //    halaman [agentId] otomatis fallback ke owner listing.
+  //  Begitu user JADI agent, monopoli mati (dia bukan calon pembeli lagi).
+  const presenterId =
+    currentAgentId || (!isAgentUser && referralCode ? referralCode : null);
 
   if (product.slug && product.id_property) {
     const expectedSlugId = `${product.slug}-${product.id_property.toString()}`;
 
     if (expectedSlugId !== slugId) {
-      if (currentAgentId) {
-        return redirect(`/Lelang/${expectedSlugId}/${currentAgentId}`);
+      if (presenterId) {
+        return redirect(`/Lelang/${expectedSlugId}/${presenterId}`);
       }
       return redirect(`/Lelang/${expectedSlugId}`);
     }
   }
 
-  if (currentAgentId) {
+  if (presenterId) {
     const safeSlugId =
       slugId || `${product.slug}-${product.id_property.toString()}`;
-    return redirect(`/Lelang/${safeSlugId}/${currentAgentId}`);
+    return redirect(`/Lelang/${safeSlugId}/${presenterId}`);
   }
 
   const safeSlugId =

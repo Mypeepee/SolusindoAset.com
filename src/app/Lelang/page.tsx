@@ -7,6 +7,8 @@ import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { buildLocationWhere } from "@/lib/listingLocationFilter";
 import { parseCategoryDbList } from "@/lib/propertyType";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
 
 type Props = {
   searchParams: { [key: string]: string | string[] | undefined };
@@ -80,6 +82,28 @@ function normalizeAgentPhoto(fileId: string | null | undefined): string {
   }
 
   return `https://drive.google.com/thumbnail?id=${trimmed}&sz=w64`;
+}
+
+// MONOPOLI LELANG: data publik agent perujuk untuk klien referral.
+// Mengembalikan null bila kode tidak valid / agent tidak AKTIF (fallback ke owner).
+async function getReferralPresenter(code: string | null | undefined) {
+  if (!code || !/^AG\d+$/i.test(code)) return null;
+  const agent = await prisma.agent.findFirst({
+    where: { id_agent: code, status_keanggotaan: "AKTIF" },
+    select: {
+      id_agent: true,
+      nama_kantor: true,
+      foto_profil_url: true,
+      pengguna: { select: { nama_lengkap: true } },
+    },
+  });
+  if (!agent) return null;
+  return {
+    id_agent: agent.id_agent,
+    nama: agent.pengguna?.nama_lengkap || "Agent Premier",
+    kantor: agent.nama_kantor || "Solusindo Aset",
+    foto: normalizeAgentPhoto(agent.foto_profil_url),
+  };
 }
 
 export default async function SearchPage({ searchParams }: Props) {
@@ -315,6 +339,20 @@ export default async function SearchPage({ searchParams }: Props) {
 
   const totalPages = Math.ceil(totalItems / limit);
 
+  // MONOPOLI LELANG: hanya untuk KLIEN referral (yang masih punya atensi beli),
+  // BUKAN agent. Begitu user jadi agent (punya agentId / peran AGENT), monopoli
+  // mati & list kembali normal (menampilkan owner tiap listing).
+  const session = await getServerSession(authOptions);
+  const role =
+    (session?.user as any)?.role || (session?.user as any)?.peran || null;
+  const agentId = (session?.user as any)?.agentId || null;
+  const referralCode = (session?.user as any)?.kode_referral || null;
+  const isAgentUser = Boolean(agentId) || role === "AGENT";
+  const presenter =
+    !isAgentUser && referralCode
+      ? await getReferralPresenter(referralCode)
+      : null;
+
   const formattedData = propertiesRaw.map((item) => {
     const rawGambar = item.gambar || "";
     const foto_list =
@@ -352,9 +390,9 @@ export default async function SearchPage({ searchParams }: Props) {
       kamar_tidur: item.kamar_tidur ?? 0,
       kamar_mandi: item.kamar_mandi ?? 0,
 
-      agent_name: item.agent.pengguna.nama_lengkap,
-      agent_photo: agentPhotoUrl,
-      agent_office: item.agent.nama_kantor,
+      agent_name: presenter ? presenter.nama : item.agent.pengguna.nama_lengkap,
+      agent_photo: presenter ? presenter.foto : agentPhotoUrl,
+      agent_office: presenter ? presenter.kantor : item.agent.nama_kantor,
 
       tanggal_lelang: item.tanggal_lelang
         ? item.tanggal_lelang.toISOString()
@@ -403,6 +441,7 @@ export default async function SearchPage({ searchParams }: Props) {
             totalPages,
             totalItems,
           }}
+          presentingAgentId={presenter?.id_agent ?? null}
         />
       </section>
     </main>

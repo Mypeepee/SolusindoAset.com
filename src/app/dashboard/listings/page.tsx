@@ -29,13 +29,13 @@ function normalizeListingImages(raw: string | null | undefined): string[] {
     .split(",")
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
-    .map((s) => (isValidImageUrl(s) ? s : `https://drive.google.com/thumbnail?id=${s}`));
+    .map((s) => (isValidImageUrl(s) ? s : `/api/drive-image?id=${s}&sz=w400`));
 }
 function normalizeAgentPhoto(fileId: string | null | undefined): string {
   if (!fileId || fileId.trim() === "") return "/images/default-profile.png";
   const t = fileId.trim();
   if (t.startsWith("http://") || t.startsWith("https://") || t.startsWith("/")) return t;
-  return `https://drive.google.com/thumbnail?id=${t}&sz=w64`;
+  return `/api/drive-image?id=${t}&sz=w64`;
 }
 
 type RawSearch = string | string[] | undefined;

@@ -1,5 +1,6 @@
 // app/Lelang/[slugId]/[agentId]/page.tsx
 import React from "react";
+import { cache } from "react";
 import { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
@@ -7,6 +8,8 @@ import DetailClient from "../DetailClient";
 import { getSimilarItems } from "@/app/Jual/[slug]/lib/similar";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
+
+export const revalidate = 3600;
 
 interface ParamsShape {
   slugId: string;
@@ -57,8 +60,48 @@ function normalizeAgentPhoto(fileId: string | null | undefined): string {
   return `https://drive.google.com/thumbnail?id=${trimmed}&sz=w64`;
 }
 
-// ✅ PERBAIKAN: hapus foto_profil_url dari select pengguna
-async function getProperty(id: bigint) {
+// Resolve "Agent Penyaji" (presenter) dari kode di URL, mis. AG8.
+// Hanya field publik. Jika kode tak valid / agent non-aktif -> null (fallback ke owner).
+async function getPresentingAgent(agentId: string | null | undefined) {
+  if (!agentId) return null;
+  const code = agentId.trim();
+  if (!/^AG\d+$/i.test(code)) return null;
+
+  const agent = await prisma.agent.findFirst({
+    where: { id_agent: code, status_keanggotaan: "AKTIF" },
+    select: {
+      id_agent: true,
+      nama_kantor: true,
+      rating: true,
+      jumlah_closing: true,
+      nomor_whatsapp: true,
+      kota_area: true,
+      jabatan: true,
+      foto_profil_url: true,
+      pengguna: {
+        select: { nama_lengkap: true, nomor_telepon: true, email: true },
+      },
+    },
+  });
+
+  if (!agent) return null;
+
+  return {
+    id_agent: agent.id_agent,
+    nama: agent.pengguna?.nama_lengkap || "Agent Premier",
+    kantor: agent.nama_kantor || "Solusindo Aset",
+    rating: agent.rating != null ? Number(agent.rating) : 5,
+    jumlah_closing: agent.jumlah_closing ?? 0,
+    whatsapp: agent.nomor_whatsapp || agent.pengguna?.nomor_telepon || "",
+    telepon: agent.pengguna?.nomor_telepon || agent.nomor_whatsapp || "",
+    kota_area: agent.kota_area || "",
+    jabatan: agent.jabatan || "",
+    foto_url: normalizeAgentPhoto(agent.foto_profil_url),
+    email: agent.pengguna?.email || "",
+  };
+}
+
+const getProperty = cache(async (id: bigint) => {
   const product = await prisma.listing.findUnique({
     where: { id_property: id },
     include: {
@@ -71,13 +114,12 @@ async function getProperty(id: bigint) {
           nomor_whatsapp: true,
           kota_area: true,
           jabatan: true,
-          foto_profil_url: true,      // foto agent dari tabel agent
+          foto_profil_url: true,
           pengguna: {
             select: {
               nama_lengkap: true,
               nomor_telepon: true,
               email: true,
-              // ❌ HAPUS foto_profil_url karena tidak ada di tabel Pengguna
             },
           },
         },
@@ -89,7 +131,7 @@ async function getProperty(id: bigint) {
   if (product.status_tayang !== "TERSEDIA") return null;
 
   return product;
-}
+});
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slugId } = params;
@@ -111,11 +153,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     };
   }
 
+  // Lelang: harga utama ada di nilai_limit_lelang, bukan harga (yang bisa 0).
+  const hargaAngka = Number(product.nilai_limit_lelang ?? product.harga ?? 0) || Number(product.harga ?? 0);
   const hargaFormatted = new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",
     maximumFractionDigits: 0,
-  }).format(Number(product.harga));
+  }).format(hargaAngka);
 
   const namaAgent =
     product.agent?.pengguna?.nama_lengkap || "Agent Premier";
@@ -219,25 +263,32 @@ export default async function DetailPage({ params }: Props) {
     }
   }
 
-  const session = await getServerSession(authOptions);
+  // Jalankan semua query independen secara paralel
+  const [session, stoker, presentingAgent, similarItems] = await Promise.all([
+    getServerSession(authOptions),
+    prisma.agent.findFirst({
+      where: { jabatan: "STOKER", status_keanggotaan: "AKTIF" },
+      orderBy: { tanggal_gabung: "asc" },
+      select: {
+        nomor_whatsapp: true,
+        pengguna: { select: { nomor_telepon: true } },
+      },
+    }),
+    getPresentingAgent(agentId),
+    getSimilarItems(product),
+  ]);
+
   const loggedInAgentId = (session?.user as any)?.agentId || null;
   const role = (session?.user as any)?.role || null;
   const jabatan = (session?.user as any)?.jabatan || null;
-
   const currentAgentId = loggedInAgentId;
-
-  // ✅ Nomor stoker (untuk tujuan "Tanyakan Stok" dari agent/role lain).
-  // agent (jabatan = STOKER) -> join pengguna -> nomor_telepon
-  const stoker = await prisma.agent.findFirst({
-    where: { jabatan: "STOKER", status_keanggotaan: "AKTIF" },
-    orderBy: { tanggal_gabung: "asc" },
-    select: {
-      nomor_whatsapp: true,
-      pengguna: { select: { nomor_telepon: true } },
-    },
-  });
   const stokerPhone =
     stoker?.pengguna?.nomor_telepon || stoker?.nomor_whatsapp || null;
+
+  // selfAgent: reuse presentingAgent kalau agent yang login = agent di URL
+  const selfAgent = loggedInAgentId
+    ? (loggedInAgentId === agentId ? presentingAgent : await getPresentingAgent(loggedInAgentId))
+    : null;
 
   const rawGambar = product.gambar || "";
   const fotoArray =
@@ -250,9 +301,6 @@ export default async function DetailPage({ params }: Props) {
 
   const finalFotoArray =
     fotoArray.length > 0 ? fotoArray : ["/images/hero/banner.jpg"];
-
-  // Rekomendasi "Properti Serupa" — campuran Primary/Secondary/Lelang, di-ranking relevansi.
-  const similarItems = await getSimilarItems(product);
 
   const productAgentPhoto = normalizeAgentPhoto(
     product.agent?.foto_profil_url
@@ -276,6 +324,8 @@ export default async function DetailPage({ params }: Props) {
         currentRole={role}
         currentJabatan={jabatan}
         stokerPhone={stokerPhone}
+        presentingAgent={presentingAgent}
+        selfAgent={selfAgent}
       />
     </main>
   );

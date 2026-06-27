@@ -28,13 +28,13 @@ const ModalNPWP: React.FC<Props> = ({
 
   useEffect(() => {
     if (open) {
-      setImageSrc(initialImageUrl || null);
+      setImageSrc(null);
       setCrop({ x: 0, y: 0 });
       setZoom(1);
       setCroppedAreaPixels(null);
       setLoading(false);
     }
-  }, [open, initialImageUrl]);
+  }, [open]);
 
   const onCropComplete = useCallback(
     (_croppedArea: Area, croppedPixels: Area) => {
@@ -194,6 +194,18 @@ const ModalNPWP: React.FC<Props> = ({
             <div className="flex-1 overflow-y-auto px-5 py-4 pb-8 grid grid-cols-1 md:grid-cols-[2fr_minmax(0,1fr)] gap-4">
               {/* Crop area */}
               <div className="flex flex-col gap-3">
+                {/* Preview NPWP tersimpan */}
+                {initialImageUrl && !imageSrc && (
+                  <div className="rounded-xl border border-amber-400/20 bg-amber-500/5 p-2 flex flex-col gap-1.5">
+                    <p className="text-[10px] text-amber-300 px-1">Foto NPWP tersimpan saat ini:</p>
+                    <img
+                      src={initialImageUrl}
+                      alt="NPWP tersimpan"
+                      className="w-full rounded-lg object-contain max-h-28"
+                    />
+                    <p className="text-[10px] text-gray-500 px-1">Unggah foto baru di bawah untuk menggantinya.</p>
+                  </div>
+                )}
                 <div className="relative rounded-xl border border-white/10 bg-gradient-to-br from-slate-900 via-slate-950 to-black overflow-hidden min-h-[260px] md:min-h-[320px] flex items-center justify-center">
                   {imageSrc ? (
                     <div className="relative w-full h-full">

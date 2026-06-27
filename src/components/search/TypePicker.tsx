@@ -126,10 +126,18 @@ export default function TypePicker({
   // posisi panel (fixed, ter-clamp ke viewport)
   const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
-  const PANEL_W = Math.min(300, vw - 16);
-  const top = rect ? rect.bottom + 10 : 0;
-  const left = rect ? Math.max(8, Math.min(rect.left, vw - PANEL_W - 8)) : 8;
-  const maxH = Math.max(240, Math.min(440, vh - top - 16));
+  // Lebar panel = lebar trigger (min 260px, max 300px) — BUKAN berbasis viewport
+  const PANEL_W = Math.min(300, Math.max(rect?.width ?? 260, 260));
+  const rawLeft = rect ? rect.left : 8;
+  const left = Math.max(8, rawLeft + PANEL_W > vw - 8 ? vw - PANEL_W - 8 : rawLeft);
+  // Buka ke atas jika ruang bawah < 280px dan ruang atas lebih banyak
+  const spaceBelow = rect ? vh - rect.bottom - 16 : 400;
+  const spaceAbove = rect ? rect.top - 16 : 400;
+  const openUpward = spaceBelow < 280 && spaceAbove > spaceBelow;
+  const maxH = Math.max(240, Math.min(440, openUpward ? spaceAbove : spaceBelow));
+  const top = openUpward
+    ? (rect?.top ?? 0) - maxH - 8
+    : (rect?.bottom ?? 0) + 8;
 
   const panel = mounted
     ? createPortal(
@@ -138,9 +146,9 @@ export default function TypePicker({
             <motion.div
               key="typepanel"
               data-search-portal="true"
-              initial={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0, y: openUpward ? -8 : 8 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 8 }}
+              exit={{ opacity: 0, y: openUpward ? -8 : 8 }}
               transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
               onMouseDown={(e) => e.stopPropagation()}
               style={{
@@ -247,11 +255,13 @@ export default function TypePicker({
         className="cursor-pointer h-full flex flex-col justify-center group"
         onClick={() => onOpenChange(!open)}
       >
-        <label
-          className={`text-[10px] font-extrabold tracking-wider uppercase mb-1 block transition-colors ${t.triggerLabel}`}
-        >
-          {label}
-        </label>
+        {label ? (
+          <label
+            className={`text-[10px] font-extrabold tracking-wider uppercase mb-1 block transition-colors ${t.triggerLabel}`}
+          >
+            {label}
+          </label>
+        ) : null}
         <div className="flex items-center gap-2 w-full">
           <Icon
             icon="solar:buildings-bold-duotone"

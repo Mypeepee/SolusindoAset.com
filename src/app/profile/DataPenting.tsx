@@ -3,34 +3,7 @@
 import React from "react";
 import { Icon } from "@iconify/react";
 import { motion } from "framer-motion";
-
-// Helper: build Google Drive thumbnail URL (id atau full URL)
-const buildDriveImageUrl = (idOrUrl?: string | null) => {
-  if (!idOrUrl) return null;
-
-  let raw = idOrUrl.trim();
-
-  // Pure ID
-  if (!raw.includes("http")) {
-    return `https://drive.google.com/thumbnail?id=${raw}&sz=w1000`;
-  }
-
-  try {
-    const url = new URL(raw);
-    const fromQuery = url.searchParams.get("id");
-    if (fromQuery) {
-      return `https://drive.google.com/thumbnail?id=${fromQuery}&sz=w1000`;
-    }
-    const match = url.pathname.match(/\/d\/([^/]+)/);
-    if (match?.[1]) {
-      return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w1000`;
-    }
-  } catch {
-    // ignore
-  }
-
-  return null;
-};
+import { driveImageUrl as buildDriveImageUrl } from "@/lib/utils";
 
 export type AgentData = {
   foto_ktp_url?: string | null;

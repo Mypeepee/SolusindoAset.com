@@ -976,9 +976,12 @@ function OfferModal({
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN SIDEBAR
 // ─────────────────────────────────────────────────────────────────────────────
-interface AgentSidebarProps { data: any }
+interface AgentSidebarProps {
+  data: any;
+  onShareOpen?: () => void;
+}
 
-export default function AgentSidebar({ data }: AgentSidebarProps) {
+export default function AgentSidebar({ data, onShareOpen }: AgentSidebarProps) {
   const { data: session } = useSession();
   const [surveyOpen,   setSurveyOpen]   = useState(false);
   const [offerOpen,    setOfferOpen]    = useState(false);
@@ -1305,12 +1308,21 @@ export default function AgentSidebar({ data }: AgentSidebarProps) {
         <div className="px-6 py-5 space-y-2.5">
           {isOwnerViewer ? (
             <>
-              <Link href={editPropertyHref}
-                className="w-full bg-[#86efac] hover:bg-[#6ee7a8] active:scale-[0.98] text-black font-extrabold text-sm py-3.5 rounded-xl transition-all flex justify-center items-center gap-2.5"
-                style={{ boxShadow:"0 8px 32px rgba(134,239,172,0.22)" }}>
-                <Icon icon="solar:pen-2-bold-duotone" className="text-xl" />
-                Edit Properti
-              </Link>
+              <div className="flex gap-2">
+                {onShareOpen && (
+                  <button onClick={onShareOpen}
+                    className="shrink-0 w-[52px] rounded-xl flex items-center justify-center transition-all active:scale-95 hover:scale-105"
+                    style={{ background:"rgba(134,239,172,0.08)", border:"1px solid rgba(134,239,172,0.3)" }}>
+                    <Icon icon="solar:share-bold-duotone" style={{ color:"#86efac", fontSize:20 }} />
+                  </button>
+                )}
+                <Link href={editPropertyHref}
+                  className="flex-1 bg-[#86efac] hover:bg-[#6ee7a8] active:scale-[0.98] text-black font-extrabold text-sm py-3.5 rounded-xl transition-all flex justify-center items-center gap-2.5"
+                  style={{ boxShadow:"0 8px 32px rgba(134,239,172,0.22)" }}>
+                  <Icon icon="solar:pen-2-bold-duotone" className="text-xl" />
+                  Edit Properti
+                </Link>
+              </div>
               <button onClick={handleDownloadBrosur} disabled={isDownloadingBrosur}
                 className="w-full bg-white/[0.04] border border-white/[0.09] hover:bg-white/[0.08] text-white/70 hover:text-white font-bold text-sm py-3.5 rounded-xl transition-all flex justify-center items-center gap-2 disabled:opacity-60">
                 <Icon icon={isDownloadingBrosur ? "solar:refresh-bold" : "solar:gallery-download-bold-duotone"} className={`text-base ${isDownloadingBrosur ? "animate-spin" : ""}`} />
@@ -1461,10 +1473,20 @@ export default function AgentSidebar({ data }: AgentSidebarProps) {
                   style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)" }}
                 >
                   <Icon icon={isDownloadingBrosur ? "solar:refresh-bold" : "solar:gallery-download-bold-duotone"} className={`text-white/70 text-[17px] ${isDownloadingBrosur ? "animate-spin" : ""}`} />
-                  <span className="text-[8px] font-black text-white/35 uppercase tracking-widest">
-                    Poster
-                  </span>
+                  <span className="text-[8px] font-black text-white/35 uppercase tracking-widest">Poster</span>
                 </button>
+
+                {/* Bagikan */}
+                {onShareOpen && (
+                  <button
+                    onClick={onShareOpen}
+                    className="flex-1 flex flex-col items-center justify-center gap-[3px] rounded-2xl transition-all active:scale-[0.96]"
+                    style={{ background: "rgba(134,239,172,0.07)", border: "1px solid rgba(134,239,172,0.25)" }}
+                  >
+                    <Icon icon="solar:share-bold-duotone" style={{ color:"#86efac", fontSize:17 }} />
+                    <span className="text-[8px] font-black uppercase tracking-widest" style={{ color:"rgba(134,239,172,0.6)" }}>Bagikan</span>
+                  </button>
+                )}
               </>
             ) : (
             <>

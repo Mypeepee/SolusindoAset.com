@@ -62,7 +62,7 @@ export default async function AgentPage() {
     const initial = nama.trim().charAt(0).toUpperCase();
 
     const photoUrl = agent.foto_profil_url
-      ? `https://drive.google.com/thumbnail?id=${agent.foto_profil_url}`
+      ? `/api/drive-image?id=${agent.foto_profil_url}&sz=w200`
       : null;
 
     return {

@@ -306,6 +306,7 @@ const PropertyCard = ({ item }: { item: PropertyDB }) => {
                 src={item.agent_photo || "/images/user/user-01.png"}
                 alt="Agent"
                 fill
+                sizes="32px"
                 className="object-cover"
               />
             </div>

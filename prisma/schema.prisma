@@ -153,6 +153,10 @@ model Listing {
   @@index([jenis_transaksi], map: "idx_property_jenis")
   @@index([id_agent], map: "idx_property_agent")
   @@index([slug], map: "idx_property_slug")
+  @@index([status_tayang], map: "idx_property_status")
+  @@index([is_hot_deal], map: "idx_property_hot_deal")
+  @@index([status_tayang, jenis_transaksi, tanggal_dibuat(sort: Desc)], map: "idx_property_status_jenis_tgl")
+  @@index([status_tayang, is_hot_deal, jenis_transaksi], map: "idx_property_status_hot_jenis")
   @@map("listing")
 }
 
@@ -533,8 +537,10 @@ model Acara {
   tanggal_dibuat   DateTime          @default(now()) @db.Timestamptz(6)
   tanggal_diupdate DateTime          @default(now()) @db.Timestamptz(6)
   sudah_dimulai    Boolean           @default(false)
+  id_klien_ref     String?           @db.VarChar(20)
   agent            Agent?            @relation(fields: [id_agent], references: [id_agent])
   listing          Listing?          @relation(fields: [id_property], references: [id_property])
+  klienRef         Klien?            @relation("KlienFollowUpAcara", fields: [id_klien_ref], references: [id_klien], onDelete: SetNull, map: "acara_klien_ref_fk")
   pesertaAcara     PesertaAcara[]
   pilihanPemilu    PilihanPemilu[]
   undangan         UndanganAcara[]
@@ -543,6 +549,7 @@ model Acara {
   @@index([tipe_acara], map: "idx_acara_tipe")
   @@index([tanggal_mulai], map: "idx_acara_tanggal")
   @@index([status_acara], map: "idx_acara_status")
+  @@index([id_klien_ref], map: "idx_acara_klien_ref")
   @@map("acara")
 }
 
@@ -804,6 +811,7 @@ model Klien {
   leadAsal     Lead?         @relation(fields: [id_lead_asal], references: [id_lead], onDelete: SetNull, map: "klien_lead_fk")
   propertiAsal Listing?      @relation(fields: [id_properti_asal], references: [id_property], onDelete: SetNull, map: "klien_properti_fk")
   preferensi    PreferensiKlien[]
+  followUpAcara Acara[]           @relation("KlienFollowUpAcara")
 
   @@index([id_agent], map: "idx_klien_agent")
   @@index([id_agent, status], map: "idx_klien_status")
@@ -1297,6 +1305,7 @@ enum tipe_notifikasi_enum {
   CO_BROKE_SUBMITTED
   CO_BROKE_ACCEPTED
   CO_BROKE_REJECTED
+  KLIEN_REFERRAL
 }
 
 enum status_tugas_enum {
