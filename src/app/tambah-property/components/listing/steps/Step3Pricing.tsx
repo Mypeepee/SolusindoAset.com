@@ -472,42 +472,45 @@ export function Step3Pricing({ form }: Step3Props) {
               error={errors.harga?.message}
               description={isSewa ? 'Harga sewa property per tahun' : 'Harga jual property'}
             >
-              <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 rounded-xl blur-lg opacity-0 group-focus-within:opacity-100 transition-opacity" />
-                <div className="relative flex items-center">
-                  <div className="absolute left-4 flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4 text-emerald-400" />
-                    <span className="text-emerald-400 font-bold text-sm">Rp</span>
-                  </div>
-                  <input
-                    type="text"
-                    value={hargaFormatted}
-                    onChange={handleHargaChange}
-                    placeholder="2.500.000.000"
-                    className={cn(
-                      'w-full h-14 pl-20 rounded-xl text-base font-semibold text-slate-100',
-                      isSewa ? 'pr-32' : 'pr-12',
-                      'bg-slate-900/50 border-2 border-slate-800',
-                      'focus:border-emerald-500/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20',
-                      'transition-all duration-300',
-                      'placeholder:text-slate-600',
-                    )}
-                  />
-                  {isSewa && (
-                    <div className="absolute right-10 text-slate-400 text-xs font-semibold whitespace-nowrap">
-                      / tahun
+              <div className="flex items-center gap-2">
+                {/* Input wrapper */}
+                <div className="relative group flex-1">
+                  <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 rounded-xl blur-lg opacity-0 group-focus-within:opacity-100 transition-opacity" />
+                  <div className="relative flex items-center">
+                    <div className="absolute left-4 flex items-center gap-2 z-10">
+                      <TrendingUp className="h-4 w-4 text-emerald-400" />
+                      <span className="text-emerald-400 font-bold text-sm">Rp</span>
                     </div>
-                  )}
-                  {harga && harga > 0 && (
-                    <motion.div
-                      initial={{ scale: 0, rotate: -180 }}
-                      animate={{ scale: 1, rotate: 0 }}
-                      className="absolute right-4"
-                    >
-                      <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                    </motion.div>
-                  )}
+                    <input
+                      type="text"
+                      value={hargaFormatted}
+                      onChange={handleHargaChange}
+                      placeholder="2.500.000.000"
+                      className={cn(
+                        'w-full h-14 pl-20 pr-10 rounded-xl text-base font-semibold text-slate-100',
+                        'bg-slate-900/50 border-2 border-slate-800',
+                        'focus:border-emerald-500/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20',
+                        'transition-all duration-300',
+                        'placeholder:text-slate-600',
+                      )}
+                    />
+                    {harga && harga > 0 && (
+                      <motion.div
+                        initial={{ scale: 0, rotate: -180 }}
+                        animate={{ scale: 1, rotate: 0 }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2"
+                      >
+                        <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                      </motion.div>
+                    )}
+                  </div>
                 </div>
+                {/* "/ tahun" di luar input — tidak makan ruang text */}
+                {isSewa && (
+                  <span className="text-slate-400 text-sm font-semibold whitespace-nowrap flex-shrink-0">
+                    / thn
+                  </span>
+                )}
               </div>
             </FormField>
 
@@ -548,42 +551,45 @@ export function Step3Pricing({ form }: Step3Props) {
               description="Berikan diskon khusus untuk menarik lebih banyak buyer"
               badge="Optional"
             >
-              <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-amber-500/20 to-orange-500/20 rounded-xl blur-lg opacity-0 group-focus-within:opacity-100 transition-opacity" />
-                <div className="relative flex items-center">
-                  <div className="absolute left-4 flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-amber-400" />
-                    <span className="text-amber-400 font-bold text-sm">Rp</span>
-                  </div>
-                  <input
-                    type="text"
-                    value={hargaPromoFormatted}
-                    onChange={handleHargaPromoChange}
-                    placeholder="2.350.000.000"
-                    className={cn(
-                      'w-full h-14 pl-20 rounded-xl text-base font-semibold text-slate-100',
-                      isSewa ? 'pr-32' : 'pr-12',
-                      'bg-slate-900/50 border-2 border-slate-800',
-                      'focus:border-amber-500/50 focus:outline-none focus:ring-2 focus:ring-amber-500/20',
-                      'transition-all duration-300',
-                      'placeholder:text-slate-600',
-                    )}
-                  />
-                  {isSewa && (
-                    <div className="absolute right-10 text-slate-400 text-xs font-semibold whitespace-nowrap">
-                      / tahun
+              <div className="flex items-center gap-2">
+                {/* Input wrapper */}
+                <div className="relative group flex-1">
+                  <div className="absolute inset-0 bg-gradient-to-r from-amber-500/20 to-orange-500/20 rounded-xl blur-lg opacity-0 group-focus-within:opacity-100 transition-opacity" />
+                  <div className="relative flex items-center">
+                    <div className="absolute left-4 flex items-center gap-2 z-10">
+                      <Sparkles className="h-4 w-4 text-amber-400" />
+                      <span className="text-amber-400 font-bold text-sm">Rp</span>
                     </div>
-                  )}
-                  {hasPromo && (
-                    <motion.div
-                      initial={{ scale: 0, rotate: -180 }}
-                      animate={{ scale: 1, rotate: 0 }}
-                      className="absolute right-4"
-                    >
-                      <Sparkles className="h-5 w-5 text-amber-500" />
-                    </motion.div>
-                  )}
+                    <input
+                      type="text"
+                      value={hargaPromoFormatted}
+                      onChange={handleHargaPromoChange}
+                      placeholder="2.350.000.000"
+                      className={cn(
+                        'w-full h-14 pl-20 pr-10 rounded-xl text-base font-semibold text-slate-100',
+                        'bg-slate-900/50 border-2 border-slate-800',
+                        'focus:border-amber-500/50 focus:outline-none focus:ring-2 focus:ring-amber-500/20',
+                        'transition-all duration-300',
+                        'placeholder:text-slate-600',
+                      )}
+                    />
+                    {hasPromo && (
+                      <motion.div
+                        initial={{ scale: 0, rotate: -180 }}
+                        animate={{ scale: 1, rotate: 0 }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2"
+                      >
+                        <Sparkles className="h-5 w-5 text-amber-500" />
+                      </motion.div>
+                    )}
+                  </div>
                 </div>
+                {/* "/ tahun" di luar input */}
+                {isSewa && (
+                  <span className="text-slate-400 text-sm font-semibold whitespace-nowrap flex-shrink-0">
+                    / thn
+                  </span>
+                )}
               </div>
             </FormField>
 

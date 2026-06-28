@@ -221,13 +221,13 @@ export function PremiumSelect({
           <motion.ul
             id={listId}
             role="listbox"
-            initial={{ opacity: 0, y: -8, scale: 0.97 }}
+            initial={{ opacity: 0, y: 8, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -8, scale: 0.97 }}
+            exit={{ opacity: 0, y: 8, scale: 0.97 }}
             transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
             className={cn(
-              'absolute left-0 right-0 top-[calc(100%+10px)] z-50 max-h-72 overflow-y-auto rounded-2xl p-1.5',
-              'border border-white/10 bg-slate-950/85 backdrop-blur-2xl',
+              'absolute left-0 right-0 bottom-[calc(100%+10px)] z-50 max-h-64 overflow-y-auto rounded-2xl p-1.5',
+              'border border-white/10 bg-slate-950 backdrop-blur-2xl',
               '[scrollbar-width:thin]',
               cfg.panelShadow
             )}
