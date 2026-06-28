@@ -140,12 +140,28 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Ensure slug is unique — auto-append suffix if collision exists
+    let uniqueSlug = (body.slug || body.judul)
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .substring(0, 80);
+
+    const slugInUse = await prisma.listing.findUnique({ where: { slug: uniqueSlug } });
+    if (slugInUse) {
+      const suffix = Math.random().toString(36).substring(2, 7);
+      uniqueSlug = `${uniqueSlug.substring(0, 74)}-${suffix}`;
+    }
+
     // Create listing
     const listing = await prisma.listing.create({
       data: {
         id_agent: agent.id_agent,
         judul: body.judul,
-        slug: body.slug,
+        slug: uniqueSlug,
         deskripsi: body.deskripsi || null,
         jenis_transaksi,
         kategori,

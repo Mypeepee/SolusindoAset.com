@@ -163,7 +163,7 @@ export function Step4Specifications({ form }: Step4Props) {
 
         <div className="grid md:grid-cols-3 gap-6">
           {/* Luas Tanah */}
-          <FormField label="Luas Tanah" error={errors.luas_tanah?.message}>
+          <FormField label="Luas Tanah" required error={errors.luas_tanah?.message}>
             <div className="relative group">
               <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 rounded-xl blur-lg opacity-0 group-focus-within:opacity-100 transition-opacity" />
               <div className="relative flex items-center">
@@ -299,9 +299,9 @@ export function Step4Specifications({ form }: Step4Props) {
               className="relative overflow-hidden rounded-xl bg-gradient-to-br from-slate-900 to-black border border-emerald-500/20 p-5"
             >
               <div className="absolute top-0 right-0 w-40 h-40 bg-emerald-500/5 rounded-full blur-3xl" />
-              <div className="relative flex items-center justify-between">
+              <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
+                  <div className="w-12 h-12 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center flex-shrink-0">
                     <TrendingUp className="h-6 w-6 text-emerald-400" />
                   </div>
                   <div>
@@ -313,8 +313,8 @@ export function Step4Specifications({ form }: Step4Props) {
                     </p>
                   </div>
                 </div>
-                <div className="flex flex-col items-end gap-2">
-                  <div className="w-40 h-3 bg-slate-800 rounded-full overflow-hidden">
+                <div className="flex flex-col gap-2 sm:items-end">
+                  <div className="w-full sm:w-40 h-3 bg-slate-800 rounded-full overflow-hidden">
                     <motion.div
                       initial={{ width: 0 }}
                       animate={{ width: `${Math.min(buildingRatio, 100)}%` }}
@@ -574,6 +574,7 @@ export function Step4Specifications({ form }: Step4Props) {
           {/* Jenis Sertifikat */}
           <FormField
             label="Jenis Sertifikat"
+            required
             error={errors.legalitas?.message}
           >
             <div className="group">

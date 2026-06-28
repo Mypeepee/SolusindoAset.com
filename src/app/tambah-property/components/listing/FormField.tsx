@@ -12,20 +12,24 @@ interface FormFieldProps {
   hint?: string;
   children: React.ReactNode;
   className?: string;
-  description?: string; // ✅ Additional context
-  icon?: React.ReactNode; // ✅ Custom icon for label
+  description?: string;
+  icon?: React.ReactNode;
+  badge?: string;
+  loading?: boolean;
 }
 
-export function FormField({ 
-  label, 
-  required, 
-  error, 
-  success, 
-  hint, 
+export function FormField({
+  label,
+  required,
+  error,
+  success,
+  hint,
   children,
   className,
   description,
-  icon
+  icon,
+  badge,
+  loading,
 }: FormFieldProps) {
   return (
     <motion.div 
@@ -47,11 +51,16 @@ export function FormField({
           </Label>
         </div>
 
-        {/* Optional badge (e.g., "Beta", "New") */}
-        {description && (
+        {badge && (
           <span className="text-[10px] px-2 py-0.5 bg-slate-800 text-slate-400 rounded-full border border-slate-700 uppercase tracking-wider font-semibold">
-            Optional
+            {badge}
           </span>
+        )}
+        {loading && (
+          <svg className="h-3.5 w-3.5 animate-spin text-emerald-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+          </svg>
         )}
       </div>
 

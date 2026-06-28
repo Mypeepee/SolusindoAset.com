@@ -32,7 +32,7 @@ export const listingSchema = z
     slug: z.string().optional(),
 
     jenis_transaksi: z.enum(['PRIMARY', 'SECONDARY', 'LELANG', 'SEWA'], {
-      required_error: 'Pilih jenis transaksi',
+      error: 'Pilih jenis transaksi',
     }),
 
     kategori: z.enum(
@@ -47,7 +47,7 @@ export const listingSchema = z
         'PABRIK',
       ],
       {
-        required_error: 'Pilih kategori properti',
+        error: 'Pilih kategori property',
       }
     ),
 
@@ -208,6 +208,24 @@ export const listingSchema = z
         code: z.ZodIssueCode.custom,
         message: 'Uang jaminan tidak boleh lebih besar dari nilai limit lelang',
         path: ['uang_jaminan'],
+      });
+    }
+
+    // ✅ Luas tanah wajib
+    if (!data.luas_tanah || Number(data.luas_tanah) <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Luas tanah wajib diisi',
+        path: ['luas_tanah'],
+      });
+    }
+
+    // ✅ Sertifikat wajib
+    if (!data.legalitas) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Jenis sertifikat wajib dipilih',
+        path: ['legalitas'],
       });
     }
   });

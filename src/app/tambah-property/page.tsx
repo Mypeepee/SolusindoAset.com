@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ListingFormData, listingSchema } from '@/lib/validations/listing';
@@ -14,7 +14,8 @@ import { Step4Specifications } from './components/listing/steps/Step4Specificati
 import { Step5Media } from './components/listing/steps/Step5Media';
 import { useFormPersist } from './hooks/useFormPersist';
 import { motion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Save, Send, ArrowLeft } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Send, ArrowLeft, AlertTriangle, X } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 
@@ -44,10 +45,12 @@ function TambahPropertyContent() {
 
   const [currentStep, setCurrentStep] = useState(1);
   const [justEnteredStep5, setJustEnteredStep5] = useState(false);
+  const formTopRef = useRef<HTMLDivElement>(null);
   const [images, setImages] = useState<ImageFile[]>([]);
   const [saveStatus] = useState<SaveStatus>('idle');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showExitModal, setShowExitModal] = useState(false);
 
   const form = useForm<ListingFormData>({
     resolver: zodResolver(listingSchema),
@@ -72,6 +75,15 @@ function TambahPropertyContent() {
       loadListingData(listingId);
     }
   }, [isEditMode, listingId]);
+
+  // Auto-scroll to form top on step change (runs after render, reliable on mobile)
+  useEffect(() => {
+    if (formTopRef.current) {
+      const headerOffset = 72;
+      const y = formTopRef.current.getBoundingClientRect().top + window.scrollY - headerOffset;
+      window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+    }
+  }, [currentStep]);
 
   const loadListingData = async (id: string) => {
     setIsLoading(true);
@@ -145,10 +157,10 @@ function TambahPropertyContent() {
 
   const validateStep = async (step: number): Promise<boolean> => {
     const fieldsToValidate: Record<number, (keyof ListingFormData)[]> = {
-      1: ['judul', 'jenis_transaksi', 'kategori', 'tipe_property'],
+      1: ['judul', 'jenis_transaksi', 'kategori'],
       2: ['kota', 'provinsi', 'alamat_lengkap'],
       3: ['harga'],
-      4: ['luas_tanah', 'luas_bangunan'],
+      4: ['luas_tanah', 'legalitas'],
       5: [],
     };
 
@@ -185,21 +197,13 @@ function TambahPropertyContent() {
         }
         return next;
       });
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
   const handlePrevious = () => {
     if (currentStep > 1) {
       setCurrentStep((prev) => prev - 1);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  };
-
-  const handleSaveDraft = async () => {
-    toast.info(
-      'Fitur simpan draft otomatis dimatikan. Data hanya disimpan saat Publish / Update di Step 5.'
-    );
   };
 
   const uploadImagesToGoogleDrive = async (
@@ -422,12 +426,16 @@ function TambahPropertyContent() {
     });
 
     if (hasUnsavedChanges) {
-      const confirmExit = window.confirm(
-        '⚠️ Anda memiliki perubahan yang belum disimpan.\n\nApakah Anda yakin ingin keluar?'
-      );
-      if (!confirmExit) return;
+      setShowExitModal(true);
+      return;
     }
 
+    router.back();
+  };
+
+  const handleConfirmExit = () => {
+    clearDraft();
+    setShowExitModal(false);
     router.back();
   };
 
@@ -501,30 +509,101 @@ function TambahPropertyContent() {
               <AutoSaveIndicator status={saveStatus} />
             </div>
 
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleSaveDraft}
-              disabled={isEditMode}
-              className="group relative hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-slate-700 to-slate-700 transition-all duration-300 overflow-hidden"
-            >
-              <Save className="h-4 w-4 text-white relative z-10" />
-              <span className="text-sm font-medium text-white relative z-10">
-                Simpan Draft (non-aktif)
-              </span>
-            </motion.button>
-
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={handleSaveDraft}
-              disabled={isEditMode}
-              className="sm:hidden p-2 rounded-xl bg-slate-700"
-            >
-              <Save className="h-5 w-5 text-white" />
-            </motion.button>
+            <div className="w-28 sm:w-36" />
           </div>
         </div>
       </motion.div>
+
+      {/* Exit Confirmation Modal */}
+      <AnimatePresence>
+        {showExitModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+            onClick={() => setShowExitModal(false)}
+          >
+            {/* Backdrop */}
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+
+            {/* Modal */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 8 }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+              className="relative w-full max-w-md"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Glow ring */}
+              <div className="absolute -inset-px rounded-2xl bg-gradient-to-br from-amber-500/40 via-orange-500/20 to-red-500/30 blur-sm" />
+
+              <div className="relative rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 border border-white/10 overflow-hidden shadow-2xl">
+                {/* Top shimmer line */}
+                <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-amber-400/60 to-transparent" />
+
+                {/* Close button */}
+                <button
+                  onClick={() => setShowExitModal(false)}
+                  className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+
+                <div className="p-8">
+                  {/* Icon */}
+                  <div className="flex justify-center mb-6">
+                    <div className="relative">
+                      <div className="absolute inset-0 rounded-full bg-amber-500/20 blur-xl scale-150" />
+                      <div className="relative w-16 h-16 rounded-full bg-gradient-to-br from-amber-500/20 to-orange-500/10 border border-amber-500/30 flex items-center justify-center">
+                        <AlertTriangle className="w-7 h-7 text-amber-400" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Text */}
+                  <div className="text-center mb-8">
+                    <h2 className="text-xl font-bold text-white mb-2 tracking-tight">
+                      Keluar tanpa menyimpan?
+                    </h2>
+                    <p className="text-sm text-slate-400 leading-relaxed">
+                      Data yang sudah Anda isi akan hilang dan tidak dapat dikembalikan.
+                    </p>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex gap-3">
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => setShowExitModal(false)}
+                      className="flex-1 px-5 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-sm font-medium text-slate-300 transition-all duration-200"
+                    >
+                      Tetap di sini
+                    </motion.button>
+
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={handleConfirmExit}
+                      className="flex-1 relative px-5 py-3 rounded-xl overflow-hidden text-sm font-semibold text-white transition-all duration-200"
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-r from-red-600 to-rose-600" />
+                      <div className="absolute inset-0 bg-gradient-to-r from-red-500 to-rose-500 opacity-0 hover:opacity-100 transition-opacity duration-200" />
+                      <span className="relative">Ya, keluar</span>
+                    </motion.button>
+                  </div>
+                </div>
+
+                {/* Bottom shimmer line */}
+                <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
@@ -535,6 +614,7 @@ function TambahPropertyContent() {
             transition={{ delay: 0.1 }}
             className="lg:col-span-2"
           >
+            <div ref={formTopRef} />
             <ProgressIndicator currentStep={currentStep} steps={STEPS} />
 
             <form

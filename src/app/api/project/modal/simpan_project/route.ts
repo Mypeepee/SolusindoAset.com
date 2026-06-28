@@ -530,6 +530,11 @@ export async function POST(request: Request) {
         },
       });
 
+      await tx.listing.update({
+        where: { id_property: idListing },
+        data: { status_tayang: "TERJUAL" },
+      });
+
       return createdProject;
     });
 

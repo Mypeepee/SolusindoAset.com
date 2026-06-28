@@ -74,6 +74,8 @@ export function Step2Location({ form }: Step2Props) {
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
     libraries,
+    language: 'id',
+    region: 'ID',
   });
 
   const [map, setMap] = useState<google.maps.Map | null>(null);
@@ -157,16 +159,15 @@ export function Step2Location({ form }: Step2Props) {
     });
 
     if (provinsi) {
+      // Strip "Provinsi" prefix — label sudah tampil di UI
       const cleanProv = provinsi
         .replace(/^(Provinsi|Province|Prov\.?)\s*/i, '')
         .trim();
       setValue('provinsi', cleanProv);
     }
     if (kota) {
-      const cleanKota = kota
-        .replace(/^(Kabupaten|Kota|Kab\.?)\s*/i, '')
-        .trim();
-      setValue('kota', cleanKota);
+      // Pertahankan prefix "Kota" / "Kabupaten" sesuai permintaan user
+      setValue('kota', kota.trim());
     }
     if (kecamatan) {
       const cleanKecamatan = kecamatan

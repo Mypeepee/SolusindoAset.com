@@ -24,13 +24,15 @@ interface Step3Props {
   form: UseFormReturn<ListingFormData>;
 }
 
-// Helper: Format number with thousand separator
+// Helper: Format number with thousand separator (no leading zeros, no bare "0")
 const formatThousand = (value: string | number | null | undefined): string => {
   if (value === null || value === undefined) return '';
   const raw = typeof value === 'number' ? value.toString() : value;
   const numbers = raw.replace(/\D/g, '');
   if (!numbers) return '';
-  return parseInt(numbers, 10).toLocaleString('id-ID');
+  const parsed = parseInt(numbers, 10);
+  if (!parsed) return ''; // Prevent showing just "0"
+  return parsed.toLocaleString('id-ID');
 };
 
 // Helper: Parse formatted number
@@ -484,15 +486,15 @@ export function Step3Pricing({ form }: Step3Props) {
                     placeholder="2.500.000.000"
                     className={cn(
                       'w-full h-14 pl-20 rounded-xl text-base font-semibold text-slate-100',
-                      isSewa ? 'pr-28' : 'pr-12',
+                      isSewa ? 'pr-32' : 'pr-12',
                       'bg-slate-900/50 border-2 border-slate-800',
                       'focus:border-emerald-500/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20',
                       'transition-all duration-300',
                       'placeholder:text-slate-600',
                     )}
                   />
-                  {isSewa && harga && harga > 0 && (
-                    <div className="absolute right-12 text-slate-400 text-sm font-semibold">
+                  {isSewa && (
+                    <div className="absolute right-10 text-slate-400 text-xs font-semibold whitespace-nowrap">
                       / tahun
                     </div>
                   )}
@@ -524,12 +526,12 @@ export function Step3Pricing({ form }: Step3Props) {
                       {isSewa ? 'Harga Sewa' : 'Harga Jual'}
                     </span>
                   </div>
-                  <div className="flex items-baseline gap-2">
-                    <p className="text-4xl font-black text-emerald-400">
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <p className="text-2xl sm:text-3xl font-black text-emerald-400 break-all">
                       {formatCurrency(Number(harga))}
                     </p>
                     {isSewa && (
-                      <span className="text-lg text-slate-500 font-semibold">/ tahun</span>
+                      <span className="text-sm sm:text-base text-slate-500 font-semibold whitespace-nowrap">/ tahun</span>
                     )}
                   </div>
                   <p className="text-sm text-slate-500 mt-2">
@@ -560,15 +562,15 @@ export function Step3Pricing({ form }: Step3Props) {
                     placeholder="2.350.000.000"
                     className={cn(
                       'w-full h-14 pl-20 rounded-xl text-base font-semibold text-slate-100',
-                      isSewa ? 'pr-28' : 'pr-12',
+                      isSewa ? 'pr-32' : 'pr-12',
                       'bg-slate-900/50 border-2 border-slate-800',
                       'focus:border-amber-500/50 focus:outline-none focus:ring-2 focus:ring-amber-500/20',
                       'transition-all duration-300',
                       'placeholder:text-slate-600',
                     )}
                   />
-                  {isSewa && hasPromo && (
-                    <div className="absolute right-12 text-slate-400 text-sm font-semibold">
+                  {isSewa && (
+                    <div className="absolute right-10 text-slate-400 text-xs font-semibold whitespace-nowrap">
                       / tahun
                     </div>
                   )}

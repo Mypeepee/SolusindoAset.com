@@ -11,45 +11,13 @@ import {
   JENIS_TRANSAKSI_OPTIONS,
   KATEGORI_OPTIONS,
 } from '@/app/tambah-property/types/listing';
-import { Calendar, TrendingUp, Eye, Award } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { TrendingUp, Eye, Award } from 'lucide-react';
+import { cn, generateSlug } from '@/lib/utils';
+import { AuctionDatePicker } from '../AuctionDatePicker';
 
 interface Step1Props {
   form: UseFormReturn<ListingFormData>;
 }
-
-const generateSlugFromTitle = (title: string): string => {
-  if (!title) return '';
-
-  return title
-    .toLowerCase()
-    .trim()
-    .replace(/[àáâãäå]/g, 'a')
-    .replace(/[èéêë]/g, 'e')
-    .replace(/[ìíîï]/g, 'i')
-    .replace(/[òóôõö]/g, 'o')
-    .replace(/[ùúûü]/g, 'u')
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/\s+/g, ' ')
-    .replace(/\s/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .substring(0, 80)
-    .replace(/-+$/, '');
-};
-
-const toLocalDateTimeValue = (dateInput: Date | string) => {
-  const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
-  if (isNaN(date.getTime())) return '';
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
-};
 
 export function Step1BasicInfo({ form }: Step1Props) {
   const {
@@ -64,37 +32,19 @@ export function Step1BasicInfo({ form }: Step1Props) {
 
   const [titleScore, setTitleScore] = useState(0);
   const [titleTips, setTitleTips] = useState<string[]>([]);
-  const [dateTimeValue, setDateTimeValue] = useState('');
+
+  // Slug suffix dibuat SEKALI saat mount → tidak berubah tiap keystroke
+  const slugSuffixRef = React.useRef(Math.random().toString(36).substring(2, 7));
 
   useEffect(() => {
     if (judul) {
-      const slug = generateSlugFromTitle(judul);
+      const slug = generateSlug(judul) + '-' + slugSuffixRef.current;
       setValue('slug', slug);
     }
   }, [judul, setValue]);
 
-  useEffect(() => {
-    if (tanggalLelang) {
-      setDateTimeValue(toLocalDateTimeValue(tanggalLelang));
-    } else {
-      setDateTimeValue('');
-    }
-  }, [tanggalLelang]);
-
-  const handleDateTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setDateTimeValue(value);
-
-    if (!value) {
-      setValue('tanggal_lelang', undefined as any, { shouldValidate: true });
-      return;
-    }
-
-    const parsedDate = new Date(value);
-
-    if (!isNaN(parsedDate.getTime())) {
-      setValue('tanggal_lelang', parsedDate, { shouldValidate: true });
-    }
+  const handleDateChange = (date: Date | undefined) => {
+    setValue('tanggal_lelang', date ?? (undefined as any), { shouldValidate: true });
   };
 
   useEffect(() => {
@@ -424,47 +374,24 @@ export function Step1BasicInfo({ form }: Step1Props) {
                   </div>
                 </div>
 
-                <FormField
-                  label="Tanggal & Waktu Lelang"
-                  required
-                  error={errors.tanggal_lelang?.message}
-                  hint="Bisa pilih tanggal lampau maupun masa depan"
-                  icon={<Calendar className="h-3 w-3 text-amber-400" />}
-                >
-                  <div className="group relative">
-                    <input
-                      type="datetime-local"
-                      value={dateTimeValue}
-                      onChange={handleDateTimeChange}
-                      step={60}
-                      className="h-12 w-full rounded-xl border-2 border-slate-800 bg-slate-900/50 px-4 pr-12 text-slate-100 transition-all duration-300 focus:border-amber-500/50 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-                    />
-                    <Calendar className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-amber-400 transition-transform group-focus-within:scale-110" />
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm font-semibold text-slate-200">
+                      Tanggal &amp; Waktu Lelang
+                      <span className="ml-1 text-red-400">*</span>
+                    </span>
                   </div>
-                </FormField>
-
-                {tanggalLelang && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3"
-                  >
-                    <p className="mb-1 text-xs font-semibold text-amber-400">
-                      Preview Jadwal:
+                  <AuctionDatePicker
+                    value={tanggalLelang instanceof Date ? tanggalLelang : tanggalLelang ? new Date(tanggalLelang) : undefined}
+                    onChange={handleDateChange}
+                    error={errors.tanggal_lelang?.message}
+                  />
+                  {!errors.tanggal_lelang && (
+                    <p className="mt-1.5 text-xs text-slate-500">
+                      Bisa pilih tanggal lampau maupun masa depan
                     </p>
-                    <p className="text-sm text-slate-200">
-                      {new Date(tanggalLelang).toLocaleDateString('id-ID', {
-                        weekday: 'long',
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}{' '}
-                      WIB
-                    </p>
-                  </motion.div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
           </motion.div>

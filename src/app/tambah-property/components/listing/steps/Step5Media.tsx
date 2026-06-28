@@ -54,7 +54,10 @@ export function Step5Media({ form, images, onImagesChange }: Step5Props) {
   const legalitas = watch('legalitas');
   const nomorLegalitas = watch('nomor_legalitas');
   const harga = watch('harga');
-  const alamat = watch('alamat');
+  const hargaPromo = watch('harga_promo');
+  const nilaiLimitLelang = watch('nilai_limit_lelang');
+  const alamat = watch('alamat_lengkap');
+  const isSewa = jenisTransaksi === 'SEWA';
 
   // Calculate completion status
   const hasEnoughImages = images.length >= 3;
@@ -110,6 +113,15 @@ export function Step5Media({ form, images, onImagesChange }: Step5Props) {
       if (kondisiInterior) specs.push(`Kondisi: ${kondisiInterior}`);
       if (legalitas) specs.push(`Sertifikat: ${legalitas}`);
 
+      // Helper harga sesuai jenis transaksi
+      const hargaDisplay = isLelang
+        ? nilaiLimitLelang ? `💰 Nilai Limit Lelang: Rp ${formatHarga(Number(nilaiLimitLelang))}` : ''
+        : harga
+          ? isSewa
+            ? `💰 Harga Sewa: Rp ${formatHarga(Number(harga))} / tahun${hargaPromo ? `\n💸 Harga Promo: Rp ${formatHarga(Number(hargaPromo))} / tahun` : ''}`
+            : `💰 Harga: Rp ${formatHarga(Number(harga))}${hargaPromo ? `\n💸 Harga Promo: Rp ${formatHarga(Number(hargaPromo))}` : ''}`
+          : '';
+
       // TEMPLATE KHUSUS LELANG
       if (isLelang) {
         switch (template) {
@@ -121,7 +133,7 @@ export function Step5Media({ form, images, onImagesChange }: Step5Props) {
 SPESIFIKASI:
 ${specs.map(s => `• ${s}`).join('\n')}
 
-${legalitas && nomorLegalitas ? `LEGALITAS:\n• Sertifikat ${legalitas}\n• No. ${nomorLegalitas}\n\n` : ''}${harga ? `💰 Harga Lelang: Rp ${formatHarga(harga)}\n\n` : ''}🎯 Kenapa Beli Lelang Lebih Menarik?
+${legalitas && nomorLegalitas ? `LEGALITAS:\n• Sertifikat ${legalitas}\n• No. ${nomorLegalitas}\n\n` : ''}${hargaDisplay ? `${hargaDisplay}\n\n` : ''}🎯 Kenapa Beli Lelang Lebih Menarik?
 
 ✓ Harga jauh di bawah pasar → lebih murah dibanding property primary & second
 ✓ Potensi capital gain tinggi → bisa dijual kembali sesuai harga pasar
@@ -152,7 +164,7 @@ ${sumberAir ? `- Sumber Air: ${sumberAir}` : ''}
 
 ${hadapBangunan ? `Orientasi: ${hadapBangunan}\n` : ''}${kondisiInterior ? `Kondisi: ${kondisiInterior}\n` : ''}
 ${legalitas ? `📜 LEGALITAS:\n- Tipe Hak: ${legalitas}${nomorLegalitas ? `\n- Nomor: ${nomorLegalitas}` : ''}\n` : ''}
-${harga ? `💰 HARGA LELANG: Rp ${formatHarga(harga)}\n` : ''}
+${hargaDisplay ? `${hargaDisplay}\n` : ''}
 🎯 KEUNGGULAN LELANG:
 
 ✅ Harga Di Bawah Pasar
@@ -179,7 +191,7 @@ SPESIFIKASI:
 ${specs.slice(0, 6).map(s => `✓ ${s}`).join('\n')}
 ${legalitas ? `✓ ${legalitas}` : ''}
 
-${harga ? `💰 Harga Lelang: Rp ${formatHarga(harga)}\n` : ''}
+${hargaDisplay ? `${hargaDisplay}\n` : ''}
 🎯 KENAPA LELANG?
 ✓ Harga di bawah pasar
 ✓ Legal & aman
@@ -197,7 +209,7 @@ SPESIFIKASI PROPERTY:
 ${specs.map(s => `• ${s}`).join('\n')}
 
 ${legalitas ? `Dilengkapi dengan sertifikat ${legalitas} yang legal dan aman.\n` : ''}
-${harga ? `💰 Harga Lelang: Rp ${formatHarga(harga)}\n` : ''}
+${hargaDisplay ? `${hargaDisplay}\n` : ''}
 🏡 COCOK UNTUK KELUARGA
 ${kamarTidur && kamarTidur >= 3 ? `Dengan ${kamarTidur} kamar tidur, property ini ideal untuk keluarga dengan ruang yang cukup untuk seluruh anggota keluarga.\n` : ''}
 🎯 MENGAPA BELI LEWAT LELANG?
@@ -216,7 +228,7 @@ Beli dengan harga lelang, nilai property tetap sesuai harga pasar. Keuntungan la
 Hubungi kami untuk informasi detail dan panduan lengkap proses lelang!`;
             break;
         }
-      } 
+      }
       // TEMPLATE NORMAL (NON-LELANG)
       else {
         switch (template) {
@@ -226,11 +238,11 @@ Hubungi kami untuk informasi detail dan panduan lengkap proses lelang!`;
 SPESIFIKASI:
 ${specs.map(s => `• ${s}`).join('\n')}
 
-${legalitas && nomorLegalitas ? `LEGALITAS:\n• Sertifikat ${legalitas}\n• No. ${nomorLegalitas}\n\n` : ''}${harga ? `HARGA: Rp ${formatHarga(harga)}\n\n` : ''}Informasi lebih lanjut hubungi kami.`;
+${legalitas && nomorLegalitas ? `LEGALITAS:\n• Sertifikat ${legalitas}\n• No. ${nomorLegalitas}\n\n` : ''}${hargaDisplay ? `${hargaDisplay}\n\n` : ''}Informasi lebih lanjut hubungi kami.`;
             break;
 
           case 'detailed':
-            description = `${actionText} ${tipeProperty || 'Property'}${harga ? ` - Rp ${formatHarga(harga)}` : ''}
+            description = `${actionText} ${tipeProperty || 'Property'}${harga ? ` - Rp ${formatHarga(Number(harga))}${isSewa ? ' / tahun' : ''}` : ''}
 
 DETAIL PROPERTY:
 
@@ -247,6 +259,7 @@ ${sumberAir ? `- Sumber Air: ${sumberAir}` : ''}
 
 ${hadapBangunan ? `Orientasi Bangunan: ${hadapBangunan}\n` : ''}${kondisiInterior ? `Kondisi Interior: ${kondisiInterior}\n` : ''}
 ${legalitas ? `LEGALITAS:\n- Sertifikat: ${legalitas}${nomorLegalitas ? `\n- Nomor: ${nomorLegalitas}` : ''}\n` : ''}
+${hargaDisplay ? `${hargaDisplay}\n` : ''}
 Untuk informasi lebih detail dan jadwal survey, silakan hubungi kami.`;
             break;
 
@@ -256,18 +269,19 @@ Untuk informasi lebih detail dan jadwal survey, silakan hubungi kami.`;
 ${specs.slice(0, 6).map(s => `✓ ${s}`).join('\n')}
 ${legalitas ? `✓ ${legalitas}` : ''}
 
-${harga ? `💰 Harga: Rp ${formatHarga(harga)}` : ''}
+${hargaDisplay}
 
 Hubungi untuk info lengkap.`;
             break;
 
           case 'family':
-            description = `${tipeProperty || 'Property'} ${actionText}${harga ? ` - Rp ${formatHarga(harga)}` : ''}
+            description = `${tipeProperty || 'Property'} ${actionText}${harga ? ` - Rp ${formatHarga(Number(harga))}${isSewa ? ' / tahun' : ''}` : ''}
 
 Property ini menawarkan:
 ${specs.map(s => `• ${s}`).join('\n')}
 
 ${kondisiInterior ? `Interior dalam kondisi ${kondisiInterior.toLowerCase()}, ` : ''}${legalitas ? `dengan sertifikat ${legalitas} yang lengkap dan legal` : 'dengan legalitas yang jelas'}.
+${hargaPromo ? `\n💸 Tersedia harga promo: Rp ${formatHarga(Number(hargaPromo))}${isSewa ? ' / tahun' : ''}` : ''}
 
 ${kamarTidur && kamarTidur >= 3 ? 'Cocok untuk keluarga dengan ruang yang cukup untuk seluruh anggota keluarga.' : ''}
 
