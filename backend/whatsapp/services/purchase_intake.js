@@ -1,4 +1,5 @@
 import { CLOSING_STATE, CLOSING_FLOW_VERSION, closingDp, closingStockStatus, detectClosingIntent, requestsClosingExit } from './closing_state.js';
+import { localPropertyScope } from './property_scope.js';
 
 const normalize = (text = '') => text.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
 const money = value => `Rp ${value.toLocaleString('id-ID')}`;
@@ -15,7 +16,7 @@ export function isPurchasePreparationText(text, conversion) {
 }
 
 export function isPurchaseDocumentSubmission({ text = '', type, conversion }) {
-  return !!conversion?.purchase_intake &&
+  return localPropertyScope(text) !== 'other' && !!conversion?.purchase_intake &&
     (['image', 'document'].includes(type) || /\d{8,}|\b(?:nik|nomor rekening)\b/i.test(text));
 }
 

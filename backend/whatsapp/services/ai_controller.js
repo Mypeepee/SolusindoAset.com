@@ -10,6 +10,7 @@ import { purchaseCostReply } from './property_costs.js';
 import { withoutFloorCount } from './catalog.js';
 import { createClosingController } from './closing_controller.js';
 import { createSmartSearchParser } from './smart_search_parser.js';
+import { createPropertyScopeClassifier } from './property_scope.js';
 export { HANDOVER_MESSAGE, detectHandover } from './interaction_policy.js';
 
 export const FUNDS_QUESTION = 'Lelang ini mewajibkan uang jaminan tunai. Apakah Bapak/Ibu sudah memiliki alokasi dana siap pakai untuk aset ini?';
@@ -40,8 +41,10 @@ Konfirmasi area, gali pilihan transaksi, jenis properti, anggaran dan luas tanah
 opsi dari database dan bantu klien memilih. Sapaan, stiker dan topik lain
 ditangani backend; jangan mengirim pesan lanjutan tanpa pesan dari pelanggan.
 Jika pesan yang lolos pemeriksaan awal ternyata jelas di luar topik properti,
-set action="out_of_scope". Jangan jawab isi topik itu; backend mengirim sapaan
-standar maksimal sekali lalu diam. Bedakan topik lain dari bahasa tak dipahami.
+set action="out_of_scope". Jangan jawab isi topik itu; backend tidak mengirim
+balasan apa pun. Setelah perkenalan, tanyakan "Ada yang bisa saya bantu?" tanpa
+mengasumsikan klien mencari properti. Untuk pesan campuran, jawab hanya bagian
+properti. Bedakan topik lain dari bahasa tak dipahami.
 
 GAYA PERCAKAPAN
 Tanggapi inti pesan, lalu tanyakan hanya hal yang belum diketahui. Hindari gaya
@@ -405,6 +408,7 @@ export function createAiController(config, dependencies = {}) {
     generateClosing: createClosingController(config, dependencies),
     interpretBuyer: createBuyerInterpreter(config, dependencies),
     parseSearch: createSmartSearchParser(config, dependencies),
+    classifyPropertyScope: createPropertyScopeClassifier(config, dependencies),
     async generate({ history, facts, catalog, qualification, userText, knowledge, signal, now = Date.now() }) {
       facts = withoutFloorCount(facts);
       const options = catalog.filter((item) => !['sold', 'withdrawn'].includes(item.availability_status) &&

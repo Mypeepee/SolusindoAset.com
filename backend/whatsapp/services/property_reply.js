@@ -7,7 +7,7 @@ import { selectedRecommendation, isRecommendationList, AMBIGUOUS_SELECTION_REPLY
 import { purchaseCostReply, isPurchaseCostQuestion } from './property_costs.js';
 import { propertyDetailsReply, requestsPropertyDetails } from './property_details.js';
 import { CLARIFY_PROPERTY_MESSAGE, searchReply } from './search_reply.js';
-import { CONTEXT_REQUIRED_MESSAGE, HANDOVER_MESSAGE, interactionDecision, historyPolicy, requestsPropertySearch, hasPropertyReference } from './interaction_policy.js';
+import { CONTEXT_REQUIRED_MESSAGE, HANDOVER_MESSAGE, interactionDecision, resolveInteractionDecision, historyPolicy, requestsPropertySearch, hasPropertyReference } from './interaction_policy.js';
 import { requestsAlternatives } from './conversation_references.js';
 import { shouldInterpretBuyer } from './buyer_interpreter.js';
 import { UNDERSTANDING_VERSION } from './buyer_turn.js';
@@ -19,6 +19,7 @@ import { planPurchaseIntake, isPurchasePreparationText } from './purchase_intake
 import { shouldParseSmartSearch, applyDiscovery, discoverySnapshot, discoveryQuestionReply } from './smart_search_parser.js';
 import { assetConsultationTurn, isVisitRequest, isConditionQuestion } from './asset_consultation.js';
 import { previewSurveys } from './survey_booking.js';
+import { localPropertyScope, propertyScopeText } from './property_scope.js';
 
 export const PRIVACY_REPLY = 'Saya hanya dapat membantu dengan informasi properti yang ditayangkan untuk calon pembeli. Data akun, password, rekening, identitas pribadi, serta keuangan internal perusahaan tidak tersedia melalui chatbot.\n\nProperti atau kode aset mana yang ingin Bapak/Ibu ketahui?';
 
@@ -34,7 +35,8 @@ export function isPrivateRequest(text, conversion = null) {
 }
 
 export const publicConversationHistory = (history) => history.filter((item) =>
-  !(item.role === 'user' && isPrivateRequest(item.content)) && item.content !== PRIVACY_REPLY);
+  !item.property_ignored && !(item.role === 'user' && (isPrivateRequest(item.content) || localPropertyScope(item.content) === 'other')) && item.content !== PRIVACY_REPLY)
+  .map((item) => item.role === 'user' ? { ...item, content: propertyScopeText(item.content) } : item);
 
 // Browsing a recommendation changes the selected asset, not the buyer's
 // search. Keep qualification turns across details/costs, and mask the copied
@@ -93,11 +95,12 @@ function excludedRecommendations(history, text, originalId, state) {
   return [...excluded].slice(-64);
 }
 
-export async function resolvePropertyContext(catalog, text, previousId, history = [], now = Date.now(), signal, preferenceState = null, conversion = null, ai = null, consultationState = null) {
+export async function resolvePropertyContext(catalog, text, previousId, history = [], now = Date.now(), signal, preferenceState = null, conversion = null, ai = null, consultationState = null, forceSearch = false) {
+  text = propertyScopeText(text);
   if (!previousId && !hasPropertyReference(text) && !requestsPropertySearch(text)) previousId = selectedAssetIdFromHistory(history);
   const memory = retainedSearchHistory(publicConversationHistory(history));
   const continuation = explicitAsset(text, history.findLast((item) => item.role === 'assistant')) && memory.sourceId ? null : preferenceState;
-  let buyer = buyerContext(memory.history, text, previousId, { continuation });
+  let buyer = buyerContext(memory.history, text, previousId, { continuation, forceSearch });
   // Local rules extract known expressions first. The LLM receives every retained
   // turn plus the structured memory, and can only propose a validated delta.
   let parsed = null;
@@ -151,7 +154,7 @@ export async function resolvePropertyContext(catalog, text, previousId, history 
     const lastSelection = history.findLastIndex((item, index) => item.role === 'user' &&
       (hasPropertyReference(item.content) || selectedRecommendation(item.content, history.slice(0, index))));
     const lastSearch = history.findLastIndex((item) => item.role === 'user' && requestsPropertySearch(item.content));
-    const explicitSearch = requestsPropertySearch(text) || lastSearch > lastSelection;
+    const explicitSearch = forceSearch || requestsPropertySearch(text) || lastSearch > lastSelection;
     if (previousId && !explicitAsset(text, history.findLast((item) => item.role === 'assistant'))) {
       const remembered = understood(buyerContext(memory.history, text, previousId, { forceSearch: explicitSearch, continuation }));
       if (remembered.searching && remembered.stage === 'recommendations') {
@@ -310,25 +313,27 @@ async function propertyContextReply({ context, ai, text, history, qualification 
 }
 
 export async function generatePropertyReply({ catalog, ai, text, history, previousId, qualification = {}, sandbox = true, signal, policyState, surveys = sandbox ? previewSurveys : null, agentId = 'AG108', now = Date.now() }) {
+  history = history.filter((item) => !item.property_ignored);
   if (!previousId && !hasPropertyReference(text) && !requestsPropertySearch(text)) previousId = selectedAssetIdFromHistory(history);
   const state = policyState || historyPolicy(history);
   previousId ||= state.survey_state?.asset_id || state.consultation?.asset_id;
-  const decision = interactionDecision({ text, previousId, history, state: { ...state, canScheduleVisit: !!surveys } });
+  let decision = interactionDecision({ text, previousId, history, state: { ...state, canScheduleVisit: !!surveys } });
   const rules = (reply, status, action = 'reply') => ({ reply, action, suppressed: reply === null, qualification: {}, asset: null, knowledge: { status, source: 'interaction_policy' } });
   if (state.is_bot_active === false) return rules(null, 'human_handoff_paused');
-  if (isPrivateRequest(text, state.conversion)) return rules(state.out_of_scope_notified ? null : CONTEXT_REQUIRED_MESSAGE, state.out_of_scope_notified ? 'waiting_for_property' : 'context_required');
+  if (isPrivateRequest(text, state.conversion)) return rules(null, 'waiting_for_property');
   if (decision === 'handoff') return rules(HANDOVER_MESSAGE, 'handover_simulated', 'handoff');
   const client = clientIntroductionTurn({ text, history, identity: state.client_identity,
     hasContext: !!previousId || !!state.buyer_state?.searchStarted || history.some((item) => item.role === 'user' && requestsPropertySearch(item.content)) });
   if (client.reply) return rules(client.reply, client.identity.asked || client.identity.name || client.identity.salutation || client.identity.declined ? 'client_identified' : 'context_required');
+  decision = await resolveInteractionDecision({ text, previousId, history, state: { ...state, canScheduleVisit: !!surveys } }, ai, signal);
   if (decision === 'silent') return rules(null, 'waiting_for_property');
   if (decision === 'nudge') return rules(CONTEXT_REQUIRED_MESSAGE, 'context_required');
-  const context = await resolvePropertyContext(catalog, text, previousId, history, now, signal, state.buyer_state, state.conversion, ai, { surveyState: state.survey_state, consultation: state.consultation });
+  const context = await resolvePropertyContext(catalog, text, previousId, history, now, signal, state.buyer_state, state.conversion, ai, { surveyState: state.survey_state, consultation: state.consultation }, decision === 'search');
   const check = await requestAuctionCheck({ asset: context.checkAsset || context.asset, sandbox, now });
   const result = await replyFromPropertyContext({ context, ai, text, history, qualification, check, now, signal,
     selectedAssetId: previousId,
     conversion: state.conversion, clarify: decision === 'clarify', clientIdentity: client.identity,
     consultation: state.consultation, surveyState: state.survey_state, surveys, agentId, phone: sandbox ? '6280000000001' : null });
-  if (result.action === 'out_of_scope') return rules(state.out_of_scope_notified ? null : CONTEXT_REQUIRED_MESSAGE, state.out_of_scope_notified ? 'waiting_for_property' : 'context_required');
+  if (result.action === 'out_of_scope') return rules(null, 'waiting_for_property');
   return { ...result, buyer_state: context.buyer?.continuation || null };
 }

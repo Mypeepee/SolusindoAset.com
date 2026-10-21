@@ -33,7 +33,7 @@ function spokenNumber(raw) {
 // Small, explicit aliases only: no fuzzy correction of place names or amounts.
 export function normalizeBuyerLanguage(text) {
   return text.normalize('NFKC').replace(/\b(?:rmh|rmah)\b/gi, 'rumah')
-    .replace(/\b(?:nyari|nyarik|carinya)\b/gi, 'cari').replace(/\basset\b/gi, 'aset')
+    .replace(/\b(?:nyari|nyarik|carinya)\b/gi, 'cari').replace(/\b(?:cariin|carik(?:an|in))\b/gi, 'carikan').replace(/\basset\b/gi, 'aset')
     .replace(/\b(?:pengen|pingin|pgn)\b/gi, 'ingin')
     .replace(/\b(?:property|properties|proeprty)\b/gi, 'properti')
     .replace(/\b(property|properti|aset|rumah|unit)2(?=\s+(?:yang\s+)?(?:tersebut|ini|itu|tadi|sebelumnya|lain(?:nya)?)\b)/gi,

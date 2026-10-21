@@ -10,6 +10,7 @@ import { MemoryStore } from '../state/memory_store.js';
 import { MessageProcessor } from '../services/message_processor.js';
 import { createSandboxRouter } from '../routes/sandbox.js';
 import { IDLE_TIMEOUT_MS } from '../services/interaction_policy.js';
+import { addressedIntroductionSamples } from '../scripts/lib/addressed-introduction-samples.js';
 
 const user = (content) => ({ role: 'user', content });
 const assistant = (content) => ({ role: 'assistant', content });
@@ -42,6 +43,86 @@ test('greeting invites a chosen name and title; calling the bot pak or bu never 
   assert.equal(splitClientIntroduction('terima kasih pak', INTRODUCTION_MESSAGE).update, null);
 });
 
+const combinedIntroductions = [
+  'selamat siang, saya vera',
+  'selamat siang saya vera',
+  'selamat siang pak, saya vera',
+  'halo, nama saya vera',
+  'halo kak nama saya vera',
+  'hai! aku vera',
+  'hello 👋 saya vera',
+  'assalamualaikum, perkenalkan saya vera',
+  'Selamat pagi. Saya Vera.',
+  'selamat sore\nsaya vera',
+];
+
+test('greetings with a named recipient identify the client separately in varied word order and punctuation', async () => {
+  for (const sample of addressedIntroductionSamples()) {
+    for (const history of [[], introHistory]) {
+      const parsed = splitClientIntroduction(sample.text, history.at(-1)?.content);
+      assert.equal(parsed.update?.name, sample.name, sample.text);
+      assert.equal(parsed.remaining, '', sample.text);
+      const identity = clientIdentity([...history, user(sample.text)]);
+      assert.equal(identity.name, sample.name, sample.text);
+      assert.equal(identity.salutation, sample.salutation, sample.text);
+      const result = await generatePropertyReply({ text: sample.text, history, catalog: noCatalog, ai: noAi });
+      assert.equal(result.reply, `Salam kenal, ${sample.label}. Ada yang bisa saya bantu?`, sample.text);
+      assert.equal(result.suppressed, false, sample.text);
+      assert.equal(buyerContext(history, sample.text, null).searching, false, sample.text);
+    }
+  }
+});
+
+test('a greeting addressed to the agent invites the client name without treating the agent as the client', async () => {
+  for (const text of ['malam pak jason', 'halo Jason', 'selamat sore Pak Jason Christopher Liendo', 'halo Pak Budi', 'permisi Pak Jason']) {
+    const result = await generatePropertyReply({ text, history: [], catalog: noCatalog, ai: noAi });
+    assert.equal(result.reply, INTRODUCTION_MESSAGE, text);
+    assert.equal(clientIdentity([user(text)]).name, null, text);
+    assert.equal(clientIdentity([user(text)]).salutation, null, text);
+  }
+});
+
+test('a greeting and explicit introduction in one message receive the neutral welcome without AI or inventory access', async () => {
+  for (const history of [[], introHistory]) {
+    for (const text of combinedIntroductions) {
+      const parsed = splitClientIntroduction(text, history.at(-1)?.content);
+      assert.equal(parsed.update?.name.toLowerCase(), 'vera', text);
+      assert.equal(parsed.remaining, '', text);
+      const identity = clientIdentity([...history, user(text)]);
+      assert.equal(identity.name.toLowerCase(), 'vera', text);
+      assert.equal(identity.salutation, null, text);
+      const result = await generatePropertyReply({ text, history, catalog: noCatalog, ai: noAi });
+      assert.equal(result.reply, 'Salam kenal, Vera. Ada yang bisa saya bantu?', text);
+      assert.equal(result.suppressed, false, text);
+      assert.equal(buyerContext(history, text, null).searching, false, text);
+    }
+  }
+});
+
+test('combined greetings retain an explicit client title and the actual search after the introduction', async () => {
+  const titled = await generatePropertyReply({ text: 'selamat siang pak, saya Bu Vera', history: [], catalog: noCatalog, ai: noAi });
+  assert.equal(titled.reply, 'Salam kenal, Bu Vera. Ada yang bisa saya bantu?');
+  for (const text of [
+    'selamat siang, saya vera dari Banten, cari rumah lelang di Benowo Surabaya budget 500 juta',
+    'halo saya vera, cari rumah lelang di Benowo Surabaya budget 500 juta',
+    'malam Pak Jason, saya vera dari Banten, cari rumah lelang di Benowo Surabaya budget 500 juta',
+    'malam Pak Jason saya vera tolong carikan rumah lelang di Benowo Surabaya budget 500 juta',
+    'halo Mas Budi saya vera mohon cari rumah lelang di Benowo Surabaya budget 500 juta',
+  ]) {
+    const parsed = splitClientIntroduction(text);
+    assert.equal(parsed.update.name, 'vera', text);
+    assert.match(parsed.remaining, /cari(?:kan)? rumah lelang/, text);
+    const buyer = buyerContext([], text, null);
+    assert.equal(buyer.profile.city, 'Surabaya', text);
+    assert.equal(buyer.profile.max_price, 500000000, text);
+    assert.equal(buyer.profile.category, 'RUMAH', text);
+    const result = await generatePropertyReply({ text, history: [], catalog: noCatalog, ai: noAi });
+    assert.ok(result.reply, text);
+    assert.equal(result.knowledge.status, 'qualifying', text);
+    assert.doesNotMatch(result.reply, /Ada yang bisa saya bantu|Banten/, text);
+  }
+});
+
 test('ordinary search answers, questions and addresses are not personal names even after the introduction prompt', () => {
   for (const text of ['saya cari rumah', 'saya mau investasi', 'saya flipping', 'di Tandes pak', 'toko', 'lelang', 'semua boleh', 'nama saya siapa?', 'panggil saya siapa?', 'rumah', 'saya belum tahu', 'dana satu miliar', 'semiliar', 'seratus meter']) {
     assert.equal(splitClientIntroduction(text, INTRODUCTION_MESSAGE).update, null, text);
@@ -59,7 +140,7 @@ test('skipping or declining introductions never prevents property search', async
   }
   for (const text of ['skip dulu', 'nama nanti aja', 'nggak usah nama', 'langsung aja pak', 'gak usah pak', 'nggak perlu kenalan']) {
     const result = await generatePropertyReply({ text, history: introHistory, catalog: noCatalog, ai: noAi });
-    assert.match(result.reply, /langsung cari propertinya/);
+    assert.match(result.reply, /Tidak masalah\. Ada yang bisa saya bantu\?/);
     assert.equal(clientIdentity([...introHistory, user(text)]).name, null);
   }
 });
@@ -155,6 +236,16 @@ test('Playground persists chosen address per server conversation and permits an 
   assert.match(named.reply, /Manukan.*kota atau kabupaten mana/s);
   assert.doesNotMatch(named.reply, /Pak atau Bu siapa/);
   assert.match((await post('Surabaya pak', direct)).reply, /Manukan.*Surabaya/s);
+  for (const text of combinedIntroductions) {
+    const welcomed = await post(text, randomUUID());
+    assert.equal(welcomed.reply, 'Salam kenal, Vera. Ada yang bisa saya bantu?', text);
+    assert.equal(welcomed.suppressed, false, text);
+  }
+  for (const text of ['malam pak jason, saya vera', 'malam pak jason saya vera', 'halo Mas Budi, ini saya vera', 'selamat malam Pak Jason, Vera di sini']) {
+    const welcomed = await post(text, randomUUID());
+    assert.equal(welcomed.reply, 'Salam kenal, Vera. Ada yang bisa saya bantu?', text);
+    assert.equal(welcomed.suppressed, false, text);
+  }
 });
 
 const directOpening = 'siang pak, saya tertarik dengan aset lelang di daerah manukan apakah ada pak?';

@@ -25,7 +25,8 @@ const NUMBER = '(\\d+(?:[.,]\\d+)*)';
 const UNIT = '(miliar|milyar|juta|jt|ribu|rb|m)';
 const budgetIntent = /\b(budget|bujet|anggaran|plafon|dana|harga|minimal|minimum|maksimal|maksimum|max|mentok|batas harga|di bawah|dibawah|rentang harga|kisaran harga)\b/i;
 export const hasLocationInterest = (text) => /\b(?:tertarik|berminat|minat|mau|ingin)\s+(?:(?:mencari|cari|aset|properti|rumah|ruko|gudang|tanah|apartemen|toko|pabrik|kos|kost|hotel|vila|villa)\s+)*(?:di|daerah|kawasan|area|kota|kabupaten|kecamatan)\s+[\p{L}]/iu.test(text);
-export const hasSearchIntent = (text) => /\b(cari(?:kan)?|mencari|butuh|alternatif|pilihan lain|ada(?:kah)?\s+(?:aset|properti|rumah|tanah|ruko|kos|kost|gudang|apartemen|toko|pabrik|hotel|vila|villa))\b/i.test(text) || hasLocationInterest(text) || requestsAlternatives(text);
+export const hasSearchIntent = (text) => /\b(cari(?:kan)?|mencari|butuh|alternatif|pilihan lain|ada(?:kah)?\s+(?:aset|properti|rumah|tanah|ruko|kos|kost|gudang|apartemen|toko|pabrik|hotel|vila|villa))\b/i.test(text) ||
+  (/\b(?:ingin|mau|minat|tertarik|perlu)\s+(?:(?:beli|membeli|sewa|menyewa|punya|memiliki|dibantu|dicarikan|saya|sebuah|satu|unit)\s+){0,4}(?:aset|properti|rumah|tanah|ruko|kos|kost|gudang|apartemen|toko|pabrik|hotel|vila|villa)\b/i.test(text) && !/\b(?:ini|itu|tadi|tersebut)\b/i.test(text)) || hasLocationInterest(text) || requestsAlternatives(text);
 export function explicitAsset(text, preceding) {
   const plain = normalizeBuyerLanguage(text).replace(/\*/g, '');
   return /(?:\b(?:kode|id|aset|properti)\s*[:#-]?\s*|#)(?=[A-Z0-9-]*\d)[A-Z0-9-]+\b/i.test(plain) ||

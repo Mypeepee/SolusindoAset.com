@@ -18,7 +18,7 @@ test('the exact tkzin introduction receives a reply while the stated origin does
   const text = 'saya tkzin dari banten';
   const result = await generatePropertyReply({ text, history, catalog: noCatalog, ai: noAi });
   assert.equal(result.suppressed, false); assert.equal(result.knowledge.status, 'client_identified');
-  assert.match(result.reply, /Salam kenal, Tkzin/); assert.match(result.reply, /Lagi cari properti di daerah mana/);
+  assert.match(result.reply, /Salam kenal, Tkzin/); assert.match(result.reply, /Ada yang bisa saya bantu/);
   const identity = clientIdentity([...history, user(text)]);
   assert.equal(identity.name, 'tkzin'); assert.equal(identity.salutation, null);
   const buyer = buyerContext(history, text, null);
@@ -56,7 +56,7 @@ test('origin and a genuine search in the same message preserve the search and an
 test('an origin without a name after the invitation still receives a property-search invitation', async () => {
   for (const text of ['saya dari Banten', 'dari Banten', 'domisili di Banten']) {
     const result = await generatePropertyReply({ text, history, catalog: noCatalog, ai: noAi });
-    assert.equal(result.suppressed, false, text); assert.match(result.reply, /Lagi cari properti di daerah mana/);
+    assert.equal(result.suppressed, false, text); assert.match(result.reply, /Ada yang bisa saya bantu/);
     assert.equal(clientIdentity([...history, user(text)]).name, null);
   }
 });
@@ -105,7 +105,7 @@ test('Playground replies to the exact introduction and resumes a different targe
     });
     assert.equal(response.status, 200); const result = await response.json();
     assert.equal(result.suppressed, false); assert.ok(result.reply); assert.equal(result.session.is_bot_active, true);
-    if (index === 1) { assert.match(result.reply, /Salam kenal, Tkzin/); assert.match(result.reply, /Lagi cari properti di daerah mana/); }
+    if (index === 1) { assert.match(result.reply, /Salam kenal, Tkzin/); assert.match(result.reply, /Ada yang bisa saya bantu/); }
     if (index < 2) assert.equal(queries.length, 0);
   }
   assert.equal(queries.length, 1); assert.equal(queries[0].city, 'Surabaya');

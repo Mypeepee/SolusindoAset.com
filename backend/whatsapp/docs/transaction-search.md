@@ -214,8 +214,7 @@ siapa? Ingin disapa Pak, Bu, Kak, atau cukup nama saja?
 
 **User:** Bu Rina pak
 
-**Bot:** Salam kenal, Bu Rina. Lagi cari properti di daerah mana? Kalau sudah ada
-aset yang diminati, boleh kirim kode atau link-nya ya.
+**Bot:** Salam kenal, Bu Rina. Ada yang bisa saya bantu?
 
 **User:** saya cari rumah lelang di Surabaya
 

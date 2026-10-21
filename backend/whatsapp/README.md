@@ -116,6 +116,13 @@ menebak gender dari nama atau sapaan yang ditujukan kepada bot. Klien boleh
 melewati perkenalan dan langsung mencari properti. `client_identity` disimpan
 terpisah dari filter properti dan tetap ada saat riwayat dipangkas atau konteks
 pencarian kedaluwarsa; penyimpanannya masih mengikuti umur sesi di memori proses.
+Setelah perkenalan, balasan netral: “Salam kenal, Verlyna. Ada yang bisa saya bantu?”
+Sapaan dengan nama penerima seperti “malam Pak Jason, saya Vera” juga dikenali;
+Jason adalah penerima sapaan dan Vera adalah klien. Bentuk tanpa koma,
+“ini saya Vera”, “ini Vera”, dan “Vera di sini” didukung. Uji variasinya dengan
+`npm run simulate:greetings`.
+Bot tidak menganggap semua kontak sedang mencari properti. Pesan pekerjaan lain
+diabaikan sejak pesan pertama, lalu layanan dilanjutkan jika klien membahas properti.
 Lihat [perkenalan dan pilihan sapaan](docs/transaction-search.md#perkenalan-dan-pilihan-sapaan).
 
 Jika pesan pertama langsung mencari properti dan masih perlu klarifikasi,
@@ -168,8 +175,17 @@ ulang otomatis tanpa membuka koneksi WhatsApp. `WHATSAPP_BACKEND_URL` website ha
 layanan biasa beserta pemulihan sesi WhatsApp.
 
 `services/interaction_policy.js` memeriksa pesan **sebelum** pencarian database
-atau LLM. Sapaan, stiker/media, dan pesan di luar konteks mendapat template
-standar satu kali; pesan berikutnya di luar konteks tidak menghasilkan kiriman.
+atau LLM. Sapaan awal mengundang perkenalan. Stiker/media tanpa konteks dan
+pesan di luar properti tidak menghasilkan kiriman, termasuk pesan pertamanya.
+`services/property_scope.js` membedakan tugas properti dari invoice pekerjaan,
+rapat, lamaran, desain website, sewa kendaraan, serta topik lain walaupun menyebut
+rumah, nama kota, nominal uang, lokasi, atau jadwal. Pesan yang diabaikan tidak
+masuk konteks pencarian berikutnya, mengubah filter, atau memicu handoff. Dalam
+pesan campuran, hanya klausa properti yang dipakai untuk lokasi dan budget.
+Bahasa yang belum dikenali aturan lokal dapat diklasifikasikan oleh AI dengan
+bukti kutipan pesan, keluaran terstruktur, pembatalan, dan batas waktu 12 detik.
+Kegagalan klasifikasi mempertahankan keputusan lokal; tidak mengarang maksud baru.
+Lihat [simulasi pembatasan topik](docs/simulasi-scope-properti.md).
 Kode/template/link atau permintaan natural seperti “bisa tolong carikan saya
 aset di Manukan kah pak?” membuka layanan. Sapaan/partikel di akhir kalimat
 tidak menjadi filter lokasi. Pernyataan “saya tertarik di Manukan” juga membuka
@@ -360,7 +376,7 @@ Negosiasi, survei/viewing, serta dokumen spesifik SHM/HGB/Grosse menghentikan bo
 dan mengirim satu pesan handoff Jason yang tetap. Bahasa lanjutan yang belum
 dipahami mendapat klarifikasi singkat; bot tetap aktif dan konteks dipertahankan.
 Model juga dapat mengembalikan action `handoff` atau `out_of_scope`; backend
-mengganti teks model dengan template resmi dan menerapkan status percakapannya.
+mengirim template resmi untuk handoff dan tidak mengirim balasan untuk out_of_scope.
 Bot tidak berwenang mengubah limit, menerima transaksi, atau memastikan legalitas.
 
 Grup, broadcast/status, dan pesan sendiri diabaikan sebelum membaca isi pesan,

@@ -53,7 +53,7 @@ export async function simulateIntroductionOrigin(scenario) {
     const introduced = await send(scenario.text);
     assert.equal(introduced.client_identity.name, scenario.identity.name);
     assert.equal(introduced.client_identity.salutation, scenario.identity.salutation);
-    assert.match(replies.at(-1), /Salam kenal/); assert.match(replies.at(-1), /Lagi cari properti di daerah mana/);
+    assert.match(replies.at(-1), /Salam kenal/); assert.match(replies.at(-1), /Ada yang bisa saya bantu/);
     assert.doesNotMatch(replies.at(-1), /Mau beli atau sewa|ngobrol dengan siapa/);
     assert.equal(queries.length, 0); assert.equal(captures.length, 0);
     assert.ok(!introduced.buyer_state?.searchStarted, 'Origin alone must not start a property search');

@@ -2,8 +2,9 @@ import { ServiceError, logFailure } from '../lib/http.js';
 import { detectHandover, HANDOVER_MESSAGE } from './ai_controller.js';
 import { resolvePropertyContext, selectedAssetIdFromHistory, isPrivateRequest, replyFromPropertyContext } from './property_reply.js';
 import { needsAuctionCheck, requestAuctionCheck } from './auction_check.js';
-import { ignoredInbound, interactionDecision, CONTEXT_REQUIRED_MESSAGE, requestsPropertySearch } from './interaction_policy.js';
-import { clientIntroductionTurn, INTRODUCTION_MESSAGE } from './client_identity.js';
+import { ignoredInbound, interactionDecision, resolveInteractionDecision, CONTEXT_REQUIRED_MESSAGE, requestsPropertySearch } from './interaction_policy.js';
+import { clientIntroductionTurn } from './client_identity.js';
+import { ignorePropertyTurn } from './property_scope.js';
 import { qualifiedClientFunnel } from './client_capture.js';
 import { validPhone, validContact } from '../lib/security.js';
 import { CLOSING_STATE, applyClosingOutcome, searchConversion } from './closing_state.js';
@@ -362,11 +363,12 @@ export class MessageProcessor {
       await this.deliver(session, preference ? 'Rekomendasi aset otomatis sudah diaktifkan kembali. Saya akan kabari kalau ada listing baru yang sesuai.' : 'Baik, rekomendasi aset otomatis saya hentikan. Kalau ingin menerima lagi, ketik “aktifkan rekomendasi”.', message.id);
       return;
     }
-    const history = this.conversationHistory(session);
+    const conversation = this.conversationHistory(session);
+    const history = conversation.filter((item) => !item.property_ignored);
     session.asset_id ||= session.survey_state?.asset_id || session.consultation?.asset_id || selectedAssetIdFromHistory(history);
-    const decision = interactionDecision({ text: message.text || '', type: message.type, previousId: session.asset_id, history, state: { ...session, canScheduleVisit: !!this.surveys } });
+    let decision = interactionDecision({ text: message.text || '', type: message.type, previousId: session.asset_id, history, state: { ...session, canScheduleVisit: !!this.surveys } });
     const client = clientIntroductionTurn({ text: message.text || '', history, identity: session.client_identity,
-      hasContext: !!session.asset_id || history !== session.history || !!session.buyer_state?.searchStarted || session.history.some((item) => item.role === 'user' && requestsPropertySearch(item.content)) });
+      hasContext: !!session.asset_id || conversation !== session.history || !!session.buyer_state?.searchStarted || history.some((item) => item.role === 'user' && requestsPropertySearch(item.content)) });
     const phone = this.whatsapp.getContactPhone?.(message.from) || (validPhone(message.from) ? message.from : null);
     try {
       if (phone && client.identity?.name) this.clients?.setName(phone, client.identity.name);
@@ -377,12 +379,18 @@ export class MessageProcessor {
     }
     catch (error) { logFailure(this.logger, 'client_identity_save_failed', error); }
     if (client.reply && decision !== 'handoff' && !isPrivateRequest(message.text || '', session.conversion) && message.type === 'text') {
-      session.out_of_scope_notified = client.reply === INTRODUCTION_MESSAGE;
+      session.out_of_scope_notified = true;
       await this.deliver(session, client.reply, message.id);
       return;
     }
-    if (decision === 'silent') return;
-    if (decision === 'nudge' || isPrivateRequest(message.text || '', session.conversion)) {
+    if (isPrivateRequest(message.text || '', session.conversion)) { ignorePropertyTurn(session.history, message.text); return; }
+    const scopeLookup = new AbortController();
+    this.propertyLookups.set(session.phone, scopeLookup);
+    try { decision = await resolveInteractionDecision({ text: message.text || '', type: message.type, previousId: session.asset_id, history, state: { ...session, canScheduleVisit: !!this.surveys } }, this.ai, scopeLookup.signal); }
+    finally { if (this.propertyLookups.get(session.phone) === scopeLookup) this.propertyLookups.delete(session.phone); }
+    if (!stillActive()) return;
+    if (decision === 'silent') { ignorePropertyTurn(session.history, message.text); return; }
+    if (decision === 'nudge') {
       if (!session.out_of_scope_notified) { session.out_of_scope_notified = true; await this.deliver(session, CONTEXT_REQUIRED_MESSAGE, message.id); }
       return;
     }
@@ -391,7 +399,7 @@ export class MessageProcessor {
     const lookup = new AbortController();
     this.propertyLookups.set(session.phone, lookup);
     let context;
-    try { context = await resolvePropertyContext(this.catalog, message.text, session.asset_id, history, this.now(), lookup.signal, session.buyer_state, session.conversion, this.ai, { surveyState: session.survey_state, consultation: session.consultation }); }
+    try { context = await resolvePropertyContext(this.catalog, message.text, session.asset_id, history, this.now(), lookup.signal, session.buyer_state, session.conversion, this.ai, { surveyState: session.survey_state, consultation: session.consultation }, decision === 'search'); }
     catch (error) {
       if (lookup.signal.aborted) return;
       logFailure(this.logger, 'property_lookup_failed', error);
@@ -454,7 +462,7 @@ export class MessageProcessor {
       await this.sendHandover(session, message, result.reply); return;
     }
     if (result.action === 'out_of_scope') {
-      if (!session.out_of_scope_notified) { session.out_of_scope_notified = true; await this.deliver(session, CONTEXT_REQUIRED_MESSAGE, message.id); }
+      ignorePropertyTurn(session.history, message.text);
       return;
     }
     session.out_of_scope_notified = false;

@@ -43,7 +43,7 @@ test('greeting/media/off-topic send exactly one fixed reply without reading DB o
   await f.send('asset', 'Kode 121791, masih tersedia?');
   assert.equal(f.calls.length, 1); assert.equal(f.store.get(PHONE).asset_id, '121791');
   await f.send('offtopic', 'Buat pantun dong'); await f.send('again', 'Pagi');
-  assert.equal(f.sent.filter((text) => text === CONTEXT_REQUIRED_MESSAGE).length, 1);
+  assert.equal(f.sent.filter((text) => text === CONTEXT_REQUIRED_MESSAGE).length, 0);
   await f.send('resume', 'brp harganya?');
   assert.equal(f.calls.length, 2); assert.equal(f.calls.at(-1).facts.id, '121791');
   await f.send('facility', 'Dekat lapangan bola?');
@@ -96,7 +96,7 @@ test('semantic out-of-scope classification cannot create repeated notices after 
   await f.send('first', 'Kode 121791'); classify = true;
   await f.send('off-topic', 'Detail rumah tangga artis itu');
   await f.send('repeat', 'Detail rumah tangga artis lainnya');
-  assert.deepEqual(f.sent, ['Harga limit tercatat Rp500 juta.', CONTEXT_REQUIRED_MESSAGE]);
+  assert.deepEqual(f.sent, ['Harga limit tercatat Rp500 juta.']);
   assert.equal(f.store.get(PHONE).is_bot_active, true);
 });
 

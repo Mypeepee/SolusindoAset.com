@@ -56,8 +56,12 @@ Bahasa informal/kurang jelas mendapat pertanyaan klarifikasi, bukan handoff
 otomatis. Pencarian area, pertanyaan kriteria, dan kartu rekomendasi dari database
 dirender langsung oleh backend tanpa menunggu model AI.
 
-Sapaan/stiker/topik lain mendapat template standar satu kali. Permintaan di luar
-konteks berikutnya mengembalikan `suppressed:true, reply:null` tanpa bubble bot.
+Sapaan awal mengundang perkenalan, lalu balasannya netral: “Salam kenal, Verlyna.
+Ada yang bisa saya bantu?” Stiker/media tanpa konteks dan topik di luar properti
+langsung mengembalikan `suppressed:true, reply:null` tanpa bubble bot, termasuk
+pesan pertamanya. Percakapan dapat dilanjutkan ketika klien membahas properti;
+pesan yang diabaikan tidak mengubah lokasi, budget, atau aset pilihan. Kata rumah,
+nama kota, harga, dan jadwal dalam pekerjaan lain tidak otomatis membuka pencarian.
 `conversationId` UUID memisahkan konteks per tab/agent. Backend menyimpan status
 interaksi, pointer aset dan riwayat terbatas di memori sandbox. Riwayat lama dari
 browser tidak bisa memulihkan sesi yang kedaluwarsa. Setelah
