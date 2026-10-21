@@ -10,8 +10,7 @@ echo.
 echo [INFO] Menghentikan server lama di port 3000 jika ada...
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr "LISTENING" ^| findstr ":3000"') do taskkill /F /PID %%a >nul 2>&1
 
-echo [INFO] Membersihkan build lama...
-if exist ".next" rmdir /S /Q ".next"
+echo [INFO] Build lama disimpan sampai penggantinya selesai dan tervalidasi.
 
 echo [INFO] Membangun versi produksi baru. Mohon tunggu 2-5 menit...
 call npm run build

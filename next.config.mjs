@@ -1,3 +1,5 @@
+import nextConstants from "next/constants.js";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Build a replacement separately while the current production server runs.
@@ -123,4 +125,7 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+export default (phase) => ({
+  ...nextConfig,
+  distDir: phase === nextConstants.PHASE_DEVELOPMENT_SERVER ? ".next-dev" : nextConfig.distDir,
+});

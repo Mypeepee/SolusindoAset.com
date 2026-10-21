@@ -64,9 +64,14 @@ async function main() {
   if (!await require('./check-database.cjs').checkDatabase()) {
     throw new Error('Lengkapi migrasi database sebelum menjalankan aplikasi.');
   }
+  const websitePort = Number(process.env.PORT || process.env.port || 3000);
+  if (await portOpen('127.0.0.1', websitePort)) {
+    throw new Error(`Port ${websitePort} sudah dipakai. Hentikan proses website lama sebelum menjalankan npm start lagi.`);
+  }
+  await require('./production-build.cjs').ensureProductionBuild();
 
   const botFile = path.join(root, 'backend', 'whatsapp', '.env');
-  if (fs.existsSync(botFile)) {
+  if (fs.existsSync(botFile) && !process.argv.includes('--website-only')) {
     const bot = require('dotenv').parse(fs.readFileSync(botFile));
     const runtimeFile = path.join(root, '.runtime', 'node-path.txt');
     const runtimeDirectory = fs.existsSync(runtimeFile) ? fs.readFileSync(runtimeFile, 'utf8').trim() : null;
@@ -91,7 +96,7 @@ async function main() {
       botEnv.PATH = `${path.dirname(executable)}${path.delimiter}${botEnv.PATH || ''}`;
       launch('chatbot', executable, ['backend/whatsapp/index.js'], botEnv);
     }
-  } else {
+  } else if (!process.argv.includes('--website-only')) {
     console.warn('Backend chatbot belum dikonfigurasi: siapkan backend/whatsapp/.env.');
   }
   launch('website', process.execPath, ['server.js']);

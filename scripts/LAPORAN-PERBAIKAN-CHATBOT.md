@@ -106,3 +106,19 @@ dikonfigurasi melalui `LLM_FALLBACK_MODEL`. Transport AI nyata berhasil memakai
 fallback serta menghasilkan JSON tervalidasi. Uji lengkap dashboard, pairing,
 pembacaan properti dan percakapan melalui domain publik kembali lulus. Akun
 WhatsApp masih menunggu pemindaian QR atau penautan dengan nomor oleh pengguna.
+
+Pemulihan build pada 22 Oktober 2026: `.next` ditemukan tidak lengkap, tanpa
+BUILD_ID dan berkas server produksi. Startup sekarang memeriksa BUILD_ID,
+manifest dan semua entry server sebelum menjalankan aplikasi. Build yang hilang
+dipulihkan otomatis. Penggantinya dikompilasi dalam direktori sementara dan
+divalidasi sebelum mengganti `.next`; folder sebelumnya disimpan sebagai backup.
+Build lock mencegah dua kompilasi bersamaan, dan penggantian build ditolak bila
+website masih berjalan.
+
+Development dipisahkan ke `.next-dev` pada port 3001. Kedua launcher Windows
+tidak lagi menghapus build lama sebelum kompilasi berhasil. `npm start` telah
+diuji langsung pada kondisi build yang hilang: kompilasi otomatis selesai,
+website dan backend berhasil aktif. Sebanyak 31 tes terkait build dan koneksi
+lulus. Uji dashboard lewat domain publik, properti dan percakapan kembali lulus;
+website lokal, website publik dan health backend merespons HTTP 200. WhatsApp
+AG108 masih berstatus awaiting_scan dengan QR tersedia.

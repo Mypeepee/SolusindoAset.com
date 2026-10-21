@@ -2,6 +2,16 @@ Website dan backend WhatsApp dijalankan bersama dengan `npm start` dari folder
 utama. Launcher `Jalankan-Website.bat` dan konfigurasi PM2 memakai startup yang
 sama. `npm run start:website` hanya menjalankan website untuk diagnosis.
 
+Startup memeriksa BUILD_ID, manifest dan berkas server produksi. Jika build
+hilang atau tidak lengkap, `npm start` membangun ulang secara otomatis sebelum
+memulai layanan. `npm run build` menyiapkan hasil di direktori sementara, lalu
+mengganti `.next` sesudah validasi; build lama disimpan di `.local-backups`.
+Hentikan proses website sebelum melakukan build ulang. Proses build yang gagal
+tidak menghapus build sebelumnya.
+
+`npm run dev` memakai port 3001 dan direktori `.next-dev`. Development tidak
+menimpa `.next` yang digunakan produksi pada port 3000.
+
 Startup memeriksa semua tabel, kolom dan enum yang dibutuhkan Prisma, serta
 konsistensi harga dan trigger. Periksa tanpa menjalankan layanan dengan
 `npm run db:check`. Pemeriksaan ini tidak mengubah database. Migrasi SQL tetap
