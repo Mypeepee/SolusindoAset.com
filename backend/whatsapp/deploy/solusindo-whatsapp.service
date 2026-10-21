@@ -1,0 +1,23 @@
+[Unit]
+Description=Solusindo WhatsApp pre-sales backend
+After=network.target
+
+[Service]
+Type=simple
+User=solusindo-wa
+WorkingDirectory=/opt/solusindo-whatsapp
+Environment=NODE_ENV=production
+Environment=BAILEYS_AUTH_FILE=/var/lib/solusindo-whatsapp/session.sqlite
+StateDirectory=solusindo-whatsapp
+StateDirectoryMode=0700
+ExecStart=/usr/bin/node /opt/solusindo-whatsapp/index.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=100
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

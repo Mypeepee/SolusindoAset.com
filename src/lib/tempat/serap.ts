@@ -87,6 +87,7 @@ const KELAS_DARI_KATEGORI: Record<KategoriPOI, KelasTempat> = {
   education: "SEKOLAH",
   worship: "IBADAH",
   transport: "HALTE",
+  toll: "PINTU_TOL",
   mall: "MALL",
   gym: "GYM",
   hotel: "HOTEL",
@@ -241,6 +242,8 @@ function kelasDariAkses(tipe: unknown): KelasTempat {
     case "KAMPUS": return "KAMPUS";
     case "SEKOLAH": return "SEKOLAH";
     case "STASIUN": return "STASIUN";
+    case "PINTU_TOL": return "PINTU_TOL";
+    case "TOL": return "PINTU_TOL";
     case "HALTE": return "HALTE";
     case "BANDARA": return "BANDARA";
     case "MALL": return "MALL";

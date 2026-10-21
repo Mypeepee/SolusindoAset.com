@@ -3,22 +3,22 @@ import type { WalletKey } from "@/lib/project-kas";
 /** Kategori arus kas yang boleh dipilih manual (setoran modal & talangan
  *  dibuat otomatis sistem, jadi sengaja tidak ada di sini). */
 export const KATEGORI_PENGELUARAN = [
-  { value: "pembelian_aset", label: "Pembelian aset" },
-  { value: "biaya_spare_bidding", label: "Spare bidding" },
-  { value: "biaya_dokumen_balik_nama", label: "Dokumen & balik nama" },
-  { value: "biaya_eksekusi_pengosongan", label: "Eksekusi & pengosongan" },
-  { value: "biaya_renovasi", label: "Renovasi" },
-  { value: "penggunaan_dana_cadangan", label: "Pakai dana cadangan" },
-  { value: "pengeluaran_lain", label: "Pengeluaran lain" },
+  { value: "pembelian_aset", label: "Pembelian aset", icon: "solar:home-2-bold-duotone" },
+  { value: "biaya_spare_bidding", label: "Biaya lelang", icon: "solar:tag-price-bold-duotone" },
+  { value: "biaya_dokumen_balik_nama", label: "Dokumen & balik nama", icon: "solar:document-text-bold-duotone" },
+  { value: "biaya_eksekusi_pengosongan", label: "Eksekusi & pengosongan", icon: "solar:shield-warning-bold-duotone" },
+  { value: "biaya_renovasi", label: "Renovasi", icon: "solar:pallete-2-bold-duotone" },
+  { value: "penggunaan_dana_cadangan", label: "Biaya tak terduga", icon: "solar:danger-triangle-bold-duotone" },
+  { value: "pengeluaran_lain", label: "Pengeluaran lain", icon: "solar:wallet-money-bold-duotone" },
 ] as const;
 
 export const KATEGORI_PEMASUKAN = [
-  { value: "hasil_penjualan", label: "Hasil penjualan" },
-  { value: "refund", label: "Refund (uang kembali ke pos)" },
-  { value: "pemasukan_lain", label: "Pemasukan lain" },
+  { value: "hasil_penjualan", label: "Hasil penjualan", icon: "solar:buildings-2-bold-duotone" },
+  { value: "refund", label: "Pengembalian dana", icon: "solar:refresh-circle-bold-duotone" },
+  { value: "pemasukan_lain", label: "Pemasukan lainnya", icon: "solar:banknote-2-bold-duotone" },
 ] as const;
 
-export type KategoriOption = { value: string; label: string };
+export type KategoriOption = { value: string; label: string; icon: string };
 
 export function kategoriOptions(jenis: "pemasukan" | "pengeluaran") {
   return jenis === "pemasukan"

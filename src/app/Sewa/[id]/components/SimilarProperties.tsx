@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * "Kos serupa" — jalan keluar ketika kos yang dibuka ternyata tidak cocok.
+ * "Sewa serupa" — jalan keluar ketika properti sewa yang dibuka ternyata
+ * tidak cocok.
  *
  * Kartunya BUKAN buatan file ini: yang dipakai adalah PropertyCard yang sama
  * persis dengan kartu di halaman daftar /Sewa, /Jual, /Lelang & /Carikos.
@@ -50,10 +51,10 @@ export default function SimilarProperties({
       <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>
           <h3 className="text-xl font-extrabold tracking-tight text-white md:text-2xl">
-            Kos serupa di sekitar
+            Sewa Serupa di Sekitar
           </h3>
           <p className="mt-1 text-xs text-white/40 md:text-sm">
-            Pilihan lain dengan lokasi &amp; kisaran harga yang mirip
+            Pilihan sewa lain dengan lokasi &amp; kisaran harga yang mirip
           </p>
         </div>
 

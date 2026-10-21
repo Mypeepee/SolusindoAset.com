@@ -17,8 +17,7 @@
 //     `gender`, `minKT`, `minKM`, `lantai`, `kondisi`, `hadap`, `legalitas` —
 //     tidak pernah dibaca halaman itu. Filternya terlihat aktif di URL tapi
 //     tidak menyaring apa pun.
-//  3. `minHarga` yang lebih besar dari `maxHarga` menghasilkan 0 hasil tanpa
-//     penjelasan, bukan hasil yang masuk akal.
+//  3. Input rentang tidak divalidasi sebelum dipakai sebagai filter.
 //  4. Tidak ada yang tahu filter mana yang RELEVAN untuk tab mana, jadi tab
 //     Jual pernah menawarkan "gender kos" dan tab Sewa tidak pernah menawarkan
 //     durasi sewa.
@@ -32,6 +31,7 @@
 import { Prisma } from "@prisma/client";
 import { buildKataKunciWhere } from "@/lib/listingKataKunci";
 import { buildLocationWhere } from "./listingLocationFilter";
+import { applyPropertySearchQuery } from "./propertySearchQuery";
 import { parseCategoryDbList, TYPE_DB_TO_DISPLAY } from "./propertyType";
 import {
   parseLocationParams,
@@ -386,14 +386,26 @@ export type SumberParam = { [key: string]: string | string[] | undefined };
  * Tidak pernah melempar; nilai rusak diabaikan diam-diam.
  */
 export function parseFilters(sp: SumberParam): FilterState {
+  const queryParams = new URLSearchParams();
+  for (const key of ["q", "idProperty", "minHarga", "maxHarga"]) {
+    const value = teksDari(sp[key]);
+    if (value) queryParams.set(key, value);
+  }
+  applyPropertySearchQuery(queryParams);
+  sp = {
+    ...sp,
+    q: queryParams.get("q") ?? undefined,
+    minHarga: queryParams.get("minHarga") ?? undefined,
+    maxHarga: queryParams.get("maxHarga") ?? undefined,
+  };
   const idMentah = teksDari(sp.idProperty);
   const idProperty =
     idMentah && /^\d{1,18}$/.test(idMentah) ? idMentah : undefined;
 
-  const [minHarga, maxHarga] = rentang(
-    angkaPositif(sp.minHarga),
-    angkaPositif(sp.maxHarga)
-  );
+  // Jangan tukar batas harga: budget maksimum adalah batas keras, termasuk
+  // bila tautan manual memuat minimum yang lebih besar (hasilnya kosong).
+  const minHarga = angkaPositif(sp.minHarga);
+  const maxHarga = angkaPositif(sp.maxHarga);
   // `minLt`/`minLT` sama-sama pernah dipakai di URL yang beredar.
   const [minLT, maxLT] = rentang(
     angkaPositif(sp.minLT ?? sp.minLt),
@@ -876,7 +888,7 @@ export function jumlahTersembunyi(
 
 /** Semua param yang dikuasai mesin filter — dipakai "Hapus semua". */
 export const SEMUA_PARAM_FILTER: string[] = Array.from(
-  new Set(Object.values(PARAM_BIDANG).flat())
+  new Set([...Object.values(PARAM_BIDANG).flat(), "dekat", "radius", "areaDekat"])
 );
 
 /**

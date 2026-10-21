@@ -25,6 +25,7 @@ import {
   urutkanTerdekat,
 } from "@/lib/listingTempatFilter";
 import { KATEGORI_TO_SLUG, SLUG_TO_KATEGORI } from "./constants";
+import { propertySearchRedirect } from "@/lib/propertySearchQuery";
 
 const KATEGORI_LABEL: Record<string, string> = {
   "rumah":          "Rumah",
@@ -123,6 +124,8 @@ export default async function KategoriPage({ params, searchParams }: Props) {
   const isSemua = slug === "semua";
   const kategori = SLUG_TO_KATEGORI[slug];
   if (!kategori && !isSemua) notFound();
+  const searchRedirect = propertySearchRedirect(`/properti/${slug}`, searchParams);
+  if (searchRedirect) redirect(searchRedirect);
 
   const label = isSemua ? "Semua Kategori" : KATEGORI_LABEL[slug];
 

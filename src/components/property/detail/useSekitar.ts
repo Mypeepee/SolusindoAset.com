@@ -20,6 +20,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PresisiTitik } from "@/lib/nearbyPlaces";
+import type { TempatLandmark } from "@/lib/tempat/landmark";
 
 import { RADIUS_POI_METER, type TempatTerdekat } from "@/lib/nearbyPlaces";
 
@@ -49,6 +50,7 @@ export interface SekitarAwal {
   titik: TitikAset | null;
   radius: number;
   tempat: TempatTerdekat[];
+  landmark?: TempatLandmark[];
   lengkap: boolean;
   dipindaiPada: string | null;
 }
@@ -57,6 +59,7 @@ export interface SekitarView {
   titik: TitikAset | null;
   radius: number;
   tempat: TempatTerdekat[];
+  landmark?: TempatLandmark[];
   lengkap: boolean;
   memuat: boolean;
   gagal: boolean;
@@ -76,6 +79,7 @@ export function useSekitar(
   const [titik, setTitik] = useState<TitikAset | null>(awal?.titik ?? null);
   const [radius, setRadius] = useState<number>(awal?.radius || RADIUS_POI_METER);
   const [tempat, setTempat] = useState<TempatTerdekat[]>(awal?.tempat ?? []);
+  const [landmark, setLandmark] = useState<TempatLandmark[]>(awal?.landmark ?? []);
   const [lengkap, setLengkap] = useState<boolean>(punyaAwal);
   // Aset yang datanya sudah ikut di HTML tidak pernah berstatus "memuat":
   // menyalakan skeleton untuk data yang sudah ada di layar adalah kedipan
@@ -118,6 +122,7 @@ export function useSekitar(
         setTitik(json?.titik ?? null);
         setRadius(Number(json?.radius) || RADIUS_POI_METER);
         setTempat(Array.isArray(json?.tempat) ? json.tempat : []);
+        setLandmark(Array.isArray(json?.landmark) ? json.landmark : []);
         setLengkap(!!json?.lengkap);
 
         const bermasalah = json?.status === "gagal";
@@ -153,5 +158,5 @@ export function useSekitar(
     setPutaran((n) => n + 1);
   }, []);
 
-  return { titik, radius, tempat, lengkap, memuat, gagal, ulangi };
+  return { titik, radius, tempat, landmark, lengkap, memuat, gagal, ulangi };
 }

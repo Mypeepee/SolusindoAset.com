@@ -17,6 +17,7 @@
     "db:urut": "node scripts/periksa-urut.mjs",
     "db:urut:perbaiki": "node scripts/periksa-urut.mjs --perbaiki",
     "pindai:sekitar": "node scripts/pindai-sekitar.mjs",
+    "pindai:tol": "node scripts/pindai-pintu-tol.mjs",
     "kamus:tempat": "node scripts/kamus-tempat.mjs"
   },
   "dependencies": {

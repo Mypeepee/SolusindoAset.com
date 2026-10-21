@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { lengkapiPintuTol } from "@/lib/tempat/pintu-tol.server";
 import { bacaTempatJson } from "@/lib/nearbyPlaces";
 import { bacaLandmarkJson } from "@/lib/tempat/landmark";
 import {
@@ -22,9 +23,9 @@ export const maxDuration = 60;
  * src/lib/tempat/. Skrip yang menyalin aturan itu akan perlahan berbeda darinya
  * tanpa ada yang menyadari.
  *
- * TIDAK ADA PERMINTAAN KELUAR di sini: yang dibaca adalah hasil pemindaian
- * yang tersimpan dan patokan yang diketik agent. Aman dijalankan kapan saja,
- * dan aman diulang.
+ * Mode biasa membaca hasil pemindaian tersimpan dan patokan agent. Mode
+ * `pintu-tol` melengkapi kategori gerbang dari peta, maksimum 10 titik per
+ * batch, lalu menyimpannya ke cache dan indeks yang sama.
  */
 
 function berwenang(req: Request): boolean {
@@ -66,6 +67,9 @@ export async function POST(req: Request) {
   };
 
   try {
+    if (mode === "pintu-tol") {
+      return NextResponse.json({ ok: true, ...await lengkapiPintuTol(batas, lewati) });
+    }
     if (mode === "patokan" || mode === "semua") {
       /**
        * SQL mentah, bukan filter Prisma.
@@ -109,7 +113,7 @@ export async function POST(req: Request) {
                s.presisi_titik, s.tempat, s.landmark, l.kota, l.provinsi
         FROM listing_sekitar s
         JOIN listing l ON l.id_property = s.id_property
-        WHERE s.lengkap = TRUE
+        WHERE jsonb_array_length(s.tempat) > 0 OR jsonb_array_length(s.landmark) > 0
         ORDER BY s.id_property ASC
         OFFSET ${lewati} LIMIT ${batas}
       `;

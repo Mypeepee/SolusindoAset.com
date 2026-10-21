@@ -51,7 +51,8 @@ async function hitungTotal(mode) {
     return r?.n ?? 0;
   }
   const [r] = await prisma.$queryRawUnsafe(
-    `SELECT count(*)::int n FROM listing_sekitar WHERE lengkap = TRUE`,
+    `SELECT count(*)::int n FROM listing_sekitar
+     WHERE jsonb_array_length(tempat) > 0 OR jsonb_array_length(landmark) > 0`,
   );
   return r?.n ?? 0;
 }

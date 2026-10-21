@@ -963,10 +963,10 @@ export default function DetailInfo({
           Dikelola oleh
         </Judul>
         <div
-          className={`flex flex-col gap-5 rounded-[1.5rem] border p-5 sm:flex-row sm:items-center ${LINE.card}`}
+          className={`flex items-center gap-3.5 rounded-[1.5rem] border p-4 sm:gap-5 sm:p-5 ${LINE.card}`}
           style={{ background: SURFACE.card, boxShadow: KILAU_KARTU }}
         >
-          <div className="relative h-16 w-16 shrink-0">
+          <div className="relative h-14 w-14 shrink-0 sm:h-16 sm:w-16">
             {/* Cincin foto memakai hue "orang" (violet→sky), bukan mint: mint
                 sudah jadi penanda harga & tombol di panel sebelahnya. */}
             <div
@@ -984,7 +984,7 @@ export default function DetailInfo({
                     src={data.agent.foto}
                     alt={data.agent.nama}
                     fill
-                    sizes="64px"
+                    sizes="(max-width: 639px) 56px, 64px"
                     className="object-cover"
                   />
                 ) : (
@@ -1005,13 +1005,13 @@ export default function DetailInfo({
           </div>
 
           <div className="min-w-0 flex-1">
-            <h4 className="text-base font-extrabold text-white">
+            <h4 className="truncate text-[15px] font-extrabold text-white sm:text-base">
               {data.agent.nama}
             </h4>
-            <p className="text-xs text-white/40">
+            <p className="truncate text-[11px] text-white/40 sm:text-xs">
               {data.agent.kantor} · {data.agent.kotaArea}
             </p>
-            <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] font-semibold text-white/45">
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-semibold text-white/45 sm:mt-2.5 sm:gap-x-4 sm:gap-y-1.5 sm:text-[11px]">
               <span className="inline-flex items-center gap-1.5">
                 <Icon icon="solar:star-bold" className="text-amber-400" />
                 {data.agent.rating > 0 ? data.agent.rating.toFixed(1) : "Baru"}

@@ -107,6 +107,7 @@ export function bangunQueryLandmark(
       nwr["amenity"~"^(school|kindergarten)$"]["name"](around:${Math.min(radius, RADIUS_INDEKS.SEKOLAH ?? radius)},${lat},${lon});
       nwr["shop"~"^(mall|department_store)$"]["name"]${a};
       nwr["railway"="station"]["name"]${a};
+      nwr["barrier"="toll_booth"]["name"]${a};
       nwr["aeroway"="aerodrome"]["name"]${a};
       nwr["leisure"="stadium"]["name"]${a};
       nwr["tourism"~"^(attraction|museum|zoo|theme_park)$"]["name"]${a};
@@ -123,6 +124,8 @@ export function klasifikasiLandmark(
 ): KelasTempat | null {
   const { amenity, shop, railway, aeroway, leisure, tourism } = tags;
 
+  if (tags.barrier === "toll_booth") return "PINTU_TOL";
+
   if (amenity === "university" || amenity === "college") return "KAMPUS";
   if (amenity === "school" || amenity === "kindergarten") return "SEKOLAH";
   if (amenity === "hospital") return "RUMAH_SAKIT";
@@ -136,6 +139,18 @@ export function klasifikasiLandmark(
   if (["attraction", "museum", "zoo", "theme_park"].includes(tourism)) return "WISATA";
 
   return null;
+}
+
+/** Pemindaian tambahan untuk cache lama, hanya titik gerbang pembayaran.
+ * Ruas toll=yes dan motorway_junction tidak dianggap sebagai pintu tol. */
+export function bangunQueryPintuTol(points: Array<{ lat: number; lng: number }>): string {
+  const unique = new Map(points.map((point) => [`${point.lat},${point.lng}`, point]));
+  const queries = [...unique.values()].filter(({ lat, lng }) =>
+    Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180,
+  // Cache koordinat dibulatkan ±110 m; sisakan margin untuk titik cache itu.
+  ).map(({ lat, lng }) => `nwr["barrier"="toll_booth"]["name"](around:${RADIUS_LANDMARK + 200},${lat},${lng});`);
+  if (!queries.length) throw new Error("Tidak ada titik sah untuk pemindaian pintu tol");
+  return `[out:json][timeout:30];(${queries.join("\n")});out center;`;
 }
 
 /**
@@ -186,7 +201,7 @@ export function petakanLandmark(
   lon: number,
 ): TempatLandmark[] {
   const hasil: TempatLandmark[] = [];
-  const terlihat = new Set<string>();
+  const terlihat = new Map<string, number>();
 
   for (const el of Array.isArray(elemen) ? elemen : []) {
     const tags = (el?.tags ?? {}) as Record<string, string>;
@@ -210,10 +225,10 @@ export function petakanLandmark(
     // Satu tempat sering muncul dua kali (node POI + way bangunan). Dikunci
     // nama+kelas, bukan id, supaya keduanya tidak jadi dua baris kamus.
     const kunci = `${kelas}|${normalTeks(nama)}`;
-    if (terlihat.has(kunci)) continue;
-    terlihat.add(kunci);
+    const index = terlihat.get(kunci);
+    if (index !== undefined && hasil[index].jarak <= jarak) continue;
 
-    hasil.push({
+    const place: TempatLandmark = {
       id: `${el.type}-${el.id}`,
       nama,
       lat: pLat,
@@ -222,7 +237,11 @@ export function petakanLandmark(
       jarak,
       alias: aliasDariTag(tags),
       brand: tags.brand?.trim() || tags.operator?.trim() || null,
-    });
+    };
+    if (index === undefined) {
+      terlihat.set(kunci, hasil.length);
+      hasil.push(place);
+    } else hasil[index] = place;
   }
 
   hasil.sort((a, b) => a.jarak - b.jarak);

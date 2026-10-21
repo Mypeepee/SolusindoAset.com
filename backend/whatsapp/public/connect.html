@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="id">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Hubungkan WhatsApp · Solusindo Aset</title><link rel="stylesheet" href="/connect-assets/connect.css"><script src="/connect-assets/connect.js" defer></script></head>
+<body><main>
+  <div class="brand">SOLUSINDO ASET <span>ASISTEN WHATSAPP</span></div>
+  <h1>Hubungkan WhatsApp Anda.</h1>
+  <p class="intro">Pasangkan nomor bisnis sebagai perangkat tertaut. Percakapan baru akan diteruskan ke konsultan AI Anda.</p>
+  <section id="login" hidden><h2>Akses pengaturan</h2><p>Buka halaman ini dengan <code>npm run connect</code> dari folder backend/whatsapp, atau gunakan token admin lokal.</p><form id="login-form"><label for="token">Token admin</label><input id="token" type="password" autocomplete="off" required><button>Masuk</button></form></section>
+  <section id="panel" hidden>
+    <div class="status-line"><span id="dot" class="dot"></span><strong id="status" role="status">Memeriksa koneksi…</strong></div>
+    <p id="detail">Menunggu koneksi WhatsApp.</p>
+    <div id="qr-section" hidden><img id="qr" alt="QR untuk memasangkan WhatsApp" width="300" height="300"><ol><li>Buka WhatsApp pada ponsel dengan nomor bisnis Anda.</li><li>Pilih <strong>Setelan → Perangkat tertaut → Tautkan perangkat</strong>.</li><li>Scan QR ini. Status di halaman akan berubah menjadi <strong>Tersambung</strong>.</li></ol></div>
+    <div id="code-section" hidden><p>Kode pemasangan:</p><output id="pairing-code"></output><p>Pada ponsel, pilih <strong>Perangkat tertaut → Tautkan perangkat → Tautkan dengan nomor telepon</strong>, lalu masukkan kode di atas.</p></div>
+    <div id="connected" hidden><h2>WhatsApp siap menerima pesan.</h2><p>Kirim pesan dari nomor lain, misalnya “Halo, saya mencari rumah untuk investasi”. Balasan chatbot akan muncul di WhatsApp pengirim.</p><div class="counters"><div><strong id="received">0</strong><span>Pesan diterima</span></div><div><strong id="sent">0</strong><span>Pesan dikirim</span></div></div><p>Ketik “survei lokasi” untuk menguji pengalihan ke Senior Agent. Bot kemudian berhenti membalas nomor penguji sampai diaktifkan kembali oleh CS.</p></div>
+    <details id="pairing-options"><summary>Gunakan kode pairing</summary><form id="pairing-form"><label for="phone">Nomor WhatsApp bisnis</label><input id="phone" type="tel" inputmode="numeric" pattern="[1-9][0-9]{6,14}" placeholder="6281234567890" autocomplete="tel" required><small>Gunakan kode negara 62, tanpa + atau angka 0 di depan.</small><button id="request-code">Buat kode pairing</button></form></details>
+    <button id="reconnect" class="secondary" hidden>Coba sambungkan lagi</button>
+    <button id="reset" class="secondary" hidden>Pasangkan ulang</button>
+    <p id="error" role="alert" hidden></p>
+  </section>
+  <footer>Sesi tersimpan di komputer/server ini. Biarkan backend tetap berjalan untuk menerima dan membalas pesan. Koneksi menggunakan Baileys, klien WhatsApp Web tidak resmi.</footer>
+</main></body></html>

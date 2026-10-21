@@ -1,5 +1,6 @@
 import type { SelectedRegion } from "@/lib/regionSearch";
 import type { TempatDipilih } from "@/lib/searchTabs";
+import type { BuyerCriteria } from "@/lib/chatbot/property-knowledge";
 
 export type KlienStatus =
   | "lead_baru"
@@ -82,6 +83,10 @@ export interface Klien {
   catatan: string | null;
   dibuat_pada: string;
   diperbarui_pada: string;
+  chatbot_kriteria?: BuyerCriteria | null;
+  chatbot_budget_min?: string | number | null;
+  chatbot_budget_max?: string | number | null;
+  chatbot_terakhir_pada?: string | null;
   preferensi: PreferensiKlien[];
   propertiAsal?: {
     id_property: string;
@@ -114,6 +119,7 @@ export interface PreferensiForm {
   /** Tempat patokan, disimpan utuh supaya chip-nya bisa digambar ulang tanpa
    *  menanyakan kamus lagi. null = tanpa kriteria tempat. */
   dekat: TempatDipilih | null;
+  dekat_asli?: { nilai: string; radius: number | null; radiusTampil: number };
   /** Patokan teks alamat (nama jalan / perumahan). "" = tidak dipakai. */
   alamat_teks: string;
   tujuan_beli: TujuanBeli | "";

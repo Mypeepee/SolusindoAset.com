@@ -18,6 +18,7 @@
 import { prisma } from "@/lib/prisma";
 import { hargaEfektif } from "@/lib/klienMatch";
 import { pesanRekomendasi, tautanWa, type AsetPesan } from "@/lib/klienPesan";
+import { freshAuctionWhere, isFreshAuction } from "../../backend/whatsapp/services/auction_freshness.js";
 
 /** Sekali kirim maksimal sekian aset. Bukan batas teknis — batas sopan santun:
  *  pesan WhatsApp berisi dua belas properti tidak dibaca siapa pun, dan agent
@@ -81,17 +82,19 @@ export async function catatKiriman(opsi: {
      kalau ia datang dari browser yang membuka halaman sejam lalu (atau dari
      email yang dibuka besok pagi), seluruh deteksi perubahan harga akan
      berdiri di atas angka yang sudah basi. */
-  const aset = await prisma.listing.findMany({
-    where: { id_property: { in: ids.map(BigInt) }, status_tayang: "TERSEDIA" },
+  const checkedAt = Date.now();
+  const rows = await prisma.listing.findMany({
+    where: { id_property: { in: ids.map(BigInt) }, status_tayang: "TERSEDIA", AND: [freshAuctionWhere(checkedAt)] },
     select: {
       id_property: true, slug: true, judul: true, jenis_transaksi: true, kategori: true,
       harga: true, harga_promo: true, harga_efektif: true, nilai_limit_lelang: true, status_tayang: true,
       kota: true, kecamatan: true, luas_tanah: true, luas_bangunan: true,
-      kamar_tidur: true, kamar_mandi: true,
+      kamar_tidur: true, kamar_mandi: true, tanggal_lelang: true,
     },
   });
+  const aset = rows.filter(l => isFreshAuction(l, checkedAt));
   if (aset.length === 0)
-    return { ok: false, status: 404, message: "Aset tidak ditemukan atau sudah tidak tersedia" };
+    return { ok: false, status: 404, message: "Aset tidak ditemukan, sudah tidak tersedia, atau tanggal lelangnya lebih dari satu bulan yang lalu" };
 
   const sekarang = new Date();
 
@@ -178,6 +181,7 @@ export async function catatKiriman(opsi: {
       slug: l.slug,
       judul: l.judul,
       jenis_transaksi: l.jenis_transaksi,
+      tanggal_lelang: l.tanggal_lelang,
       kategori: l.kategori,
       harga: hargaEfektif(l),
       kota: l.kota ?? "",

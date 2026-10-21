@@ -32,6 +32,7 @@ import { createPortal } from "react-dom";
 import { Icon } from "@iconify/react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { TempatDipilih } from "@/lib/searchTabs";
+import { parsePropertySearchQuery, SURABAYA_REGIONS, surabayaRegionLabel } from "@/lib/propertySearchQuery";
 
 export interface SaranTempatUi extends TempatDipilih {
   jumlah: number;
@@ -124,6 +125,12 @@ export default function TempatSaranPanel({
   inline = false,
 }: Props) {
   const t = THEMES[theme];
+  const parsedQuery = parsePropertySearchQuery(alamat?.teks ?? "");
+  const structured = Boolean(parsedQuery.nearby) || parsedQuery.regions.length > 0 || parsedQuery.minHarga !== undefined || parsedQuery.maxHarga !== undefined;
+  const priceDescription = [
+    parsedQuery.minHarga === undefined ? "" : `Mulai Rp${parsedQuery.minHarga.toLocaleString("id-ID")}`,
+    parsedQuery.maxHarga === undefined ? "" : `Maksimal Rp${parsedQuery.maxHarga.toLocaleString("id-ID")}`,
+  ].filter(Boolean).join(" · ");
   const [rect, setRect] = useState<DOMRect | null>(null);
   const [mounted, setMounted] = useState(false);
   const daftarRef = useRef<HTMLDivElement>(null);
@@ -307,7 +314,7 @@ export default function TempatSaranPanel({
               <p
                 className={`px-3.5 pb-1 pt-3 text-[10px] font-extrabold uppercase tracking-wider ${t.sub}`}
               >
-                Alamat &amp; kawasan
+                {parsedQuery.nearby ? "Tempat terdekat" : structured ? "Wilayah & harga" : "Alamat & kawasan"}
               </p>
               <button
                 type="button"
@@ -335,9 +342,15 @@ export default function TempatSaranPanel({
                   <span className={`block truncate text-sm font-bold ${t.nama}`}>
                     “{alamat.teks}”
                   </span>
-                  <span className={`block truncate text-[11px] ${t.sub}`}>
-                    Cari di alamat, kelurahan, kecamatan &amp; judul
+                  <span className={`block text-[11px] ${t.sub}`}>
+                    {parsedQuery.nearby
+                      ? `Dekat ${parsedQuery.nearby.name}${parsedQuery.nearby.wilayah ? ` di ${parsedQuery.nearby.wilayah}` : ""}`
+                      : parsedQuery.regions.length
+                      ? parsedQuery.regions.map((region) => `${surabayaRegionLabel(region)}: ${SURABAYA_REGIONS[region].join(", ")}`).join("; ")
+                      : structured ? "Cari properti sesuai budget" : "Cari di alamat, kelurahan, kecamatan & judul"}
                   </span>
+                  {parsedQuery.nearby?.radius !== undefined && <span className={`mt-1 block text-[11px] font-semibold ${t.nama}`}>Jarak maksimal {parsedQuery.nearby.radius.toLocaleString("id-ID")} m</span>}
+                  {priceDescription && <span className={`mt-1 block text-[11px] font-semibold ${t.nama}`}>{priceDescription}</span>}
                 </span>
                 <span
                   className={`shrink-0 text-[11px] font-bold ${
@@ -366,7 +379,7 @@ export default function TempatSaranPanel({
                 Cari juga berdasarkan tempat
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {["deket kampus", "deket sekolah", "deket rumah sakit", "deket mall"].map(
+                {["dekat sekolah di Surabaya", "dekat rumah sakit", "dekat stasiun", "dekat mall", "dekat pintu tol"].map(
                   (c) => (
                     <button
                       key={c}
@@ -403,7 +416,7 @@ export default function TempatSaranPanel({
             {populer
               ? "pilih"
               : alamat && aktif >= items.length
-                ? "cari alamat"
+                ? structured ? "cari properti" : "cari alamat"
                 : "cari di sekitarnya"}
           </div>
         )}

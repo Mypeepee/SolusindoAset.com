@@ -1,4 +1,6 @@
 import "server-only";
+import { nearbyQueryParts } from "../../../backend/whatsapp/services/search_scope.js";
+import { nearbyNameWhere } from "../nearbyNameWhere";
 
 /**
  * Pencarian tempat — mengubah "deket unesa" jadi daftar saran, lalu jadi
@@ -32,6 +34,8 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { RADIUS_INDEKS } from "./landmark";
+import { nearbyScopeWhere, nearbyScopeSql } from "../nearbySearchScope";
+import { normalizeNearbyArea } from "../nearbySearchQuery";
 import {
   KELAS_TEMPAT,
   RADIUS_JANGKAUAN,
@@ -210,8 +214,6 @@ interface HasilKelas {
   saran: SaranTempat[];
   /** Bentuk ternormalisasi bagian NAMA saja (tanpa "di …"), bila jenis cocok. */
   kueriNama: string | null;
-  /** Wilayah yang terbukti ada isinya — dipakai menyaring saran nama juga. */
-  wilayahSah: string | null;
 }
 
 /**
@@ -230,7 +232,7 @@ function radiusKelas(kelas: KelasTempat): number {
 }
 
 async function cariKelas(inti: string, opsi: OpsiCari): Promise<HasilKelas> {
-  const kosong: HasilKelas = { saran: [], kueriNama: null, wilayahSah: null };
+  const kosong: HasilKelas = { saran: [], kueriNama: null };
 
   const { nama, wilayah } = pisahWilayah(inti);
   const kelas = kelasDariKata(normalNama(nama));
@@ -249,29 +251,24 @@ async function cariKelas(inti: string, opsi: OpsiCari): Promise<HasilKelas> {
    * cadangan yang jujur.
    */
   const kandidat: Array<string | null> = wilayah
-    ? [normalKota(wilayah)]
+    ? [normalizeNearbyArea(wilayah)]
     : opsi.kota
       ? [normalKota(opsi.kota), null]
       : [null];
 
   const hitung = async (w: string | null): Promise<number> => {
-    const [baris] = await prisma.$queryRaw<Array<{ n: number }>>`
-      SELECT count(*)::int AS n FROM tempat
-      WHERE kelas = ${kelas}
-        AND (
-          ${w}::text IS NULL
-          OR lower(kota)     LIKE '%' || ${w}::text || '%'
-          OR lower(provinsi) LIKE '%' || ${w}::text || '%'
-        )
-    `;
-    return Number(baris?.n ?? 0);
+    return prisma.tempat.count({ where: {
+      kelas,
+      listing: { some: {
+        jarak_meter: { lte: radiusKelas(kelas) },
+        listing: { status_tayang: "TERSEDIA", bukan_properti: false, ...nearbyScopeWhere(w) },
+      } },
+    } });
   };
 
   const buat = (
     w: string | null,
     jumlah: number,
-    gantiWilayah = false,
-    diminta?: string,
   ): SaranTempat => {
     const namaWilayah = w ? rapiNama(w) : null;
     return {
@@ -288,8 +285,6 @@ async function cariKelas(inti: string, opsi: OpsiCari): Promise<HasilKelas> {
       satuan: labelKecil,
       cabang: jumlah,
       kelasSemua: true,
-      gantiWilayah,
-      wilayahDiminta: diminta,
       radius: radiusKelas(kelas),
       // Selalu di puncak: yang mengetik persis sebuah kata jenis memang sedang
       // meminta jenisnya, bukan tempat yang kebetulan bernama mirip.
@@ -298,32 +293,13 @@ async function cariKelas(inti: string, opsi: OpsiCari): Promise<HasilKelas> {
   };
 
   const saran: SaranTempat[] = [];
-  let wilayahSah: string | null = null;
 
   for (const w of kandidat) {
     const jumlah = await hitung(w);
-    if (jumlah === 0) continue;
     saran.push(buat(w, jumlah));
-    if (w && !wilayahSah) wilayahSah = w;
   }
 
-  /**
-   * Wilayah yang diminta ternyata kosong di kamus ("sekolah di Banten" padahal
-   * belum ada aset di sana). Ditawarkan versi tanpa batas wilayah sebagai
-   * ALTERNATIF BERLABEL — bukan pengganti diam-diam.
-   *
-   * Tanpa ini, layarnya cuma berkata "tidak ada tempat bernama 'sekolah di
-   * banten'", yang salah dua kali: itu bukan nama tempat, dan sekolahnya
-   * banyak — yang belum ada justru asetnya di Banten.
-   */
-  if (wilayah && saran.length === 0) {
-    const semua = await hitung(null);
-    if (semua > 0) {
-      saran.push(buat(null, semua, true, rapiNama(normalKota(wilayah))));
-    }
-  }
-
-  return { saran, kueriNama: normalNama(nama), wilayahSah };
+  return { saran, kueriNama: normalNama(nama) };
 }
 
 export async function cariTempat(
@@ -337,6 +313,15 @@ export async function cariTempat(
   const kotaNormal = opsi.kota ? normalKota(opsi.kota) : null;
 
   const kelas = await cariKelas(inti, opsi);
+  const explicitArea = pisahWilayah(kueri.toLowerCase());
+  const wilayahSaring = explicitArea.wilayah
+    ? normalizeNearbyArea(explicitArea.wilayah.replace(/^(?:daerah|wilayah|area)\s+/i, "")) : null;
+  const scope = wilayahSaring
+    ? Prisma.sql`EXISTS (
+        SELECT 1 FROM listing_tempat ls
+        JOIN listing l ON l.id_property = ls.id_property
+        WHERE ls.id_tempat = t.id AND (${nearbyScopeSql(wilayahSaring)})
+      )` : Prisma.sql`TRUE`;
 
   /**
    * Kueri untuk pencarian NAMA, setelah bagian wilayah dilepas.
@@ -349,8 +334,8 @@ export async function cariTempat(
    * "universitas", dan wilayahnya berpindah tugas jadi PENYARING di bawah.
    */
   const kueriNama =
-    kelas.saran.length && kelas.kueriNama ? kelas.kueriNama : intiNormal;
-  const wilayahSaring = kelas.wilayahSah;
+    kelas.saran.length && kelas.kueriNama ? kelas.kueriNama
+      : explicitArea.wilayah ? bacaKueriDekat(explicitArea.nama).intiNormal : intiNormal;
 
   const bentuk = bentukKueri(kueriNama);
   const pakaiTrigram = kueriNama.length >= MIN_TRIGRAM;
@@ -379,12 +364,8 @@ export async function cariTempat(
       WHERE (${saring})
         -- Wilayah yang disebut user MENYARING, bukan sekadar menaikkan: yang
         -- menulis "di Surabaya" tidak sedang menyatakan preferensi, ia sedang
-        -- membatasi. Hanya berlaku saat wilayahnya sudah terbukti ada isinya.
-        AND (
-          ${wilayahSaring}::text IS NULL
-          OR lower(t.kota)     LIKE '%' || ${wilayahSaring}::text || '%'
-          OR lower(t.provinsi) LIKE '%' || ${wilayahSaring}::text || '%'
-        )
+        -- membatasi, termasuk ketika belum ada tempat yang tercatat di sana.
+        AND (${scope})
       GROUP BY t.id
       HAVING max(${skor}) >= ${AMBANG_MIRIP}
       ORDER BY skor DESC, t.jumlah_listing DESC, length(t.nama_normal) ASC
@@ -685,6 +666,8 @@ export async function tempatPopuler(opsi: OpsiCari = {}): Promise<SaranTempat[]>
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface TempatTerpilih {
+  /** OR antar grup, AND di dalam grup; dipertahankan dari kebutuhan chatbot. */
+  gabungan?: TempatTerpilih[][];
   nilai: string;
   nama: string;
   kelas: KelasTempat;
@@ -699,6 +682,7 @@ export interface TempatTerpilih {
    * KOSONG bila pilihannya berupa kriteria — lihat `kriteria`.
    */
   ids: bigint[];
+  wilayahAset?: string;
   /**
    * Pilihan "jenis tempat" ("kampus mana pun di Malang") disimpan sebagai
    * KRITERIA, bukan daftar id.
@@ -737,6 +721,32 @@ export async function bacaTempatTerpilih(
   if (!v || v.length > 220) return null;
 
   try {
+    if (v.startsWith("kueri:")) {
+      const query = v.slice(6);
+      if (!query || query.length > 100) return null;
+      const gabungan: TempatTerpilih[][] = [];
+      for (const group of nearbyQueryParts(query)) {
+        const leaves: TempatTerpilih[] = [];
+        for (const item of group) {
+          const normalized = normalNama(item), kelas = kelasDariKata(normalized);
+          const leaf = await bacaTempatTerpilih(kelas ? `kelas:${kelas}` : `nama:${item}`);
+          // Unknown AND operands must never disappear and broaden the query.
+          leaves.push(leaf || { nilai: item, nama: item, kelas: "LAINNYA", label: "Tempat", icon: "mdi:map-marker", warna: "#94a3b8", kota: null, radius: 1200, cabang: 0, ids: [] });
+        }
+        gabungan.push(leaves);
+      }
+      return { nilai: v, nama: query, label: "Tempat", kelas: "LAINNYA", icon: "mdi:map-marker", warna: "#94a3b8", kota: null,
+        radius: Math.max(...gabungan.flat().map((leaf) => leaf.radius)), cabang: gabungan.flat().reduce((n, leaf) => n + leaf.cabang, 0), ids: [], gabungan };
+    }
+    if (v.startsWith("nama:")) {
+      const query = v.slice(5);
+      if (query.length < 3 || query.length > 100) return null;
+      const rows = await prisma.tempat.findMany({ where: nearbyNameWhere(query), select: { id: true, nama: true, kelas: true, kota: true, jangkauan: true } });
+      if (!rows.length) return null;
+      const first = rows[0], kelas = adalahKelas(first.kelas) ? first.kelas : "LAINNYA", config = KELAS_TEMPAT[kelas];
+      return { nilai: v, nama: query, kelas, label: config.label, icon: config.icon, warna: config.warna, kota: first.kota,
+        radius: Math.max(...rows.map((row) => radiusKelas(adalahKelas(row.kelas) ? row.kelas : "LAINNYA"))), cabang: rows.length, ids: rows.map((row) => row.id) };
+    }
     // ── Bentuk "jenis tempat": kelas:KAMPUS atau kelas:KAMPUS@malang ────────
     if (v.startsWith("kelas:")) {
       const isi = v.slice(6);
@@ -745,25 +755,17 @@ export async function bacaTempatTerpilih(
       if (!adalahKelas(kelas)) return null;
 
       const wilayah = wilayahMentah
-        ? normalKota(wilayahMentah.replace(/-/g, " "))
+        ? normalizeNearbyArea(wilayahMentah.replace(/-/g, " "))
         : null;
       const konfig = KELAS_TEMPAT[kelas];
       const labelKecil = konfig.label.toLowerCase();
 
-      const [baris] = await prisma.$queryRaw<Array<{ n: number }>>`
-        SELECT count(*)::int AS n FROM tempat
-        WHERE kelas = ${kelas}
-          AND (
-            ${wilayah}::text IS NULL
-            OR lower(kota)     LIKE '%' || ${wilayah}::text || '%'
-            OR lower(provinsi) LIKE '%' || ${wilayah}::text || '%'
-          )
-      `;
-      const cabang = Number(baris?.n ?? 0);
-      // Tidak ada satu pun tempat jenis itu di wilayah itu — kembalikan null
-      // supaya halaman berperilaku seolah filternya tidak ada, bukan
-      // menampilkan "0 properti" di bawah judul yang menjanjikan sesuatu.
-      if (cabang === 0) return null;
+      const cabang = await prisma.tempat.count({ where: {
+        kelas,
+        listing: { some: { listing: nearbyScopeWhere(wilayah) ?? {} } },
+      } });
+      // Sebuah kriteria yang sah tetap berlaku saat datanya kosong. Melepas
+      // filter di sini justru akan menampilkan aset yang tidak dekat tempat itu.
 
       const namaWilayah = wilayah ? rapiNama(wilayah) : null;
       return {
@@ -776,7 +778,7 @@ export async function bacaTempatTerpilih(
         icon: konfig.icon,
         warna: konfig.warna,
         kota: namaWilayah,
-        radius: RADIUS_JANGKAUAN[konfig.jangkauan],
+        radius: radiusKelas(kelas),
         cabang,
         ids: [],
         kriteria: { kelas, wilayah },

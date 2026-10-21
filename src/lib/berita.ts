@@ -46,6 +46,8 @@ export type BeritaListItem = {
   tanggal_publish: string | null;
   tanggal_dibuat: string;
   tanggal_diupdate: string;
+  review_requested_at: string | null;
+  requested_publish_at: string | null;
 };
 
 export type BeritaDetail = BeritaListItem & {
@@ -55,6 +57,7 @@ export type BeritaDetail = BeritaListItem & {
   sumber_berita: string | null;
   share: number;
   id_agent: string | null;
+  meta_description: string | null;
 };
 
 type BeritaRow = {
@@ -78,6 +81,9 @@ type BeritaRow = {
   tanggal_publish: Date | null;
   tanggal_dibuat: Date;
   tanggal_diupdate: Date;
+  meta_description?: string | null;
+  review_requested_at?: Date | null;
+  requested_publish_at?: Date | null;
 };
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -145,6 +151,8 @@ export function toListItem(row: any): BeritaListItem {
     tanggal_publish: row.tanggal_publish ? row.tanggal_publish.toISOString() : null,
     tanggal_dibuat: row.tanggal_dibuat.toISOString(),
     tanggal_diupdate: row.tanggal_diupdate.toISOString(),
+    review_requested_at: row.review_requested_at?.toISOString() ?? null,
+    requested_publish_at: row.requested_publish_at?.toISOString() ?? null,
   };
 }
 
@@ -157,11 +165,15 @@ export function toDetail(row: BeritaRow): BeritaDetail {
     sumber_berita: row.sumber_berita ?? null,
     share: row.share ?? 0,
     id_agent: row.id_agent ?? null,
+    meta_description: row.meta_description ?? null,
   };
 }
 
 // ── Public reads ────────────────────────────────────────────────────
-const PUBLISHED_WHERE: Prisma.BeritaWhereInput = { status_publish: "PUBLISHED" };
+// Approved scheduled articles are readable at their deadline, even between cron ticks.
+const publishedWhere = (): Prisma.BeritaWhereInput => ({
+  AND: [{ OR: [{ status_publish: "PUBLISHED" }, { status_publish: "SCHEDULED", tanggal_publish: { lte: new Date() } }] }],
+});
 
 export type PublicListParams = {
   q?: string;
@@ -175,7 +187,7 @@ export async function getPublishedList(params: PublicListParams = {}) {
   const page = Math.max(1, params.page || 1);
   const pageSize = Math.min(48, Math.max(1, params.pageSize || 9));
 
-  const where: Prisma.BeritaWhereInput = { ...PUBLISHED_WHERE };
+  const where: Prisma.BeritaWhereInput = publishedWhere();
   if (params.kategori && params.kategori !== "All") where.kategori = params.kategori;
   if (params.excludeSlug) where.slug = { not: params.excludeSlug };
   if (params.q && params.q.trim()) {
@@ -212,17 +224,17 @@ export async function getPublishedList(params: PublicListParams = {}) {
 export async function getFeatured(): Promise<BeritaListItem | null> {
   const row =
     (await prisma.berita.findFirst({
-      where: { ...PUBLISHED_WHERE, berita_utama: true },
+      where: { ...publishedWhere(), berita_utama: true },
       select: LIST_SELECT,
       orderBy: [{ tanggal_publish: "desc" }],
     })) ||
     (await prisma.berita.findFirst({
-      where: { ...PUBLISHED_WHERE, berita_unggulan: true },
+      where: { ...publishedWhere(), berita_unggulan: true },
       select: LIST_SELECT,
       orderBy: [{ tanggal_publish: "desc" }],
     })) ||
     (await prisma.berita.findFirst({
-      where: PUBLISHED_WHERE,
+      where: publishedWhere(),
       select: LIST_SELECT,
       orderBy: [{ tanggal_publish: "desc" }, { tanggal_dibuat: "desc" }],
     }));
@@ -231,7 +243,7 @@ export async function getFeatured(): Promise<BeritaListItem | null> {
 
 export async function getLatest(take = 3): Promise<BeritaListItem[]> {
   const rows = await prisma.berita.findMany({
-    where: PUBLISHED_WHERE,
+    where: publishedWhere(),
     select: LIST_SELECT,
     orderBy: [{ tanggal_publish: "desc" }, { tanggal_dibuat: "desc" }],
     take,
@@ -242,7 +254,7 @@ export async function getLatest(take = 3): Promise<BeritaListItem[]> {
 export async function getCategoryCounts(): Promise<Record<string, number>> {
   const grouped = await prisma.berita.groupBy({
     by: ["kategori"],
-    where: PUBLISHED_WHERE,
+    where: publishedWhere(),
     _count: { _all: true },
   });
   const out: Record<string, number> = {};
@@ -251,9 +263,9 @@ export async function getCategoryCounts(): Promise<Record<string, number>> {
 }
 
 export async function getBySlug(slug: string): Promise<BeritaDetail | null> {
-  const row = await prisma.berita.findUnique({ where: { slug } });
+  const row = await prisma.berita.findFirst({ where: { ...publishedWhere(), slug } });
   if (!row) return null;
-  return toDetail(row as unknown as BeritaRow);
+  return { ...toDetail(row as unknown as BeritaRow), status_publish: "PUBLISHED" };
 }
 
 export async function getRelated(
@@ -262,7 +274,7 @@ export async function getRelated(
   take = 3
 ): Promise<BeritaListItem[]> {
   const same = await prisma.berita.findMany({
-    where: { ...PUBLISHED_WHERE, kategori, slug: { not: slug } },
+    where: { ...publishedWhere(), kategori, slug: { not: slug } },
     select: LIST_SELECT,
     orderBy: [{ tanggal_publish: "desc" }],
     take,
@@ -271,7 +283,7 @@ export async function getRelated(
 
   const fillers = await prisma.berita.findMany({
     where: {
-      ...PUBLISHED_WHERE,
+      ...publishedWhere(),
       slug: { notIn: [slug, ...same.map((s) => s.slug)] },
     },
     select: LIST_SELECT,

@@ -1,0 +1,11 @@
+import { writeFile } from 'node:fs/promises';
+import { understandingScenarios, runUnderstandingScenario } from './lib/understanding-dialogues.js';
+import { summarizeLanguageResults } from './lib/language-dialogues.js';
+const baseline = process.argv.includes('--baseline'), results = [];
+for (const scenario of understandingScenarios()) results.push(await runUnderstandingScenario(scenario));
+const summary = summarizeLanguageResults(results);
+const path = `/tmp/kosku-understanding-${baseline ? 'baseline' : 'simulations'}.json`;
+await writeFile(path, JSON.stringify({ seed: 20261013, scope: 'Synthetic offline regression, no external AI, DB or messages.', summary, results }, null, 2));
+console.log(JSON.stringify({ ...summary, report: path }, null, 2));
+console.log(results.filter((r) => !r.passed).slice(0, 30).map((r) => `${r.name}: ${r.error}`).join('\n'));
+if (summary.failed && !baseline) process.exitCode = 1;

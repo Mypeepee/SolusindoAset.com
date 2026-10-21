@@ -30,6 +30,7 @@ export type KategoriPOI =
   | "education"
   | "worship"
   | "transport"
+  | "toll"
   | "mall"
   | "gym"
   | "hotel"
@@ -68,6 +69,7 @@ export const KATEGORI_POI: Record<KategoriPOI, KonfigKategori> = {
   // sekitar", "Gereja X" berlambang bulan sabit jadi salah yang terlihat.
   worship: { label: "Ibadah", icon: "mdi:hands-pray", warna: "#8b5cf6" },
   transport: { label: "Transport", icon: "solar:bus-bold-duotone", warna: "#0ea5e9" },
+  toll: { label: "Pintu Tol", icon: "mdi:boom-gate", warna: "#f59e0b" },
   mall: { label: "Mall", icon: "solar:shop-2-bold-duotone", warna: "#a855f7" },
   gym: { label: "Gym", icon: "solar:dumbbell-large-bold-duotone", warna: "#2563eb" },
   hotel: { label: "Hotel", icon: "solar:bed-bold-duotone", warna: "#d946ef" },
@@ -99,6 +101,7 @@ export const AKSES_DARI_KATEGORI: Record<KategoriPOI, AksesTipe> = {
   education: "SEKOLAH",
   worship: "MASJID",
   transport: "HALTE",
+  toll: "PINTU_TOL",
   mall: "MALL",
   gym: "LAINNYA",
   hotel: "LAINNYA",
@@ -113,6 +116,7 @@ const NAMA_CADANGAN: Record<KategoriPOI, string> = {
   education: "Sekolah / kampus",
   worship: "Tempat ibadah",
   transport: "Halte / stasiun",
+  toll: "Pintu tol",
   mall: "Pusat perbelanjaan",
   gym: "Gym",
   hotel: "Penginapan",
@@ -246,6 +250,8 @@ export function jarakMeter(
 function klasifikasi(tags: Record<string, string>): KategoriPOI | null {
   const { amenity, shop, leisure, tourism, healthcare, railway, highway } = tags;
 
+  if (tags.barrier === "toll_booth") return "toll";
+
   if (amenity === "place_of_worship") return "worship";
   if (["university", "school", "college", "kindergarten"].includes(amenity))
     return "education";
@@ -288,6 +294,7 @@ export function bangunQueryOverpass(lat: number, lon: number, radius: number): s
       nwr["tourism"~"^(hotel|guest_house|hostel|motel)$"](around:${radius},${lat},${lon});
       nwr["railway"="station"](around:${radius},${lat},${lon});
       node["highway"="bus_stop"](around:${radius},${lat},${lon});
+      nwr["barrier"="toll_booth"]["name"](around:${radius},${lat},${lon});
       nwr["public_transport"="station"](around:${radius},${lat},${lon});
     );
     out center ${MAKS_HASIL * 3};
@@ -305,7 +312,7 @@ export function petakanElemen(
   lon: number,
 ): TempatTerdekat[] {
   const hasil: TempatTerdekat[] = [];
-  const terlihat = new Set<string>();
+  const terlihat = new Map<string, number>();
 
   for (const el of Array.isArray(elemen) ? elemen : []) {
     const tags = (el?.tags ?? {}) as Record<string, string>;
@@ -323,17 +330,22 @@ export function petakanElemen(
     // Satu tempat bisa muncul sebagai node DAN way (mis. gedung + titik POI).
     // Kuncinya nama+kategori, bukan id, supaya pin tidak menumpuk persis.
     const kunci = `${kategori}|${nama.toLowerCase()}`;
-    if (terlihat.has(kunci)) continue;
-    terlihat.add(kunci);
+    const jarak = jarakMeter(lat, lon, pLat, pLon);
+    const index = terlihat.get(kunci);
+    if (index !== undefined && hasil[index].jarak <= jarak) continue;
 
-    hasil.push({
+    const place: TempatTerdekat = {
       id: `${el.type}-${el.id}`,
       nama,
       lat: pLat,
       lon: pLon,
       kategori,
-      jarak: jarakMeter(lat, lon, pLat, pLon),
-    });
+      jarak,
+    };
+    if (index === undefined) {
+      terlihat.set(kunci, hasil.length);
+      hasil.push(place);
+    } else hasil[index] = place;
   }
 
   // Yang terdekat menang saat dipotong: kalau harus membuang, buang yang paling

@@ -5,6 +5,7 @@ import { Icon } from "@iconify/react";
 import Link from "next/link";
 import { buildLelangPosterPayload, downloadLelangPoster } from "@/lib/lelangPoster";
 import { SITE_URL } from "@/lib/site";
+import { buildWhatsAppUrl } from "@/lib/whatsapp";
 import RincianBiayaSheet from "./RincianBiayaSheet";
 import {
   formatRupiah as formatMoney,
@@ -35,6 +36,7 @@ const formatTanggalLelang = (val?: string | null): string => {
   const d = new Date(val);
   if (isNaN(d.getTime())) return "-";
   return d.toLocaleDateString("id-ID", {
+    timeZone: "Asia/Jakarta",
     day: "2-digit",
     month: "long",
     year: "numeric",
@@ -120,8 +122,8 @@ export default function KeperluanAgent({ data, currentAgentId, currentJabatan, s
     const stokerNum = (stokerPhone || "").replace(/^0/, "62").replace(/\D/g, "");
     const waUrl =
       !isStoker && stokerNum
-        ? `https://wa.me/${stokerNum}?text=${encodeURIComponent(text)}`
-        : `https://wa.me/?text=${encodeURIComponent(text)}`;
+        ? buildWhatsAppUrl(stokerNum, text)
+        : `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
 
     window.open(waUrl, "_blank");
   };
@@ -173,35 +175,45 @@ export default function KeperluanAgent({ data, currentAgentId, currentJabatan, s
         shadow-[0_24px_80px_rgba(0,0,0,0.75)] backdrop-blur"
       >
         {/* HEADER: Estimasi Biaya — selalu terlihat */}
-        <div className="shrink-0 px-6 pt-4 pb-3 [@media(max-height:820px)]:pt-3 [@media(max-height:820px)]:pb-2.5 border-b border-white/10 bg-gradient-to-br from-emerald-500/20 via-emerald-500/5 to-transparent">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[11px] font-semibold text-emerald-100 tracking-[0.16em] uppercase">
-                Estimasi Biaya
-              </span>
+        <div className="shrink-0 px-6 py-4 [@media(max-height:820px)]:py-3 border-b border-white/10 bg-gradient-to-br from-emerald-500/20 via-emerald-500/5 to-transparent">
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-[11px] font-semibold text-emerald-100 tracking-[0.16em] uppercase">
+                  Estimasi Biaya
+                </span>
+              </div>
+
+              {/* LIMIT UTAMA — satu kelompok dengan judul agar header tidak
+                  terpecah oleh ruang kosong di antara informasi dan CTA. */}
+              <p className="mt-3 text-[10px] uppercase tracking-[0.18em] text-slate-400">
+                Harga Limit
+              </p>
+              <p className="mt-1 text-[20px] font-bold text-white leading-tight tabular-nums">
+                {formatMoney(limit)}
+              </p>
             </div>
             <button
               onClick={() => setRincianOpen(true)}
-              className="flex items-center gap-1 text-[10px] font-semibold text-slate-300 hover:text-white
-                rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] px-2 py-1 transition-colors"
+              aria-label="Lihat rincian estimasi biaya"
+              className="group flex h-11 shrink-0 items-center gap-2 rounded-xl border border-emerald-300/25
+                bg-emerald-400/[0.09] px-2.5 text-left shadow-[0_4px_16px_rgba(52,211,153,0.08)]
+                transition-all hover:border-emerald-300/50 hover:bg-emerald-400/[0.15]
+                hover:shadow-[0_6px_20px_rgba(52,211,153,0.16)] focus-visible:outline-none
+                focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950
+                active:scale-[0.97]"
             >
-              <Icon icon="solar:calculator-minimalistic-bold-duotone" className="text-emerald-300 text-xs" />
-              Rincian
+              <span className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-300/15 text-emerald-200">
+                <span className="absolute inset-0 rounded-lg border border-emerald-300/30 motion-safe:animate-ping motion-reduce:hidden" />
+                <Icon icon="solar:calculator-minimalistic-bold-duotone" className="relative text-base" />
+              </span>
+              <span className="whitespace-nowrap text-[11px] font-bold text-emerald-50">Rincian biaya</span>
+              <Icon
+                icon="solar:alt-arrow-right-linear"
+                className="ml-0.5 shrink-0 text-sm text-emerald-200/80 transition-transform group-hover:translate-x-0.5"
+              />
             </button>
-          </div>
-
-          {/* LIMIT UTAMA */}
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">
-              Harga Limit
-            </p>
-            <p className="mt-1 text-[20px] font-bold text-white leading-tight tabular-nums">
-              {formatMoney(limit)}
-            </p>
-            <p className="mt-1 text-[10px] text-slate-400 [@media(max-height:820px)]:hidden">
-              Nilai ini akan menyesuaikan dengan harga menang lelang.
-            </p>
           </div>
         </div>
 
@@ -219,9 +231,7 @@ export default function KeperluanAgent({ data, currentAgentId, currentJabatan, s
             </span>
           </div>
 
-          {/* Dua pos biaya utama — warnanya konsisten dengan sheet rincian
-              (hijau = balik nama, kuning = eksekusi) supaya agent tidak perlu
-              membaca ulang label saat berpindah tampilan. */}
+          {/* Ringkasan dua pos biaya; fee agent dirinci di sheet biaya lengkap. */}
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => setRincianOpen(true)}
@@ -260,7 +270,7 @@ export default function KeperluanAgent({ data, currentAgentId, currentJabatan, s
               <p className="text-[9px] uppercase tracking-[0.16em] text-slate-400">
                 Estimasi Total Modal
               </p>
-              <p className="text-[9px] text-slate-500 mt-0.5">Limit + balik nama + eksekusi</p>
+              <p className="text-[9px] text-slate-500 mt-0.5">Limit + biaya + fee agent</p>
             </div>
             <p className="text-[15px] font-bold text-white tabular-nums shrink-0">
               {formatMoney(rincian.totalModal)}
@@ -269,12 +279,24 @@ export default function KeperluanAgent({ data, currentAgentId, currentJabatan, s
 
           <button
             onClick={() => setRincianOpen(true)}
-            className="w-full mt-1 rounded-2xl bg-white/[0.02] border border-white/5 px-3 py-2 text-left hover:bg-white/[0.05] transition-colors [@media(max-height:900px)]:hidden"
+            className="group mt-1 flex min-h-11 w-full items-center justify-between rounded-xl border border-emerald-300/20
+              bg-emerald-400/[0.06] px-3 text-left transition-all hover:border-emerald-300/45 hover:bg-emerald-400/[0.11]
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950
+              active:scale-[0.98] [@media(max-height:820px)]:hidden"
           >
-            <p className="text-[9px] text-slate-400 leading-relaxed">
-              Buka rincian untuk melihat komponen tiap pos biaya dan menyalin penjelasannya
-              dalam format siap kirim ke klien.
-            </p>
+            <span className="flex items-center gap-2.5">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-300/10 text-emerald-200">
+                <Icon icon="solar:calculator-minimalistic-bold-duotone" className="text-[15px]" />
+              </span>
+              <span>
+                <span className="block text-[10px] font-bold text-emerald-50">Lihat rincian biaya lengkap</span>
+                <span className="block mt-0.5 text-[9px] text-slate-400">Komponen biaya &amp; teks siap kirim ke klien</span>
+              </span>
+            </span>
+            <Icon
+              icon="solar:alt-arrow-right-linear"
+              className="shrink-0 text-sm text-emerald-200/80 transition-transform group-hover:translate-x-0.5"
+            />
           </button>
         </div>
 
@@ -449,33 +471,37 @@ export default function KeperluanAgent({ data, currentAgentId, currentJabatan, s
         <button
           onClick={() => setRincianOpen(true)}
           aria-label="Lihat rincian estimasi biaya"
-          className="w-full h-[32px] px-4 flex items-center justify-between gap-2
-            border-b border-white/[0.06] active:bg-white/[0.035] transition-colors"
+          className="group w-full min-h-12 px-4 flex items-center justify-between gap-2
+            border-b border-emerald-300/[0.12] bg-gradient-to-r from-emerald-400/[0.09] via-emerald-400/[0.035] to-transparent
+            transition-colors hover:from-emerald-400/[0.13] active:bg-emerald-400/[0.14]
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-300"
         >
           <span className="flex items-center gap-2 min-w-0 leading-none">
             <span className="flex items-baseline gap-1.5 shrink-0">
-              <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-white/35">
+              <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-white/45">
                 Limit
               </span>
-              <span className="text-[11.5px] font-bold text-white tabular-nums">
+              <span className="text-[12px] font-bold text-white tabular-nums">
                 {formatMoneyShort(limit)}
               </span>
             </span>
-            <span className="w-px h-2.5 bg-white/10 shrink-0" />
+            <span className="w-px h-4 bg-white/10 shrink-0" />
             <span className="flex items-baseline gap-1.5 min-w-0">
-              <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-white/35 shrink-0">
-                Est. Biaya
+              <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-white/45 shrink-0">
+                Worst case
               </span>
-              <span className="text-[11.5px] font-bold text-emerald-300 tabular-nums truncate">
+              <span className="text-[12px] font-bold text-emerald-300 tabular-nums truncate">
                 {formatMoneyShort(totalBiaya)}
               </span>
             </span>
           </span>
-          <span className="flex items-center gap-0.5 shrink-0 text-white/40">
-            <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] max-[359px]:hidden">
-              Rincian
+          <span className="flex items-center gap-1.5 shrink-0 rounded-xl border border-emerald-300/25 bg-emerald-300/10 py-1.5 pl-1.5 pr-2 text-emerald-100">
+            <span className="relative flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-300/15 text-emerald-200">
+              <span className="absolute inset-0 rounded-lg border border-emerald-200/30 motion-safe:animate-ping motion-reduce:hidden" />
+              <Icon icon="solar:calculator-minimalistic-bold-duotone" className="relative text-[14px]" />
             </span>
-            <Icon icon="solar:alt-arrow-right-linear" className="text-[11px]" />
+            <span className="text-[9px] font-extrabold uppercase tracking-[0.06em]">Rincian</span>
+            <Icon icon="solar:alt-arrow-right-linear" className="hidden min-[360px]:block text-[13px] transition-transform group-hover:translate-x-0.5" />
           </span>
         </button>
 

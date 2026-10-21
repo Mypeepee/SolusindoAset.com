@@ -18,7 +18,6 @@ import { createPortal } from "react-dom";
 import { Icon } from "@iconify/react";
 
 import Kalender, { type FaseRentang } from "./Kalender";
-import SurveiModal from "./SurveiModal";
 import VoucherSheet from "./VoucherSheet";
 import PengajuanSewaModal from "./PengajuanSewaModal";
 import { useVoucher } from "../lib/useVoucher";
@@ -47,7 +46,7 @@ import type { SewaDetailData } from "../types";
  *               hanya tombol aksinya dihilangkan. Bukan kosmetik: pengajuan
  *               sewa yang hidup akan tercatat sebagai lead atas listingnya
  *               sendiri — mengotori persis angka yang dipakai menilai listing
- *               itu — dan penjadwalan surveinya berakhir di nomor sendiri.
+ *               itu.
  */
 export type ModePanel = "penyewa" | "pratinjau";
 
@@ -151,7 +150,6 @@ export default function BookingSidebar({
   );
   const [kalender, setKalender] = useState(false);
   const [fase, setFase] = useState<FaseRentang>("mulai");
-  const [survei, setSurvei] = useState(false);
   const [pilihTipeBuka, setPilihTipeBuka] = useState(false);
   const [voucherBuka, setVoucherBuka] = useState(false);
   const [pengajuanBuka, setPengajuanBuka] = useState(false);
@@ -296,10 +294,6 @@ export default function BookingSidebar({
   /** Potongan terbesar yang bisa didapat sekarang — umpan baris voucher. */
   const hematTerbaik = voucher.terbaik?.potongan ?? 0;
 
-  const ringkasanPilihan = tipe
-    ? `tipe ${tipe.nama}${tipe.luasKamar ? ` (${tipe.luasKamar} m²)` : ""}`
-    : undefined;
-
   const lokasiRingkas =
     [data.kelurahan, data.kecamatan, data.kota].filter(Boolean).join(", ") ||
     data.kota;
@@ -341,13 +335,6 @@ export default function BookingSidebar({
     return Math.max(12, selisihBulan + 1);
   })();
 
-  /* Dulu di sini ada `hubungiWA` — pembangun pesan WhatsApp untuk tombol "Chat
-     agent" di area aksi. Tombolnya dihapus (lihat catatan di sana), dan
-     fungsinya ikut dihapus daripada ditinggal menganggur: pesan WhatsApp yang
-     setara sudah dibangun di PengajuanSewaModal & SurveiModal, dan dua salinan
-     format pesan yang sama adalah dua tempat yang harus diingat saat harganya
-     berubah bentuk. */
-
   /**
    * Isi panel, dipakai desktop & bottom sheet.
    *
@@ -379,13 +366,23 @@ export default function BookingSidebar({
               )}
             </p>
           </div>
-          {promoBerlaku && (
+          <div className="mt-1 flex shrink-0 items-center gap-2">
             <span
-              className={`mt-1 shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${AKSEN.mint.chip}`}
+              role="img"
+              aria-label="Listing terverifikasi"
+              title="Listing terverifikasi"
+              className={`grid h-8 w-8 place-items-center rounded-full border ${AKSEN.emerald.chip}`}
             >
-              Promo
+              <Icon icon="solar:verified-check-bold" className="text-base" />
             </span>
-          )}
+            {promoBerlaku && (
+              <span
+                className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${AKSEN.mint.chip}`}
+              >
+                Promo
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Baris status: tipe yang dipilih + ketersediaannya. Ketersediaan di
@@ -866,26 +863,27 @@ export default function BookingSidebar({
       <div className="px-5 pt-4">
         {terkunci ? (
           <div
-            className={`rounded-2xl border border-rose-400/20 p-4 ${AKSEN.rose.wash}`}
+            className={`flex items-center gap-3 rounded-2xl border border-rose-400/20 px-3 py-2.5 ${AKSEN.rose.wash}`}
           >
-            <p className={`flex items-center gap-2 text-xs font-bold ${AKSEN.rose.teks}`}>
-              <Icon icon="solar:lock-keyhole-bold-duotone" className="text-base" />
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-rose-400/10">
+              <Icon
+                icon="solar:lock-keyhole-bold-duotone"
+                className={`text-base ${AKSEN.rose.teks}`}
+              />
+            </span>
+            <p className={`min-w-0 flex-1 truncate text-xs font-bold ${AKSEN.rose.teks}`}>
               {tersewa
                 ? "Listing ini sudah tersewa"
                 : penuhKarenaTanggal
                   ? unitTunggal
-                    ? "Unit sudah terpakai pada tanggal itu"
-                    : "Kamar sudah penuh pada tanggal itu"
+                    ? "Unit terpakai pada tanggal ini"
+                    : "Kamar penuh pada tanggal ini"
                   : penuh
                     ? unitTunggal
                       ? "Unit ini sedang tidak tersedia"
                       : "Semua kamar sedang terisi"
-                    : "Harga belum tersedia untuk durasi ini"}
+                    : "Harga belum tersedia"}
             </p>
-
-            {/* Penuh karena TANGGAL masih punya jalan keluar, dan jalan
-                keluarnya ada di panel ini — mengarahkannya ke listing lain
-                justru membuang penyewa yang sebenarnya masih tertarik. */}
             {penuhKarenaTanggal ? (
               <button
                 onClick={() => {
@@ -893,18 +891,17 @@ export default function BookingSidebar({
                   setFase("mulai");
                   bukaKalender("mulai");
                 }}
-                className={`mt-2 inline-flex items-center gap-1 text-[11px] font-bold transition-colors hover:text-white ${AKSEN.sky.teks}`}
+                className={`shrink-0 text-[11px] font-bold transition-colors hover:text-white ${AKSEN.sky.teks}`}
               >
-                Coba tanggal lain
-                <Icon icon="solar:calendar-search-linear" />
+                Ubah
               </button>
             ) : (
               <Link
                 href={`/Sewa?kota=${encodeURIComponent(data.kota)}`}
-                className={`mt-2 inline-flex items-center gap-1 text-[11px] font-bold transition-colors hover:text-white ${AKSEN.sky.teks}`}
+                aria-label={`Lihat properti sewa lain di ${data.kota}`}
+                className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl transition-colors hover:bg-white/[0.07] hover:text-white ${AKSEN.sky.teks}`}
               >
-                Lihat kos lain di {data.kota}
-                <Icon icon="solar:arrow-right-linear" />
+                <Icon icon="solar:arrow-right-linear" className="text-lg" />
               </Link>
             )}
           </div>
@@ -916,25 +913,15 @@ export default function BookingSidebar({
              harga & sisa kamar yang salah. Yang hilang hanya tombolnya, karena
              semuanya ditujukan ke dirinya sendiri: pengajuan sewa akan tercatat
              sebagai lead atas listingnya sendiri — mengotori persis angka yang
-             dia pakai menilai listing itu — dan permintaan surveinya berakhir
-             di nomor WhatsApp-nya sendiri.
+             dia pakai menilai listing itu.
 
              Keterangan yang dulu ada di sini sudah dihapus atas permintaan:
              alat kerjanya ada di Panel Kontrol Agent di atas halaman, jadi
              kotak penjelasan di sini hanya mengulang yang sudah dia tahu. */
           null
         ) : (
-          /* SATU BARIS, dua tombol berdampingan.
-             Ditumpuk, keduanya memakan dua tinggi tombol plus jaraknya — dan
-             tinggi itulah yang membuat ujung panel jatuh di luar layar laptop.
-             Berdampingan, biayanya tinggal satu baris.
-
-             Bahwa keduanya kini sama besar TIDAK membuat keduanya setara:
-             urutannya (kiri lebih dulu dibaca), isian mint pekat lawan garis
-             tipis, dan bayangan yang hanya dimiliki yang kiri sudah menyatakan
-             mana yang dimaksudkan. Warna & bobot memikul hierarki di sini,
-             bukan lebar. */
-          <div className="grid grid-cols-2 gap-2.5">
+          /* Jalur booking dibuat tegas: pilih tanggal lalu ajukan sewa. */
+          <div>
             {/* Tombol utama: cahaya menyebar di BAWAH tombol (bukan border
                 menyala) supaya ia terlihat mengambang di atas panel — arah
                 kedalaman yang sama dengan cangkang panelnya. Sapuan cahaya
@@ -964,7 +951,7 @@ export default function BookingSidebar({
               onClick={() =>
                 tanggalMulai ? setPengajuanBuka(true) : bukaKalender("mulai")
               }
-              className="group relative overflow-hidden rounded-2xl bg-[#86efac] px-2 py-3.5 text-[13px] font-extrabold text-black shadow-[0_10px_30px_-10px_rgba(134,239,172,0.75)] transition-all duration-200 hover:bg-[#a7f3c4] hover:shadow-[0_14px_38px_-10px_rgba(134,239,172,0.9)] active:scale-[0.985] motion-reduce:transition-none"
+              className="group relative w-full overflow-hidden rounded-2xl bg-[#86efac] px-2 py-3.5 text-[13px] font-extrabold text-black shadow-[0_10px_30px_-10px_rgba(134,239,172,0.75)] transition-all duration-200 hover:bg-[#a7f3c4] hover:shadow-[0_14px_38px_-10px_rgba(134,239,172,0.9)] active:scale-[0.985] motion-reduce:transition-none"
             >
               <span
                 aria-hidden
@@ -983,40 +970,10 @@ export default function BookingSidebar({
               </span>
             </button>
 
-            {/* SATU jalur cadangan, bukan dua.
-                "Chat agent" dihapus: ia menawarkan hal yang sama dengan tombol
-                di sebelahnya — bicara dengan agent — hanya lewat pintu yang
-                lebih sepi. WhatsApp-nya sendiri tidak hilang: baik pengajuan
-                sewa maupun penjadwalan survei berakhir di percakapan WhatsApp
-                dengan agent yang sama, lengkap dengan tanggal & harga yang sudah
-                dipilih — pesan yang jauh lebih berguna daripada "halo" kosong. */}
-            <button
-              onClick={() => setSurvei(true)}
-              className="flex items-center justify-center gap-1.5 rounded-2xl border border-white/[0.12] px-2 py-3.5 text-[11px] font-bold text-white transition-all duration-200 hover:border-white/30 hover:bg-white/[0.06] active:scale-[0.985] motion-reduce:transition-none"
-            >
-              <Icon
-                icon="solar:calendar-add-bold-duotone"
-                className="shrink-0 text-base"
-              />
-              Jadwalkan survei
-            </button>
           </div>
         )}
       </div>
 
-      {/* Penutup: jaminan, bukan hiasan. Ditaruh DI DALAM panel supaya panel
-          punya ujung yang jelas, bukan berhenti mendadak di bawah tombol. */}
-      <div
-        className={`mt-3 flex items-center justify-center gap-2 border-t px-5 py-2.5 ${LINE.row}`}
-      >
-        <Icon
-          icon="solar:shield-check-bold-duotone"
-          className={`text-sm ${AKSEN.emerald.ikon}`}
-        />
-        <span className="text-[10px] font-semibold text-white/30">
-          Listing terverifikasi agent resmi Solusindo
-        </span>
-      </div>
     </>
   );
 
@@ -1479,34 +1436,12 @@ export default function BookingSidebar({
                     Lihat panel
                   </button>
                 ) : (
-                  <>
-                    {/* 44px persis untuk keduanya — batas bawah target sentuh yang
-                        nyaman di ponsel; tombol 40px terasa "meleset" saat dipakai
-                        sambil berjalan. Tingginya disamakan supaya keduanya terbaca
-                        sebagai satu gugus kontrol, bukan dua benda yang kebetulan
-                        bersebelahan.
-
-                        Tombol ikon diberi isian tipis (bukan hanya garis): kotak
-                        berongga di atas permukaan kaca terlihat seperti lubang. */}
-                    <button
-                      onClick={() => setSurvei(true)}
-                      className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-white/[0.14] bg-white/[0.04] text-white transition-all duration-200 hover:bg-white/[0.09] active:scale-95 motion-reduce:transition-none"
-                      aria-label="Jadwalkan survei"
-                    >
-                      <Icon icon="solar:calendar-add-bold-duotone" className="text-xl" />
-                    </button>
-                    {/* Membuka sheet, BUKAN langsung modal pengajuan: di layar kecil
-                        tipe kamar & tanggal belum pernah terlihat, jadi mengajukan
-                        dari sini berarti mengajukan atas pilihan bawaan yang tidak
-                        pernah dilihat siapa pun. Tombol "Ajukan Sewa" yang sebenarnya
-                        ada di dalam sheet, sesudah semua pilihan. */}
-                    <button
-                      onClick={() => setSheet(true)}
-                      className="h-12 shrink-0 rounded-2xl bg-[#86efac] px-5 text-[15px] font-extrabold text-black shadow-[0_8px_26px_-10px_rgba(134,239,172,0.9)] transition-transform active:scale-[0.97] motion-reduce:transition-none"
-                    >
-                      Ajukan
-                    </button>
-                  </>
+                  <button
+                    onClick={() => setSheet(true)}
+                    className="h-12 shrink-0 rounded-2xl bg-[#86efac] px-5 text-[15px] font-extrabold text-black shadow-[0_8px_26px_-10px_rgba(134,239,172,0.9)] transition-transform active:scale-[0.97] motion-reduce:transition-none"
+                  >
+                    Ajukan sewa
+                  </button>
                 )}
               </div>
             )}
@@ -1729,16 +1664,6 @@ export default function BookingSidebar({
         voucherSah={!voucher.gugur}
       />
 
-      <SurveiModal
-        buka={survei}
-        onTutup={() => setSurvei(false)}
-        idProperty={data.idProperty}
-        idAgent={data.agent.idAgent}
-        namaAgent={data.agent.nama}
-        teleponAgent={data.agent.telepon}
-        judulProperti={data.judul}
-        ringkasanPilihan={ringkasanPilihan}
-      />
     </>
   );
 }

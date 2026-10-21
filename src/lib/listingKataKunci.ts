@@ -32,6 +32,8 @@
  */
 
 import { Prisma } from "@prisma/client";
+import { regionValueVariants } from "./regionMatch";
+import { parsePropertySearchQuery, SURABAYA_REGIONS } from "./propertySearchQuery";
 
 /** Kolom yang ikut dicari. Urutan tidak berpengaruh — ini gabungan OR. */
 const KOLOM: Array<keyof Prisma.ListingWhereInput> = [
@@ -46,14 +48,27 @@ const KOLOM: Array<keyof Prisma.ListingWhereInput> = [
 export function buildKataKunciWhere(
   q: string | null | undefined,
 ): Prisma.ListingWhereInput | undefined {
-  const teks = String(q ?? "").trim();
-  if (!teks) return undefined;
-  return {
+  const { text: teks, regions } = parsePropertySearchQuery(String(q ?? ""));
+  const textWhere: Prisma.ListingWhereInput | undefined = teks ? {
     OR: KOLOM.map(
       (kolom) =>
         ({ [kolom]: { contains: teks, mode: "insensitive" } }) as Prisma.ListingWhereInput,
     ),
+  } : undefined;
+  if (!regions.length) return textWhere;
+
+  // Semua kecamatan memiliki induk yang sama: syarat kota cukup sekali,
+  // lalu gabungkan varian kecamatan dalam satu IN agar kueri tetap ringkas.
+  const locationWhere: Prisma.ListingWhereInput = {
+    kota: { in: regionValueVariants("Surabaya", "kota"), mode: "insensitive" },
+    kecamatan: {
+      in: Array.from(new Set(regions.flatMap((region) =>
+        SURABAYA_REGIONS[region].flatMap((name) => regionValueVariants(name, "kecamatan")),
+      ))),
+      mode: "insensitive",
+    },
   };
+  return textWhere ? { AND: [locationWhere, textWhere] } : locationWhere;
 }
 
 /** Konteks transaksi halaman — menentukan aset mana yang ikut dihitung. */

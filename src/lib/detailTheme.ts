@@ -273,6 +273,7 @@ export const AKSEN_AKSES: Record<string, Aksen> = {
   HALTE: AKSEN.sky,
   BANDARA: AKSEN.sky,
   TOL: AKSEN.sky,
+  PINTU_TOL: AKSEN.amber,
   MALL: AKSEN.amber,
   PASAR: AKSEN.amber,
   MINIMARKET: AKSEN.amber,

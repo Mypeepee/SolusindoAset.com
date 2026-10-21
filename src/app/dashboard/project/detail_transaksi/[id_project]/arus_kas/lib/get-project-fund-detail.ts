@@ -93,6 +93,7 @@ export async function getProjectFundDetail(
         nominal_komitmen: true,
         nominal_terbayar: true,
         status: true,
+        dibuat_tanggal: true,
         agent: {
           select: {
             foto_profil_url: true,
@@ -151,6 +152,54 @@ export async function getProjectFundDetail(
       dikunci: SYSTEM_CATEGORIES.has(row.kategori_transaksi),
     };
   });
+
+  // Data project yang dibuat sebelum buku kas tunggal belum selalu punya
+  // baris `setoran_modal`. Agar kas tetap jujur saat dibuka, tampilkan selisih
+  // modal investor sebagai entri sistem (read-only). Pembayaran baru selalu
+  // menulis baris database, jadi entri virtual ini otomatis hilang saat
+  // nilainya sudah tercatat di ledger.
+  const recordedModalByInvestor = new Map<string, number>();
+  for (const row of cashflowRows) {
+    if (
+      row.id_project_investor == null ||
+      !["setoran_modal", "talangan_investor"].includes(row.kategori_transaksi)
+    ) {
+      continue;
+    }
+    const key = row.id_project_investor.toString();
+    recordedModalByInvestor.set(
+      key,
+      (recordedModalByInvestor.get(key) ?? 0) + toNumber(row.nominal)
+    );
+  }
+
+  for (const inv of investorRows) {
+    const investorId = inv.id_project_investor.toString();
+    const unrecordedModal = Math.max(
+      0,
+      toNumber(inv.nominal_terbayar) -
+        (recordedModalByInvestor.get(investorId) ?? 0)
+    );
+    if (unrecordedModal <= 0) continue;
+
+    const name = inv.agent?.pengguna?.nama_lengkap?.trim() || inv.id_agent;
+    transactions.push({
+      id_project_arus_kas: `modal-legacy-${investorId}`,
+      id_project: idProject,
+      wallet_key: "utama",
+      tanggal_transaksi: inv.dibuat_tanggal,
+      jenis_transaksi: "pemasukan",
+      kategori_transaksi: "setoran_modal",
+      judul_transaksi: `Setoran modal ${name}`,
+      nominal: unrecordedModal,
+      status_transaksi: "tercatat",
+      catatan: "Modal investor yang sudah diterima sebelum buku kas digunakan.",
+      dibuat_tanggal: inv.dibuat_tanggal,
+      id_project_investor: investorId,
+      investor_nama: name,
+      dikunci: true,
+    });
+  }
 
   // ── Daftar investor ──────────────────────────────────────────────────────
   // Dipakai form pencatatan & panel tutup kekurangan untuk memilih penanggung.

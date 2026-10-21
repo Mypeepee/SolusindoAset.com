@@ -69,15 +69,22 @@ export default function DetailClient({ data, similar }: Props) {
    *
    * BOOKING (kos, apartemen, villa) → panel pemesanan: tanggal, tipe kamar,
    * voucher, "Ajukan Sewa". NEGOSIASI (gudang, ruko, pabrik, tanah, rumah) →
-   * panel kontak: chat, ajukan penawaran, jadwalkan survei — sama seperti
-   * halaman detail Jual & Lelang, karena persoalannya memang sama: tidak ada
-   * yang bisa "dipesan", yang ada adalah percakapan.
+   * panel kontak: satu jalur chat ke agent. Tidak ada yang bisa "dipesan",
+   * yang ada adalah percakapan untuk menyusun kontrak tahunan.
    *
    * Nilainya datang dari server (tabel @/lib/sewaKapabilitas), bukan disimpulkan
    * di sini — supaya halaman, API tulis, dan formulir tambah properti tidak
    * pernah bisa berbeda pendapat soal kategori yang sama.
    */
   const modePemesanan = data.modeSewa === "BOOKING";
+  /** Ruang bawah besar hanya diperlukan ketika bilah aksi mobile benar-benar
+      tampil. Pemilik listing tidak mendapat bilah itu, jadi menyisakannya
+      hanya menciptakan jurang kosong sebelum footer. */
+  const kelasRuangBawah = modePemesanan
+    ? "pb-28 lg:pb-16"
+    : pengelola.bolehKelola
+      ? "pb-12 xl:pb-16"
+      : "pb-28 xl:pb-16";
 
   // Kalender ketersediaan hanya untuk kategori bermode BOOKING — aturannya
   // dipegang satu tempat supaya tombol di sini dan API tidak pernah berbeda
@@ -150,7 +157,7 @@ export default function DetailClient({ data, similar }: Props) {
       <div className="lg:hidden h-[60px]" />
       <div className="hidden lg:block h-24 w-full" />
 
-      <div className="relative flex flex-col pb-28 lg:pb-16">
+      <div className={`relative flex flex-col ${kelasRuangBawah}`}>
         {/* ── BREADCRUMB ── */}
         <div className="hidden lg:block container mx-auto px-4 mb-5">
           <div className="flex items-center gap-2 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
@@ -281,12 +288,16 @@ export default function DetailClient({ data, similar }: Props) {
 
         {/* ── DUA KOLOM ── */}
         <div className="container mx-auto px-4 order-3 lg:order-none">
-          <div className="flex flex-col lg:flex-row gap-8 xl:gap-12 items-start">
+          <div
+            className={`flex flex-col gap-8 xl:gap-12 items-start ${
+              modePemesanan ? "lg:flex-row" : "xl:flex-row"
+            }`}
+          >
             <DetailInfo data={dataLive} booking={booking} />
             {!modePemesanan ? (
-              /* Kategori NEGOSIASI: tidak ada yang bisa dipesan di sini.
-                 Panel kontak menggantikan seluruh panel pemesanan — lihat
-                 catatan pembuka KontakSidebar. */
+              /* Kategori NEGOSIASI: kontrak tahunan dimulai dari percakapan,
+                 bukan checkout. Panel ini merangkum detail penting dan membuka
+                 satu jalur yang jelas: chat dengan agent penyaji. */
               <KontakSidebar
                 data={dataLive}
                 bolehKelola={pengelola.bolehKelola}

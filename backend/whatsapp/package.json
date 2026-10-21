@@ -1,0 +1,50 @@
+{
+  "name": "solusindo-whatsapp-presales",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Konsultan pra-penjualan lelang WhatsApp untuk Solusindo Aset",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "start:playground": "node index.js --no-auto-connect",
+    "connect": "node scripts/open-connect.js",
+    "dev": "node --watch index.js",
+    "dev:playground": "node --watch index.js --no-auto-connect",
+    "setup:webhook": "node scripts/verify-webhook.js",
+    "test": "node --test",
+    "simulate:buyers": "node scripts/simulate-buyer-dialogues.js",
+    "simulate:language": "node scripts/simulate-language-dialogues.js",
+    "simulate:understanding": "node scripts/simulate-understanding.js",
+    "simulate:informal": "node scripts/simulate-informal-preferences.js",
+    "simulate:customers": "node scripts/simulate-customer-language.js",
+    "simulate:introductions": "node scripts/simulate-introduction-origins.js",
+    "simulate:styles": "node scripts/simulate-conversation-styles.js",
+    "simulate:selections": "node scripts/simulate-selection-language.js",
+    "simulate:single-asset": "node scripts/simulate-single-recommendation.js",
+    "simulate:purchase-interest": "node scripts/simulate-purchase-interest.js",
+    "simulate:purchasing": "node --experimental-strip-types scripts/simulate-purchasing.js",
+    "simulate:ranges": "node scripts/simulate-quantity-ranges.js",
+    "simulate:categories": "node scripts/simulate-multi-category.js",
+    "simulate:transactions": "node scripts/simulate-transactions.js",
+    "simulate:exclusions": "node scripts/simulate-transaction-exclusions.js",
+    "simulate:understanding:ai": "node scripts/simulate-understanding-ai.js",
+    "simulate:context": "node scripts/simulate-context-dialogues.js",
+    "simulate:regions": "node scripts/simulate-city-scope-dialogues.js",
+    "simulate:region-choices": "node scripts/simulate-region-choices.js",
+    "simulate:advanced": "node scripts/simulate-advanced-search.js",
+    "simulate:recommendations": "node scripts/simulate-recommendation-dialogues.js",
+    "simulate:detail-alternatives": "node scripts/simulate-detail-alternatives.js",
+    "simulate:consultation": "node scripts/simulate-asset-consultation.js",
+    "check": "node --check index.js && node --check app.js && node --test"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "7.0.0-rc14",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "pino": "10.4.0",
+    "qrcode": "1.5.4"
+  }
+}

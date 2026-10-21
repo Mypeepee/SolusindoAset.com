@@ -1,0 +1,45 @@
+.root {
+  font-family: inherit;
+  -webkit-font-smoothing: antialiased;
+  color-scheme: dark;
+}
+.root button, .root a, .root summary { -webkit-tap-highlight-color: transparent; }
+
+/* Only opacity and transforms animate. The glow itself is a static layer. */
+@keyframes live-pulse {
+  0%, 100% { opacity: .35; transform: scale(1); }
+  50% { opacity: .85; transform: scale(1.5); }
+}
+@keyframes connect-pulse {
+  0%, 100% { opacity: .15; }
+  50% { opacity: .55; }
+}
+@keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modal-in {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 10px)) scale(.98); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes success-in { from { opacity: 0; transform: scale(.88); } to { opacity: 1; transform: scale(1); } }
+.livePulse { animation: live-pulse 3s ease-in-out infinite; }
+.connectPulse::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -4px;
+  border: 1px solid rgb(110 231 183 / .5);
+  border-radius: 16px;
+  box-shadow: 0 0 20px -8px rgb(110 231 183 / .5);
+  pointer-events: none;
+  animation: connect-pulse 3s ease-in-out infinite;
+}
+.overlay { animation: overlay-in 180ms ease-out; }
+.modal {
+  font-family: inherit;
+  color-scheme: dark;
+  animation: modal-in 220ms cubic-bezier(.2,.8,.2,1);
+}
+.success { animation: success-in 320ms cubic-bezier(.2,.8,.2,1); }
+@media (prefers-reduced-motion: reduce) {
+  .livePulse, .connectPulse::before, .overlay, .modal, .success { animation: none; }
+  .root *, .modal * { transition-duration: 0.01ms !important; }
+}

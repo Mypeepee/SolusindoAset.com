@@ -451,7 +451,7 @@ const SELECT_ASET_BARU = {
      `lolosSemuaGerbang()` MENOLAK aset yang relasinya tidak ter-select —
      meloloskannya berarti mengirim aset yang belum tentu dekat ke klien yang
      tegas memintanya dekat. Hanya dua kolom, jadi murah. */
-  tempatDekat: { select: { id_tempat: true, jarak_meter: true, presisi: true } },
+  tempatDekat: { select: { id_tempat: true, jarak_meter: true, presisi: true, tempat: { select: { kelas: true } } } },
 } as const;
 
 /* ── Tanda air ────────────────────────────────────────────────────────────

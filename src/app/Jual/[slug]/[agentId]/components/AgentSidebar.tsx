@@ -14,7 +14,10 @@ import { pusherClient } from "@/lib/pusher-client";
 import CobrokeModal, { CobrokeClaimSummary } from "@/components/PropertyDetail/CobrokeModal";
 import { downloadPropertyImages } from "@/lib/downloadPropertyImages";
 import { buildJualPosterData, downloadJualPoster } from "@/lib/jualPoster";
-import { SITE_URL } from "@/lib/site";
+import { SITE_URL, URL_PUBLIK } from "@/lib/site";
+import { buildSurveyMessage, buildSurveyWhatsAppUrl } from "@/lib/surveyWhatsApp";
+import { buildWhatsAppUrl } from "@/lib/whatsapp";
+import { useSurveyContact } from "@/hooks/useSurveyContact";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PENAWARAN — status penawaran milik user untuk properti ini
@@ -49,6 +52,7 @@ interface SurveyModalProps {
   onClose: () => void;
   agentName: string;
   propertyTitle: string;
+  propertyUrl: string;
   agentPhone: string;
   idProperty: string | number;
   idAgent: string;
@@ -61,8 +65,8 @@ function fmtPhoneDigits(d: string) {
   return `${s.slice(0,4)}-${s.slice(4,8)}-${s.slice(8)}`;
 }
 
-function SurveyModal({ isOpen, onClose, agentName, propertyTitle, agentPhone, idProperty, idAgent }: SurveyModalProps) {
-  const { data: session } = useSession();
+function SurveyModal({ isOpen, onClose, agentName, propertyTitle, propertyUrl, agentPhone, idProperty, idAgent }: SurveyModalProps) {
+  const { name: namaKlien, setName: setNamaKlien, phoneDigits, setPhoneDigits } = useSurveyContact(isOpen);
 
   const [step,         setStep]         = useState<1|2|3|4>(1);
   const [selectedDate, setSelectedDate] = useState<Date|null>(null);
@@ -70,8 +74,6 @@ function SurveyModal({ isOpen, onClose, agentName, propertyTitle, agentPhone, id
   const [currentMonth, setCurrentMonth] = useState<Date>(() => { const d=new Date(); d.setDate(1); return d; });
   const [slots,        setSlots]        = useState<SlotInfo[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
-  const [namaKlien,    setNamaKlien]    = useState("");
-  const [phoneDigits,  setPhoneDigits]  = useState(""); // digits after +62, no dashes
   const [catatan,      setCatatan]      = useState("");
   const [formError,    setFormError]    = useState("");
   const [submitting,   setSubmitting]   = useState(false);
@@ -88,30 +90,12 @@ function SurveyModal({ isOpen, onClose, agentName, propertyTitle, agentPhone, id
       const d = new Date(); d.setDate(1); setCurrentMonth(d);
       setMounted(true);
       requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)));
-
-      // Prefill dari session jika sudah login
-      if (session?.user) {
-        setNamaKlien(session.user.name || "");
-        fetch("/api/profile")
-          .then(r => r.ok ? r.json() : null)
-          .then(data => {
-            const raw: string = data?.pengguna?.nomor_telepon || "";
-            let digits = raw.replace(/\D/g, "");
-            if (digits.startsWith("62")) digits = digits.slice(2);
-            if (digits.startsWith("0"))  digits = digits.slice(1);
-            setPhoneDigits(digits.slice(0, 12));
-          })
-          .catch(() => {});
-      } else {
-        setNamaKlien("");
-        setPhoneDigits("");
-      }
     } else {
       setVisible(false);
       const t = setTimeout(() => setMounted(false), 420);
       return () => clearTimeout(t);
     }
-  }, [isOpen, session]);
+  }, [isOpen]);
 
   useEffect(() => {
     document.body.style.overflow = isOpen ? "hidden" : "";
@@ -192,9 +176,12 @@ function SurveyModal({ isOpen, onClose, agentName, propertyTitle, agentPhone, id
       if (!res.ok) { const err=await res.json(); setSubmitError(err.error||"Gagal menyimpan."); setSubmitting(false); return; }
     } catch { setSubmitError("Koneksi gagal."); setSubmitting(false); return; }
 
-    const wa  = agentPhone.replace(/^0/,"62").replace(/\D/g,"");
-    const msg = `Halo ${agentName}, saya ingin menjadwalkan *Survei Lokasi* untuk properti:\n*${propertyTitle}*\n\n📅 Tanggal: ${fmtDate()}\n🕐 Waktu: ${selectedTime} WIB\n👤 Nama: ${namaKlien}\n📱 No. Telp: ${fullPhone}${catatan.trim()?`\n📝 Catatan: ${catatan.trim()}`:""}\n\nMohon konfirmasi jadwalnya. Terima kasih!`;
-    window.open(`https://wa.me/${wa}?text=${encodeURIComponent(msg)}`, "_blank");
+    const message = buildSurveyMessage({
+      agentName, propertyTitle, propertyUrl,
+      date: fmtDate(), time: selectedTime,
+      clientName: namaKlien, clientPhone: fullPhone, notes: catatan,
+    });
+    window.open(buildSurveyWhatsAppUrl(agentPhone, message), "_blank", "noopener,noreferrer");
     setSubmitting(false);
     handleClose();
   };
@@ -538,6 +525,7 @@ interface OfferModalProps {
   onClose: () => void;
   agentName: string;
   propertyTitle: string;
+  propertyUrl: string;
   agentPhone: string;
   askingPrice: number;
   idProperty: string | number;
@@ -546,7 +534,7 @@ interface OfferModalProps {
 }
 
 function OfferModal({
-  isOpen, onClose, agentName, propertyTitle, agentPhone, askingPrice, idProperty, idAgent, onOfferChange,
+  isOpen, onClose, agentName, propertyTitle, propertyUrl, agentPhone, askingPrice, idProperty, idAgent, onOfferChange,
 }: OfferModalProps) {
   const { data: session, status: sessionStatus } = useSession();
   const [offerRaw, setOfferRaw] = useState("");
@@ -671,10 +659,10 @@ function OfferModal({
 
     onOfferChange?.({ status: "pending", penawaran: offerNum });
 
-    const phone = agentPhone.replace(/^0/, "62").replace(/\D/g, "");
     let msg =
       `Halo ${agentName}, saya ingin mengajukan penawaran untuk properti:\n` +
       `*${propertyTitle}*\n\n` +
+      `🔗 Detail properti di Solusindo Aset:\n${propertyUrl}\n\n` +
       `💰 Harga Listing: ${fmt(askingPrice)}\n` +
       `🤝 Tawaran Saya: *${fmt(offerNum)}*`;
     if (diffPct > 0)       msg += ` (${diffPct}% di bawah harga listing)`;
@@ -683,7 +671,7 @@ function OfferModal({
     if (notes.trim())      msg += `\n\n📝 Catatan: ${notes.trim()}`;
     msg += `\n\nMohon pertimbangan dan konfirmasinya. Terima kasih!`;
 
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
+    window.open(buildWhatsAppUrl(agentPhone, msg), "_blank", "noopener,noreferrer");
     setSubmitting(false);
     handleClose();
   };
@@ -1039,13 +1027,15 @@ export default function AgentSidebar({ data, onShareOpen }: AgentSidebarProps) {
     return () => clearTimeout(t);
   }, [decisionToast]);
 
-  // ── Resolve agent ID (fallback chain: owner → listing's own id_agent field) ──
+  // ── Agent pemilik listing, dengan fallback ke data owner ──
   const owner   = data.owner || {};
-  const effectiveAgentId: string = String(owner.id_agent || data.id_agent || "");
+  const effectiveAgentId: string = String(data.id_agent || owner.id_agent || owner.id || "");
 
   // ── Co-broke mode: viewer adalah agent lain (bukan pemilik listing) ──
-  const viewerAgentId: string | undefined = (session?.user as any)?.agentId;
-  const isCobrokeViewer = !!viewerAgentId && viewerAgentId !== effectiveAgentId;
+  const viewerAgentId = (session?.user?.peran ?? session?.user?.role) === "AGENT"
+    ? session?.user?.agentId || undefined
+    : undefined;
+  const isCobrokeViewer = !!viewerAgentId && !!effectiveAgentId && viewerAgentId !== effectiveAgentId;
   // ── Owner mode: viewer adalah pemilik listing sendiri ──
   const isOwnerViewer = !!viewerAgentId && viewerAgentId === effectiveAgentId;
   const editPropertyHref = `/tambah-property?id=${data.id_property}&mode=edit`;
@@ -1172,12 +1162,14 @@ export default function AgentSidebar({ data, onShareOpen }: AgentSidebarProps) {
         isOpen={surveyOpen} onClose={() => setSurveyOpen(false)}
         agentName={agent.name} propertyTitle={data.title || data.judul || ""}
         agentPhone={agent.phone} idProperty={data.id_property} idAgent={effectiveAgentId}
+        propertyUrl={`${URL_PUBLIK}/Jual/${data.slug ? `${data.slug}-${data.id_property}` : data.id_property}/${effectiveAgentId}`}
       />
       <OfferModal
         isOpen={offerOpen} onClose={() => setOfferOpen(false)}
         agentName={agent.name} propertyTitle={data.title || data.judul || ""}
         agentPhone={agent.phone} askingPrice={hargaPromo ?? harga}
         idProperty={data.id_property} idAgent={effectiveAgentId}
+        propertyUrl={`${URL_PUBLIK}/Jual/${data.slug ? `${data.slug}-${data.id_property}` : data.id_property}/${effectiveAgentId}`}
         onOfferChange={setMyOffer}
       />
       <CobrokeModal

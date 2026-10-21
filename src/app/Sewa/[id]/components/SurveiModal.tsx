@@ -15,8 +15,10 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "@iconify/react";
-import { useSession } from "next-auth/react";
+import { useSurveyContact } from "@/hooks/useSurveyContact";
 import { trackLeadClick } from "@/lib/leadTracking";
+import { URL_PUBLIK } from "@/lib/site";
+import { buildSurveyMessage, buildSurveyWhatsAppUrl } from "@/lib/surveyWhatsApp";
 import Kalender from "./Kalender";
 import { AKSEN, SURFACE } from "./sewaTheme";
 
@@ -56,7 +58,7 @@ export default function SurveiModal({
   judulProperti,
   ringkasanPilihan,
 }: Props) {
-  const { data: session } = useSession();
+  const { name: nama, setName: setNama, phoneDigits: telepon, setPhoneDigits: setTelepon } = useSurveyContact(buka);
 
   const [mounted, setMounted] = useState(false);
   const [langkah, setLangkah] = useState<1 | 2 | 3>(1);
@@ -64,8 +66,6 @@ export default function SurveiModal({
   const [jam, setJam] = useState<string | null>(null);
   const [slot, setSlot] = useState<Slot[]>([]);
   const [muatSlot, setMuatSlot] = useState(false);
-  const [nama, setNama] = useState("");
-  const [telepon, setTelepon] = useState("");
   const [catatan, setCatatan] = useState("");
   const [galat, setGalat] = useState("");
   const [kirim, setKirim] = useState(false);
@@ -88,20 +88,7 @@ export default function SurveiModal({
         ? `Saya ingin melihat ${ringkasanPilihan}.`
         : "Saya ingin melihat kamarnya langsung.",
     );
-
-    if (session?.user) {
-      setNama(session.user.name || "");
-      fetch("/api/profile")
-        .then((r) => (r.ok ? r.json() : null))
-        .then((d) => {
-          let digit = String(d?.pengguna?.nomor_telepon || "").replace(/\D/g, "");
-          if (digit.startsWith("62")) digit = digit.slice(2);
-          if (digit.startsWith("0")) digit = digit.slice(1);
-          setTelepon(digit.slice(0, 12));
-        })
-        .catch(() => {});
-    }
-  }, [buka, session, ringkasanPilihan]);
+  }, [buka, ringkasanPilihan]);
 
   useEffect(() => {
     if (!buka) return;
@@ -196,16 +183,18 @@ export default function SurveiModal({
       return;
     }
 
-    const wa = teleponAgent.replace(/^0/, "62").replace(/\D/g, "");
-    const pesan =
-      `Halo ${namaAgent}, saya ingin *survei kos*:\n` +
-      `🏠 ${judulProperti}\n` +
-      (ringkasanPilihan ? `🛏️ ${ringkasanPilihan}\n` : "") +
-      `\n📅 ${formatTanggalPanjang(tanggal)}\n🕐 ${jam} WIB\n` +
-      `👤 ${nama.trim()}\n📱 ${teleponPenuh}\n` +
-      (catatan.trim() ? `📝 ${catatan.trim()}\n` : "") +
-      `\nMohon konfirmasinya, terima kasih!`;
-    window.open(`https://wa.me/${wa}?text=${encodeURIComponent(pesan)}`, "_blank");
+    const pesan = buildSurveyMessage({
+      agentName: namaAgent,
+      propertyTitle: judulProperti,
+      propertyUrl: `${URL_PUBLIK}/Sewa/${idProperty}`,
+      propertyDetails: ringkasanPilihan,
+      date: formatTanggalPanjang(tanggal),
+      time: jam,
+      clientName: nama,
+      clientPhone: teleponPenuh,
+      notes: catatan,
+    });
+    window.open(buildSurveyWhatsAppUrl(teleponAgent, pesan), "_blank", "noopener,noreferrer");
 
     setKirim(false);
     setSukses(true);

@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState, useMemo, useCallback } from "react"
 import { createPortal } from "react-dom";
 import { Icon } from "@iconify/react";
 import { downloadPropertyImages } from "@/lib/downloadPropertyImages";
+import { buildWhatsAppUrl } from "@/lib/whatsapp";
 
 interface SelfAgent {
   id_agent: string;
@@ -217,7 +218,7 @@ export default function ShareListingModal({
   };
 
   const openWa = () =>
-    window.open(`https://wa.me/?text=${encodeURIComponent(caption)}`, "_blank");
+    window.open(buildWhatsAppUrl("", caption), "_blank", "noopener,noreferrer");
 
   const nativeShare = async () => {
     if (navigator.share) {

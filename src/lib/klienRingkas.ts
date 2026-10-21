@@ -175,10 +175,9 @@ const TIPE_URUT = (a: string, b: string) => a.localeCompare(b);
 /** Label satu grup, mis. "Rumah · Gresik · ≤ 250 jt" atau
  *  "Gudang · Surabaya +2 · ≥ 1.000 m²".
  *
- *  Lokasi dipotong di dua, bukan ditulis semua: pill ini berdiri di baris yang
- *  bisa digulir, dan label sepanjang satu kalimat membuat pill berikutnya
- *  tidak pernah terlihat. */
-export function ringkasGrup(rows: PrefRingkas[]): string {
+ *  Label pill diringkas; `lengkap` dipakai di kepala dan penjelasan hasil
+ *  pencarian agar semua tipe dan lokasi yang dicari tetap terbaca. */
+export function ringkasGrup(rows: PrefRingkas[], opsi: { lengkap?: boolean } = {}): string {
   if (rows.length === 0) return "";
 
   /* Baris ber-tipe null berarti "semua tipe". Kalau SATU baris saja begitu,
@@ -194,12 +193,13 @@ export function ringkasGrup(rows: PrefRingkas[]): string {
      Rumah / Tanah / Toko" menghasilkan pill sepanjang satu kalimat, dan pill
      berikutnya tidak pernah terlihat di baris yang bisa digulir — padahal
      justru MEMBANDINGKAN antar pill yang jadi gunanya. */
-  const tipeTeks = tipe.length <= 2 ? tipe.join(" / ") : `${tipe.slice(0, 2).join(" / ")} +${tipe.length - 2}`;
+  const tipeTeks = opsi.lengkap || tipe.length <= 2 ? tipe.join(" / ") : `${tipe.slice(0, 2).join(" / ")} +${tipe.length - 2}`;
 
   const bagian: string[] = [tipeTeks];
   if ((rows[0].maksud ?? "").toUpperCase() === "SEWA") bagian.push("Sewa");
 
-  if (lok.length === 1) bagian.push(lok[0]);
+  if (opsi.lengkap && lok.length > 0) bagian.push(lok.join(" / "));
+  else if (lok.length === 1) bagian.push(lok[0]);
   else if (lok.length > 1) bagian.push(`${lok[0]} +${lok.length - 1}`);
 
   const bmin = rows[0].budget_min == null ? null : Number(rows[0].budget_min);

@@ -282,16 +282,6 @@ export async function PATCH(
     const transactionId = parseRouteId(id);
     const body = await request.json();
 
-    if (body.auto_cover_deficit === true) {
-      return NextResponse.json(
-        {
-          message:
-            "Edit transaksi yang memakai auto cover investor belum didukung. Hapus transaksi lama lalu buat ulang transaksi baru.",
-        },
-        { status: 400 }
-      );
-    }
-
     const existing = await prisma.projectArusKas.findUnique({
       where: {
         id_project_arus_kas: transactionId,
@@ -321,15 +311,8 @@ export async function PATCH(
 
     await assertProjectOwner(existing.id_project);
 
-    const walletKey =
-      body.wallet_key !== undefined ? body.wallet_key : existing.wallet_key;
-
-    if (!isWalletKey(walletKey)) {
-      return NextResponse.json(
-        { message: "wallet_key tidak valid." },
-        { status: 400 }
-      );
-    }
+    // Satu buku kas; kolom legacy ini tidak lagi menjadi pilihan pengguna.
+    const walletKey: WalletKey = "utama";
 
     const judulTransaksi =
       body.judul_transaksi !== undefined
@@ -421,49 +404,6 @@ export async function PATCH(
         },
         { status: 400 }
       );
-    }
-
-    // ── Guard anti-minus (dua lapis) ───────────────────────────────────────
-    // Keadaan dana dihitung ulang SEOLAH baris ini belum ada, lalu nilai
-    // barunya diuji. Pengeluaran tidak boleh membuat anggaran pos maupun kas
-    // proyek minus; edit tidak menyediakan talangan otomatis.
-    const stateTanpaBaris = await loadFundStateExcluding(
-      prisma,
-      existing.id_project,
-      transactionId
-    );
-
-    if (!stateTanpaBaris) {
-      return NextResponse.json(
-        { message: "Project tidak ditemukan." },
-        { status: 404 }
-      );
-    }
-
-    if (jenisTransaksi === "pengeluaran" && statusTransaksi === "tercatat") {
-      const plan = planExpense({
-        state: stateTanpaBaris,
-        walletKey,
-        nominal: Number(nominal.toString()),
-      });
-
-      if (plan.butuhTalangan) {
-        const alasan =
-          plan.tambahanAnggaran > 0
-            ? `Anggaran ${WALLET_LABELS[walletKey]} tinggal ${formatIDR(
-                plan.sisaAnggaranPos
-              )}`
-            : `Kas proyek tinggal ${formatIDR(plan.sisaKas)}`;
-
-        return NextResponse.json(
-          {
-            message: `${alasan}, kurang ${formatIDR(
-              plan.totalDibebankan
-            )} untuk nominal ini. Kurangi nominalnya, atau hapus transaksi ini lalu catat ulang supaya kekurangannya bisa dibebankan ke investor.`,
-          },
-          { status: 400 }
-        );
-      }
     }
 
     const updated = await prisma.projectArusKas.update({
@@ -685,11 +625,6 @@ export async function DELETE(
       return await batalkanTalanganMandiri(existing);
     }
 
-    // Talangan yang dibuat untuk MENUTUP pengeluaran ini (kalau ada). Menghapus
-    // pengeluaran harus MEMBATALKAN talangan-nya: turunkan modal disetor
-    // penanggung & hitung ulang kepemilikan.
-    const stateSebelumHapus = await loadFundState(prisma, existing.id_project);
-
     const linkedTalangan = await prisma.projectArusKas.findMany({
       where: {
         id_arus_kas_terkait: transactionId,
@@ -704,56 +639,6 @@ export async function DELETE(
     });
 
     if (linkedTalangan.length === 0) {
-      // Tanpa talangan tertaut: pastikan penghapusan tidak membuat kas atau
-      // anggaran pos jadi minus (menghapus PEMASUKAN menarik uang keluar).
-      const stateSetelahHapus = await loadFundStateExcluding(
-        prisma,
-        existing.id_project,
-        transactionId
-      );
-
-      if (!stateSetelahHapus) {
-        return NextResponse.json(
-          { message: "Project tidak ditemukan." },
-          { status: 404 }
-        );
-      }
-
-      if (stateSetelahHapus.sisaKas < 0) {
-        return NextResponse.json(
-          {
-            message: `Menghapus transaksi ini membuat kas proyek minus ${formatIDR(
-              stateSetelahHapus.sisaKas
-            )}. Hapus pengeluaran yang memakai dana ini lebih dulu.`,
-          },
-          { status: 400 }
-        );
-      }
-
-      // Pos yang terdampak hanya boleh membaik, tak boleh jatuh ke minus baru.
-      const walletKey = normalizeWalletKey(existing.wallet_key);
-      const posSebelum = stateSebelumHapus?.pos.find(
-        (item) => item.walletKey === walletKey
-      );
-      const posSesudah = stateSetelahHapus.pos.find(
-        (item) => item.walletKey === walletKey
-      );
-
-      if (
-        posSesudah &&
-        posSesudah.sisaAnggaran < 0 &&
-        posSesudah.sisaAnggaran < (posSebelum?.sisaAnggaran ?? 0)
-      ) {
-        return NextResponse.json(
-          {
-            message: `Menghapus transaksi ini membuat anggaran ${WALLET_LABELS[walletKey]} minus ${formatIDR(
-              posSesudah.sisaAnggaran
-            )}. Hapus pengeluaran pos ini lebih dulu.`,
-          },
-          { status: 400 }
-        );
-      }
-
       await prisma.projectArusKas.delete({
         where: { id_project_arus_kas: transactionId },
       });

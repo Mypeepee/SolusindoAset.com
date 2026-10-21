@@ -31,6 +31,8 @@ import { Icon } from "@iconify/react";
 import { DURASI_META, formatRupiah, type DurasiKey } from "@/lib/kosDetail";
 import { trackLeadClick } from "@/lib/leadTracking";
 import { getOfferFeedback } from "@/lib/offerFeedback";
+import { URL_PUBLIK } from "@/lib/site";
+import { buildWhatsAppUrl } from "@/lib/whatsapp";
 import { AKSEN, LINE, SURFACE } from "./sewaTheme";
 
 interface Props {
@@ -166,6 +168,7 @@ export default function PenawaranSewaModal({
       `Saya baru mengajukan penawaran sewa lewat Solusindo.`,
       "",
       `🏠 *${judulProperti}*`,
+      `🔗 Detail properti di Solusindo Aset:\n${URL_PUBLIK}/Sewa/${idProperty}`,
       `💰 Harga pasang: ${formatRupiah(hargaListing)}${suffix}`,
       `🤝 Tawaran saya: *${formatRupiah(nominal)}${suffix}*`,
       catatan.trim() ? `📝 ${catatan.trim()}` : null,
@@ -174,7 +177,7 @@ export default function PenawaranSewaModal({
     ]
       .filter(Boolean)
       .join("\n");
-    window.open(`https://wa.me/${telp}?text=${encodeURIComponent(pesan)}`, "_blank");
+    window.open(buildWhatsAppUrl(telp, pesan), "_blank", "noopener,noreferrer");
   };
 
   // ───────────────────────────────────────────────────────────────────────

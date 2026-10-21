@@ -25,6 +25,9 @@ import {
 import { formatJarak } from "@/lib/nearbyPlaces";
 import { normalNama } from "@/lib/tempat/normalisasi";
 import type { TempatDipilih } from "@/lib/searchTabs";
+import { parsePropertySearchQuery } from "./propertySearchQuery";
+import { nearbyScopeWhere } from "./nearbySearchScope";
+import { MIN_NEARBY_RADIUS, MAX_NEARBY_RADIUS } from "./nearbySearchQuery";
 
 export type { TempatTerpilih };
 
@@ -40,7 +43,7 @@ export type { TempatTerpilih };
 const MAKS_URUT = 5_000;
 
 /** Radius yang boleh dipilih user, meter. */
-export const RADIUS_PILIHAN = [1_000, 3_000, 5_000, 10_000] as const;
+export const RADIUS_PILIHAN = [100, 300, 500, 1_000, 3_000, 5_000, 10_000] as const;
 
 /**
  * Baca param `dekat` (+ `radius` opsional) jadi tempat terpilih.
@@ -57,13 +60,16 @@ export async function bacaTempatDariParams(searchParams: {
   const nilai = Array.isArray(mentah) ? mentah[0] : mentah;
   if (!nilai) return null;
 
-  const tempat = await bacaTempatTerpilih(nilai);
-  if (!tempat) return null;
+  const selected = await bacaTempatTerpilih(nilai);
+  if (!selected) return null;
+  const area = searchParams.areaDekat;
+  const wilayahAset = (Array.isArray(area) ? area[0] : area)?.trim();
+  const tempat = wilayahAset ? { ...selected, wilayahAset } : selected;
 
   const rMentah = searchParams.radius;
   const r = Number(Array.isArray(rMentah) ? rMentah[0] : rMentah);
-  if (Number.isFinite(r) && r >= 200 && r <= 20_000) {
-    return { ...tempat, radius: Math.round(r) };
+  if (Number.isFinite(r) && r >= MIN_NEARBY_RADIUS && r <= MAX_NEARBY_RADIUS) {
+    return { ...tempat, radius: Math.round(r), ...(tempat.gabungan ? { gabungan: tempat.gabungan.map((group) => group.map((leaf) => ({ ...leaf, radius: Math.round(r) }))) } : {}) };
   }
   return tempat;
 }
@@ -82,6 +88,7 @@ export function buildTempatWhere(
   tempat: TempatTerpilih | null,
 ): Prisma.ListingWhereInput | undefined {
   if (!tempat) return undefined;
+  if (tempat.gabungan) return { OR: tempat.gabungan.map((group) => ({ AND: group.map((leaf) => buildTempatWhere(leaf) || { id_property: { in: [] } }) })) };
 
   /**
    * Pilihan "jenis tempat" ("kampus mana pun di Malang") disaring lewat
@@ -95,29 +102,21 @@ export function buildTempatWhere(
    * otomatis benar.
    */
   if (tempat.kriteria) {
-    const w = tempat.kriteria.wilayah;
-    return {
+    const w = tempat.wilayahAset ?? tempat.kriteria.wilayah;
+    const near: Prisma.ListingWhereInput = {
       tempatDekat: {
         some: {
           jarak_meter: { lte: tempat.radius },
-          tempat: {
-            kelas: tempat.kriteria.kelas,
-            ...(w
-              ? {
-                  OR: [
-                    { kota: { contains: w, mode: "insensitive" } },
-                    { provinsi: { contains: w, mode: "insensitive" } },
-                  ],
-                }
-              : {}),
-          },
+          tempat: { kelas: tempat.kriteria.kelas },
         },
       },
     };
+    const scope = nearbyScopeWhere(w);
+    return scope ? { AND: [scope, near] } : near;
   }
 
   if (tempat.ids.length === 0) return undefined;
-  return {
+  const near: Prisma.ListingWhereInput = {
     tempatDekat: {
       some: {
         id_tempat: { in: tempat.ids },
@@ -125,6 +124,8 @@ export function buildTempatWhere(
       },
     },
   };
+  const scope = nearbyScopeWhere(tempat.wilayahAset);
+  return scope ? { AND: [scope, near] } : near;
 }
 
 /**
@@ -138,13 +139,14 @@ export function buildTempatWhere(
  * Alias yang diasumsikan: `lt` = listing_tempat, `tp` = tempat.
  */
 function syaratTempatSql(tempat: TempatTerpilih): Prisma.Sql | null {
+  if (tempat.gabungan) {
+    const conditions = tempat.gabungan.flat().map(syaratTempatSql).filter((value): value is Prisma.Sql => value !== null);
+    return conditions.length ? Prisma.sql`(${Prisma.join(conditions, " OR ")})` : null;
+  }
   if (tempat.kriteria) {
-    const w = tempat.kriteria.wilayah;
-    return w
-      ? Prisma.sql`tp.kelas = ${tempat.kriteria.kelas}
-          AND (lower(tp.kota) LIKE ${"%" + w + "%"}
-            OR lower(tp.provinsi) LIKE ${"%" + w + "%"})`
-      : Prisma.sql`tp.kelas = ${tempat.kriteria.kelas}`;
+    // ID aset sudah dibatasi buildTempatWhere; kota pada tempat dapat berbeda
+    // dari kota aset di perbatasan, jadi tidak disaring ulang di sini.
+    return Prisma.sql`tp.kelas = ${tempat.kriteria.kelas}`;
   }
   if (tempat.ids.length === 0) return null;
   return Prisma.sql`lt.id_tempat IN (${Prisma.join(tempat.ids)})`;
@@ -440,8 +442,11 @@ export async function siapkanTempat(
     catatan: null,
   };
   if (!teks) return kosong;
+  // Wilayah Surabaya memakai kecamatan, bukan radius sebuah landmark.
+  const parsed = parsePropertySearchQuery(teks);
+  if (parsed.regions.length && !parsed.nearby) return { ...kosong, q: teks };
 
-  const tebakan = await tebakTempatDariTeks(teks, { kota: opsi.kota });
+  const tebakan = await tebakTempatDariTeks(parsed.nearby ? `dekat ${parsed.nearby.placeQuery}` : teks, { kota: opsi.kota });
 
   // Kata kunci DIPERTAHANKAN saat tebakannya gagal. Hasilnya memang akan
   // kosong, dan itu benar: yang mengetik "sekolah di Banten" belum tentu mau
@@ -454,10 +459,17 @@ export async function siapkanTempat(
   const tempat = await bacaTempatTerpilih(tebakan.tempat.nilai);
   if (!tempat) return { ...kosong, q: teks };
 
+  const rawRadius = searchParams.radius;
+  const radius = Number((Array.isArray(rawRadius) ? rawRadius[0] : rawRadius) ?? parsed.nearby?.radius);
+  const resolved = {
+    ...tempat,
+    ...(parsed.nearby?.wilayah ? { wilayahAset: parsed.nearby.wilayah } : {}),
+    ...(Number.isFinite(radius) && radius >= MIN_NEARBY_RADIUS && radius <= MAX_NEARBY_RADIUS ? { radius: Math.round(radius) } : {}),
+  };
   return {
-    tempat,
-    q: undefined,
-    chip: keChip(tempat),
+    tempat: resolved,
+    q: parsed.nearby?.keyword || undefined,
+    chip: keChip(resolved),
     ditebak: true,
     catatan: null,
   };
@@ -474,5 +486,6 @@ function keChip(t: TempatTerpilih): TempatDipilih {
     radius: t.radius,
     cabang: t.cabang,
     kelasSemua: t.kelasSemua,
+    wilayah: t.wilayahAset ?? t.kriteria?.wilayah ?? undefined,
   };
 }

@@ -27,6 +27,7 @@
    ════════════════════════════════════════════════════════════ */
 
 import { useState } from "react";
+import { labelPreferensiTempat, radiusPreferensiTempat } from "@/lib/preferensiTempatLabel";
 import { Icon } from "@iconify/react";
 import { motion } from "framer-motion";
 import TypePicker from "@/components/search/TypePicker";
@@ -166,7 +167,7 @@ export function buildPrefPayloads(p: PreferensiForm) {
     luas_max:        p.luas_max ? Number(unformatRupiah(p.luas_max)) : null,
     legalitas:       p.legalitas || null,
     dekat_nilai:     p.dekat?.nilai ?? null,
-    dekat_radius:    p.dekat?.radius ?? null,
+    dekat_radius:    p.dekat && p.dekat_asli?.nilai === p.dekat.nilai && p.dekat_asli.radiusTampil === p.dekat.radius ? p.dekat_asli.radius : p.dekat?.radius ?? null,
     alamat_teks:     p.alamat_teks?.trim() || null,
     tujuan_beli:     p.tujuan_beli || null,
     catatan:         p.catatan.trim() || null,
@@ -231,10 +232,11 @@ export function groupPreferensi(rows: PreferensiKlien[]): PreferensiForm[] {
            formulir hanya demi label akan menambah satu permintaan jaringan
            untuk sesuatu yang tidak mengubah apa pun saat disimpan. */
         dekat:           p.dekat_nilai
-          ? { nilai: p.dekat_nilai, nama: p.dekat_nilai, label: "Tempat",
+          ? { nilai: p.dekat_nilai, nama: labelPreferensiTempat(p.dekat_nilai), label: "Tempat",
               icon: "solar:map-point-bold-duotone", warna: "emerald",
-              radius: p.dekat_radius ?? 1500 }
+              radius: p.dekat_radius ?? radiusPreferensiTempat(p.dekat_nilai) }
           : null,
+        dekat_asli: p.dekat_nilai ? { nilai: p.dekat_nilai, radius: p.dekat_radius ?? null, radiusTampil: p.dekat_radius ?? radiusPreferensiTempat(p.dekat_nilai) } : undefined,
         tujuan_beli:     p.tujuan_beli || "",
         catatan:         p.catatan || "",
       };
@@ -393,7 +395,7 @@ export function IsiPreferensi({
         />
         {form.dekat && (
           <p className="mt-1 text-[10.5px] text-slate-500">
-            Radius {(form.dekat.radius / 1000).toFixed(1).replace(".", ",")} km dari {form.dekat.nama}
+            {form.dekat_asli?.nilai === form.dekat.nilai && form.dekat_asli.radius == null && form.dekat_asli.radiusTampil === form.dekat.radius ? `Radius mengikuti jenis tempat · ${form.dekat.nama}` : `Radius ${(form.dekat.radius / 1000).toFixed(1).replace(".", ",")} km dari ${form.dekat.nama}`}
           </p>
         )}
         {form.alamat_teks && (

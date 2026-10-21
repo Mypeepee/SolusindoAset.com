@@ -2,19 +2,8 @@
 // ---------------------------------------------------------------------------
 // PENYUSUN PESAN UNTUK KLIEN — draf yang tinggal diketuk agent.
 //
-// Keputusan produk yang mendasari berkas ini: sistem TIDAK mengirim WhatsApp
-// sendiri. Ia menyusun pesannya sampai selesai, lalu menyerahkan satu tautan
-// wa.me; agent mengetuk sekali dan WhatsApp terbuka dengan teks siap kirim.
-//
-// Kenapa begitu, bukan gateway otomatis:
-//   • Tidak ada satu pun integrasi WhatsApp di kode ini — semua lewat wa.me.
-//   • Nomor WhatsApp pribadi agent yang dipakai mengirim blasting otomatis
-//     adalah nomor yang cepat atau lambat diblokir; yang hilang bukan cuma
-//     fitur ini, tapi seluruh riwayat percakapan kerjanya.
-//   • Klien properti membalas manusia. Pesan yang jelas-jelas robot menurunkan
-//     tingkat balasan justru pada pekerjaan yang seluruh gunanya ada di balasan.
-// Yang diotomatiskan adalah bagian yang membosankan — menyusun daftar, menulis
-// harga, menempel tautan — bukan bagian yang butuh penilaian manusia.
+// Dipakai oleh draf wa.me di CRM dan antrean notifikasi listing baru. Antrean
+// menangani pencocokan ulang, batas frekuensi, kepemilikan chat dan deduplikasi.
 //
 // Seluruh fungsi di sini MURNI (tanpa I/O) supaya bisa diuji dan dipakai baik
 // dari server maupun browser.
@@ -27,6 +16,7 @@ export type AsetPesan = {
   slug: string;
   judul: string;
   jenis_transaksi: string;
+  tanggal_lelang?: Date | string | null;
   kategori: string;
   harga: number;
   kota: string;
@@ -123,8 +113,11 @@ export function pesanRekomendasi(opsi: {
   idAgent?: string | null;
   aset: AsetPesan[];
   maksud: "BELI" | "SEWA";
+  otomatis?: boolean;
+  now?: number;
 }): string {
   const { namaKlien, namaAgent, idAgent, aset, maksud } = opsi;
+  const now = opsi.now ?? Date.now();
   if (aset.length === 0) return "";
 
   const kerja = maksud === "SEWA" ? "disewa" : "dibeli";
@@ -142,7 +135,9 @@ export function pesanRekomendasi(opsi: {
        memikirkan Anda. */
     const kepala = aset.length > 1 ? `${i + 1}. *${a.judul}*` : `*${a.judul}*`;
     baris.push(kepala);
-    baris.push(`   ${rupiahRingkas(a.harga)}`);
+    baris.push(`   ${rupiahRingkas(a.harga)}${opsi.otomatis && a.jenis_transaksi === "LELANG" ? " (harga limit lelang)" : ""}`);
+    const auctionDate = a.tanggal_lelang ? new Date(a.tanggal_lelang).getTime() : NaN;
+    if (a.jenis_transaksi === "LELANG" && Number.isFinite(auctionDate)) baris.push(`   🗓️ Lelang tercatat: ${new Intl.DateTimeFormat("id-ID", { dateStyle: "long", timeZone: "Asia/Jakarta" }).format(auctionDate)}${auctionDate <= now ? " (jadwal sudah lewat)" : ""}`);
 
     const lokasi = [a.kecamatan, a.kota].filter(Boolean).join(", ");
     if (lokasi) baris.push(`   📍 ${lokasi}`);
@@ -158,8 +153,11 @@ export function pesanRekomendasi(opsi: {
     baris.push("");
   });
 
+  if (aset.some(a => a.jenis_transaksi === "LELANG" && a.tanggal_lelang && new Date(a.tanggal_lelang).getTime() <= now)) baris.push("Untuk aset yang jadwal lelangnya sudah lewat, ketersediaan dan jadwal ulang masih perlu dikonfirmasi.", "");
   baris.push(
-    aset.length > 1
+    aset.every(a => a.jenis_transaksi === "LELANG")
+      ? "Kalau ada yang menarik, sebutkan nomor pilihannya ya. Saya bisa jelaskan detail, rincian biaya, dan panduan viewing mandiri dari luar."
+      : aset.length > 1
       ? "Kalau ada yang menarik, saya bisa aturkan jadwal survei. Ada yang ingin dilihat lebih dulu?"
       : "Kalau berkenan, saya bisa aturkan jadwal survei. Kapan waktu yang pas untuk Bapak/Ibu?",
   );

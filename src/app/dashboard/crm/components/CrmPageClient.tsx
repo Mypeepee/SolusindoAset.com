@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { labelPreferensiTempat, radiusPreferensiTempat } from "@/lib/preferensiTempatLabel";
 import { Icon } from "@iconify/react";
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
@@ -147,6 +148,7 @@ const SOURCE_META: { test: RegExp; label: string; icon: string }[] = [
   { test: /WA Organik/i,           label: "WA Organik", icon: "ic:baseline-whatsapp" },
 ];
 function provenanceOf(k: Klien): { label: string; icon: string } {
+  if (k.chatbot_terakhir_pada) return { label: "Chatbot WhatsApp", icon: "ic:baseline-whatsapp" };
   const c = k.catatan || "";
   for (const m of SOURCE_META) if (m.test.test(c)) return { label: m.label, icon: m.icon };
   return { label: SUMBER_LABEL[k.sumber], icon: "solar:inbox-line-bold-duotone" };
@@ -2099,10 +2101,11 @@ function KlienDetailDrawer({ klien, onClose, onEdit, onDelete, onMove, onKlienUp
       legalitas:  (g.legalitas as Sertifikat | null) || "",
       alamat_teks: g.alamat_teks || "",
       dekat: g.dekat_nilai
-        ? { nilai: g.dekat_nilai, nama: g.dekat_nilai, label: "Tempat",
+        ? { nilai: g.dekat_nilai, nama: labelPreferensiTempat(g.dekat_nilai), label: "Tempat",
             icon: "solar:map-point-bold-duotone", warna: "emerald",
-            radius: g.dekat_radius ?? 1500 }
+            radius: g.dekat_radius ?? radiusPreferensiTempat(g.dekat_nilai) }
         : null,
+      dekat_asli: g.dekat_nilai ? { nilai: g.dekat_nilai, radius: g.dekat_radius, radiusTampil: g.dekat_radius ?? radiusPreferensiTempat(g.dekat_nilai) } : undefined,
       tujuan_beli: (g.tujuan_beli as TujuanBeli | null) || "",
       catatan: g.catatan || "",
     });
@@ -2472,7 +2475,7 @@ function KlienDetailDrawer({ klien, onClose, onEdit, onDelete, onMove, onKlienUp
                             {(g.luas_min || g.luas_max) && (
                               <InfoRow label={labelLuas(g.types)} value={[g.luas_min, g.luas_max].filter(Boolean).join(" – ") + " m²"} />
                             )}
-                            {g.dekat_nilai && <InfoRow label="Dekat" value={`${g.dekat_nilai}${g.dekat_radius ? ` · ${(g.dekat_radius/1000).toFixed(1).replace(".", ",")} km` : ""}`} />}
+                            {g.dekat_nilai && <InfoRow label="Dekat" value={`${labelPreferensiTempat(g.dekat_nilai)}${g.dekat_radius ? ` · ${(g.dekat_radius/1000).toFixed(1).replace(".", ",")} km` : ""}`} />}
                             {g.legalitas && <InfoRow label="Sertifikat" value={SERTIFIKAT_LABEL[g.legalitas as Sertifikat] ?? g.legalitas} />}
                             {g.tujuan_beli && <InfoRow label="Tujuan" value={{ ditempati: "Ditempati", investasi: "Investasi", disewakan: "Disewakan" }[g.tujuan_beli] ?? g.tujuan_beli} />}
                             {g.catatan && <InfoRow label="Catatan" value={g.catatan} />}
@@ -2702,6 +2705,7 @@ type PrefRingkasan = {
   id_grup: string;
   ids: string[];
   label: string;
+  label_lengkap?: string;
   maksud: string;
   /** Seluruh kecocokan kriteria ini, termasuk yang tidak muat di daftar. */
   total: number;
@@ -3442,7 +3446,7 @@ function MatchListingModal({ klienId, klienNama, punyaWa, klienEmail, prefIds, p
   const ringkasHeader = daftarPref.length === 0
     ? "Dari seluruh preferensi klien ini"
     : daftarPref.length === 1
-      ? daftarPref[0].label
+      ? (daftarPref[0].label_lengkap ?? daftarPref[0].label)
       : `${daftarPref.length} preferensi · ${daftarPref.reduce((n, p) => n + p.total - (kurangGrup.get(p.id_grup) ?? 0), 0)} kecocokan`;
 
   return (
@@ -3467,7 +3471,7 @@ function MatchListingModal({ klienId, klienNama, punyaWa, klienEmail, prefIds, p
             <Icon icon="solar:magic-stick-3-bold-duotone" className="text-base text-emerald-300" />
             <h3 className="text-[15px] font-extrabold text-white">Asisten Aset · {nama}</h3>
           </div>
-          <p className="mt-1 text-[12px] text-slate-400">{ringkasHeader}</p>
+          <p className="mt-1 pr-10 text-[12px] leading-relaxed text-slate-400">{ringkasHeader}</p>
 
           {/* ── Chip preferensi ──
               Klien nyata jarang punya satu kriteria. Tanpa baris ini, dua
@@ -3491,6 +3495,7 @@ function MatchListingModal({ klienId, klienNama, punyaWa, klienEmail, prefIds, p
               {daftarPref.map(p => (
                 <button
                   key={p.id_grup}
+                  title={p.label_lengkap ?? p.label}
                   onClick={() => setSorot(s => (s === p.id_grup ? null : p.id_grup))}
                   className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold transition-colors ${
                     sorot === p.id_grup
@@ -3578,7 +3583,7 @@ function MatchListingModal({ klienId, klienNama, punyaWa, klienEmail, prefIds, p
                   </button>
                 </div>
               ) : (
-                <PanelKosong diagnosa={diagnosa} tanpaPref={tanpaPref} />
+                <PanelKosong diagnosa={diagnosa} tanpaPref={tanpaPref} preferensi={daftarPref} />
               )
             ) : tampil.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -3822,7 +3827,11 @@ function MatchListingModal({ klienId, klienNama, punyaWa, klienEmail, prefIds, p
    penjelasan membuat agent menyimpulkan fiturnya rusak; layar kosong yang
    menyebut gerbang mana yang menghalangi membuatnya membuka preferensi dan
    memperbaiki satu angka. */
-function PanelKosong({ diagnosa, tanpaPref }: { diagnosa: Diagnosa | null; tanpaPref?: boolean }) {
+function PanelKosong({ diagnosa, tanpaPref, preferensi }: {
+  diagnosa: Diagnosa | null;
+  tanpaPref?: boolean;
+  preferensi: PrefRingkasan[];
+}) {
   if (tanpaPref) {
     return (
       <div className="flex flex-col items-center py-16 text-center">
@@ -3859,21 +3868,24 @@ function PanelKosong({ diagnosa, tanpaPref }: { diagnosa: Diagnosa | null; tanpa
         <Icon icon="solar:home-smile-angle-bold-duotone" className="text-3xl text-slate-500" />
       </div>
       <p className="mt-3 text-[14px] font-bold text-white">Belum ada aset yang cocok persis</p>
-      {/* Klien bisa punya beberapa kriteria; saran "naikkan plafon 10%" tanpa
-          menyebut plafon yang mana tidak bisa ditindaklanjuti. */}
-      {diagnosa?.label && (
-        <p className="mt-1 text-[11px] font-semibold text-slate-500">
-          Ditinjau dari kriteria: <span className="text-slate-300">{diagnosa.label}</span>
-        </p>
+      {/* Diagnosa hanya mengambil beberapa baris; cakupan pencarian tetap
+          seluruh tipe dan lokasi dari preferensi yang dipilih. */}
+      {preferensi.length > 0 && (
+        <div className="mt-2 max-w-sm text-[11px] font-semibold text-slate-500">
+          <p>Kriteria pencarian di seluruh lokasi pilihan:</p>
+          {preferensi.map(p => (
+            <p key={p.id_grup} className="mt-1 text-slate-300">{p.label_lengkap ?? p.label}</p>
+          ))}
+        </div>
       )}
 
-      {diagnosa && diagnosa.totalTanpaFilterLunak === 0 ? (
-        <p className="mt-1 max-w-sm text-[12px] text-slate-500">
-          Tidak ada satu pun aset dengan kategori dan jenis transaksi ini yang sedang tersedia. Kriteria budget dan
-          lokasinya belum jadi soal.
-        </p>
-      ) : saran.length > 0 ? (
+      {saran.length > 0 ? (
         <>
+          {diagnosa?.label && (
+            <p className="mt-3 text-[11px] font-semibold text-slate-500">
+              Saran untuk kriteria: <span className="text-slate-300">{diagnosa.label}</span>
+            </p>
+          )}
           <p className="mt-1 max-w-sm text-[12px] text-slate-500">
             Pencarian sengaja ketat — tidak ada aset yang ditampilkan kalau tidak benar-benar masuk kriteria. Yang
             menghalangi:
@@ -3895,7 +3907,8 @@ function PanelKosong({ diagnosa, tanpaPref }: { diagnosa: Diagnosa | null; tanpa
         </>
       ) : (
         <p className="mt-1 max-w-sm text-[12px] text-slate-500">
-          Semua aset yang cocok sudah pernah dikirim ke klien ini. Lihat tab Terkirim.
+          Belum ditemukan aset baru yang memenuhi seluruh kriteria. Aset yang sudah dikirim atau disingkirkan
+          tidak ditampilkan di tab ini.
         </p>
       )}
     </div>

@@ -1,0 +1,27 @@
+[
+  {
+    "id": "DEMO-001",
+    "name": "SIMULASI rumah lelang — bukan penawaran nyata",
+    "is_demo": true,
+    "transaction_type": "LELANG",
+    "origin": "unknown",
+    "location": "Lokasi ilustrasi — bukan penawaran nyata",
+    "availability_status": "unknown",
+    "availability_source": null,
+    "availability_verified_at": null,
+    "availability_valid_until": null,
+    "limit_price": 800000000,
+    "market_estimate": 1100000000,
+    "market_source": "Angka ilustrasi; ganti dengan pembanding pasar terverifikasi",
+    "verified_at": "2026-10-08T09:00:00+07:00",
+    "deposit": 160000000,
+    "additional_cost_estimate": 90000000,
+    "cost_notes": "Ilustrasi total bea, pajak, balik nama, renovasi, pengosongan, holding dan penjualan. Verifikasi komponen aktual.",
+    "registration_closes_at": null,
+    "deposit_due_at": null,
+    "auction_at": null,
+    "settlement_terms": "Verifikasi jadwal pelunasan pada pengumuman aset nyata",
+    "legal_notes": "Status dokumen, sengketa, penghuni, serta akses belum diverifikasi",
+    "official_url": null
+  }
+]

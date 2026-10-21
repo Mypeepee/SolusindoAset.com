@@ -254,6 +254,7 @@ export async function GET(req: NextRequest, { params }: Ctx) {
     id_grup: g.id_grup,
     ids: g.ids,
     label: ringkasGrup(g.rows),
+    label_lengkap: ringkasGrup(g.rows, { lengkap: true }),
     maksud: g.rows[0].maksud,
     /** Seluruh kecocokan kriteria ini, termasuk yang tidak muat di daftar. */
     total: g.aset.size,

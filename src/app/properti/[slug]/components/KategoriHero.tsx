@@ -19,6 +19,7 @@ import TypePicker from "@/components/search/TypePicker";
 import MobileSearchDock from "@/components/search/MobileSearchDock";
 import KeywordField from "@/components/search/KeywordField";
 import type { TempatDipilih } from "@/lib/searchTabs";
+import { applyPropertySearchQuery } from "@/lib/propertySearchQuery";
 import {
   serializeTypes,
   parseTypeParamToDisplays,
@@ -31,6 +32,7 @@ import {
   durasiLabelFor,
   durasiUnitFor,
   formatIdNumber,
+  selectSearchPlace,
   typeOptionsFor,
   type RangeField,
 } from "@/lib/searchTabs";
@@ -442,14 +444,9 @@ function DarkSearchBar({
    *  chip — membiarkannya berarti hasil disaring dua kali, sekali sebagai
    *  tempat dan sekali sebagai teks yang tidak akan cocok ke alamat mana pun. */
   const pilihTempat = useCallback((tempat: TempatDipilih | null) => {
-    setFormData((prev) => ({
-      ...prev,
-      dekat: tempat,
-      radius: "",
-      keyword: tempat ? "" : prev.keyword,
-    }));
+    setFormData((prev) => selectSearchPlace(prev, tempat, activeTab));
     setOpenDropdown(null);
-  }, []);
+  }, [activeTab]);
 
   /** Kota yang sedang dilihat — MENAIKKAN saran di kota itu, tidak menyaring. */
   const kotaKonteks = useMemo(
@@ -499,6 +496,7 @@ function DarkSearchBar({
     }
     if (formData.dekat) {
       params.set("dekat", formData.dekat.nilai);
+      if (formData.dekat.wilayah) params.set("areaDekat", formData.dekat.wilayah);
       // Radius hanya ditulis bila BERBEDA dari bawaan kelasnya — URL yang
       // dibagikan lewat WhatsApp jadi lebih pendek, dan bawaan yang diperbaiki
       // nanti tetap berlaku untuk tautan lama.
@@ -528,6 +526,12 @@ function DarkSearchBar({
       if (formData.maxLb)    params.set("maxLB",    raw(formData.maxLb));
     }
 
+    applyPropertySearchQuery(params);
+    if (params.has("minHarga") && params.has("maxHarga") &&
+        Number(params.get("minHarga")) > Number(params.get("maxHarga"))) {
+      toast.error("Harga minimum melebihi budget maksimum. Sesuaikan filter harga.");
+      return;
+    }
     setOpenDropdown(null);
 
     // Tab transaksi ≠ "semua" → pindah ke halaman section (Jual/Lelang/Sewa).

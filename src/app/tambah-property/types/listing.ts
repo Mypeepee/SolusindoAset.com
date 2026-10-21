@@ -277,6 +277,7 @@ export type AksesTipe =
   | 'KAMPUS'
   | 'SEKOLAH'
   | 'STASIUN'
+  | 'PINTU_TOL'
   | 'HALTE'
   | 'BANDARA'
   | 'MALL'
@@ -300,6 +301,7 @@ export const AKSES_TIPE_OPTIONS: { value: AksesTipe; label: string; icon: string
   { value: 'KAMPUS', label: 'Kampus', icon: 'mdi:school' },
   { value: 'SEKOLAH', label: 'Sekolah', icon: 'mdi:book-education' },
   { value: 'STASIUN', label: 'Stasiun', icon: 'mdi:train' },
+  { value: 'PINTU_TOL', label: 'Pintu Tol', icon: 'mdi:boom-gate' },
   { value: 'HALTE', label: 'Halte / Terminal', icon: 'mdi:bus' },
   { value: 'BANDARA', label: 'Bandara', icon: 'mdi:airplane' },
   { value: 'MALL', label: 'Mall', icon: 'mdi:shopping' },

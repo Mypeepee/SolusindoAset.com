@@ -27,6 +27,7 @@ import { Icon } from "@iconify/react";
 import { isNumericOnly, type TempatDipilih } from "@/lib/searchTabs";
 import TempatSaranPanel, { type SaranTempatUi } from "./TempatSaranPanel";
 import ContohKetikan, { type JenisContoh } from "./ContohKetikan";
+import { parsePropertySearchQuery, surabayaRegionLabel } from "@/lib/propertySearchQuery";
 
 type Theme = "light" | "dark";
 
@@ -138,6 +139,14 @@ export default function KeywordField({
   const [jenisContoh, setJenisContoh] = useState<JenisContoh | null>(null);
 
   const trimmed = value.trim();
+  const parsedQuery = parsePropertySearchQuery(trimmed);
+  const structuredQuery = Boolean(parsedQuery.nearby?.kelas) || (!parsedQuery.nearby &&
+    (parsedQuery.regions.length > 0 || parsedQuery.minHarga !== undefined || parsedQuery.maxHarga !== undefined));
+  // Cakupan wilayah sudah diketahui lokal. Saran tetap siap saat API jumlah
+  // properti lambat, gagal, atau masih menjawab ketikan sebelumnya.
+  const alamatAktif = structuredQuery
+    ? { teks: trimmed, jumlah: kueriTerakhir === trimmed ? alamat?.jumlah ?? null : null }
+    : alamat;
   const mode: "id" | "alamat" | null =
     trimmed === "" ? null : isNumericOnly(trimmed) ? "id" : "alamat";
 
@@ -230,7 +239,7 @@ export default function KeywordField({
 
   const modePopuler =
     saranHidup && !dekat && trimmed.length < MIN_KETIK && populer.length > 0;
-  const daftar = modePopuler ? populer : saran;
+  const daftar = structuredQuery ? [] : modePopuler ? populer : saran;
 
   /**
    * Baris alamat ikut dinavigasi papan ketik, dan letaknya SETELAH daftar
@@ -239,7 +248,7 @@ export default function KeywordField({
    * persis hal yang paling masuk akal, dan pemakainya melihat lebih dulu apa
    * yang akan terjadi.
    */
-  const adaAlamat = Boolean(alamat) && !modePopuler;
+  const adaAlamat = Boolean(alamatAktif) && !modePopuler;
   const totalBaris = daftar.length + (adaAlamat ? 1 : 0);
 
   const panelTerbuka =
@@ -254,6 +263,11 @@ export default function KeywordField({
       modePopuler);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && (structuredQuery || parsedQuery.nearby)) {
+      e.preventDefault();
+      onSubmit();
+      return;
+    }
     if (!panelTerbuka || totalBaris === 0) {
       if (e.key === "Enter") onSubmit();
       return;
@@ -332,10 +346,12 @@ export default function KeywordField({
               title={
                 mode === "id"
                   ? "Akan dicari sebagai ID Properti"
-                  : "Akan dicari sebagai alamat — atau sebagai tempat, kalau namanya dikenali"
+                  : parsedQuery.regions.length
+                    ? `Cari di kecamatan ${parsedQuery.regions.map(surabayaRegionLabel).join(", ")}`
+                    : "Akan dicari sebagai alamat — atau sebagai tempat, kalau namanya dikenali"
               }
             >
-              {mode === "id" ? "ID" : "Alamat"}
+              {mode === "id" ? "ID" : parsedQuery.nearby ? "Dekat" : parsedQuery.regions.length ? "Wilayah" : "Alamat"}
             </span>
           )
         )}
@@ -442,10 +458,10 @@ export default function KeywordField({
         anchorRef={wrapRef}
         open={panelTerbuka}
         items={daftar}
-        memuat={memuat}
+        memuat={memuat && !structuredQuery}
         kueri={kueriTerakhir || trimmed}
         populer={modePopuler}
-        alamat={adaAlamat ? alamat : null}
+        alamat={adaAlamat ? alamatAktif : null}
         onPilihAlamat={onSubmit}
         onContoh={(teks) => {
           onChange(teks);

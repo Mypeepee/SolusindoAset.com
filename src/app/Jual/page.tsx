@@ -6,6 +6,7 @@ import ProductList from "./produklist";
 import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { buildLocationWhere } from "@/lib/listingLocationFilter";
+import { propertySearchRedirect } from "@/lib/propertySearchQuery";
 import { buildKataKunciWhere } from "@/lib/listingKataKunci";
 import {
   ambilJarakKeTempat,
@@ -120,6 +121,8 @@ const allowedKategori = [
 
 // --- 2. SERVER COMPONENT UTAMA (ASYNC) ---
 export default async function SearchPage({ searchParams }: Props) {
+  const searchRedirect = propertySearchRedirect("/Jual", searchParams);
+  if (searchRedirect) redirect(searchRedirect);
   // A. Ambil Parameter URL (Standard)
   // `page` divalidasi (bukan Number() mentah): "?page=abc" dulu menghasilkan
   // NaN → `skip: NaN` → Prisma melempar error → halaman 500.

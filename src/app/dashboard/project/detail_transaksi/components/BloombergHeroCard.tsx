@@ -37,7 +37,7 @@ import {
 import ModalTerjual from "../components/ModalTerjual";
 
 type Tone = "amber" | "emerald" | "cyan" | "fuchsia" | "rose" | "slate";
-type PaymentStatus = "lunas" | "menunggu_pembayaran";
+type PaymentStatus = "lunas" | "dibayar_sebagian" | "menunggu_pembayaran";
 
 type Investor = {
   id_agent?: string;
@@ -274,9 +274,10 @@ function getDisplayStatusLabel(status: ProjectStatus) {
 }
 
 function normalizePaymentStatus(value: unknown): PaymentStatus {
-  return String(value ?? "").toLowerCase() === "lunas"
-    ? "lunas"
-    : "menunggu_pembayaran";
+  const status = String(value ?? "").toLowerCase();
+  if (status === "lunas") return "lunas";
+  if (status === "dibayar_sebagian") return "dibayar_sebagian";
+  return "menunggu_pembayaran";
 }
 
 function getInvestorCommittedAmount(item: any) {

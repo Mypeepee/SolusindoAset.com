@@ -37,6 +37,7 @@ import {
 } from "@/lib/nearbyPlaces";
 
 import type { SekitarView } from "./useSekitar";
+import { RADIUS_LANDMARK } from "@/lib/tempat/landmark";
 
 /** Berapa tempat per kategori yang ditampilkan — yang terdekat lebih dulu. */
 const MAKS_PER_KATEGORI = 3;
@@ -89,9 +90,29 @@ export default function FasilitasSekitar({
   }, [sekitar.tempat]);
 
   const poiTampil = semuaKategori ? poiGrup : poiGrup.slice(0, KATEGORI_AWAL);
+  const pintuTol = useMemo(() => (sekitar.landmark ?? [])
+    .filter((place) => place.kelas === "PINTU_TOL" && place.jarak <= RADIUS_LANDMARK)
+    .sort((a, b) => a.jarak - b.jarak).slice(0, 3), [sekitar.landmark]);
 
   return (
     <div className={className}>
+      {pintuTol.length > 0 && (
+        <section className="mb-6 rounded-2xl border border-amber-400/20 bg-amber-400/[0.04] p-4" aria-label="Pintu tol terdekat">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h4 className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.14em] text-amber-400">
+              <Icon icon="mdi:boom-gate" className="text-lg" />Pintu tol terdekat
+            </h4>
+            <span className="text-[11px] text-white/40">Radius {labelRadius(RADIUS_LANDMARK)}</span>
+          </div>
+          {pintuTol.map((place) => (
+            <div key={place.id} className="flex items-center justify-between gap-3 border-b border-white/[0.05] py-2 last:border-0">
+              <span className="min-w-0 text-[13px] text-white/80">{place.nama}</span>
+              <span className="shrink-0 rounded-lg bg-white/[0.06] px-2 py-0.5 text-[11px] font-bold text-white">{formatJarak(place.jarak)}</span>
+            </div>
+          ))}
+          <p className="mt-2 text-[11px] text-white/40">Jarak garis lurus; jarak berkendara mengikuti akses jalan.</p>
+        </section>
+      )}
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h4 className="text-[11px] font-black uppercase tracking-[0.14em] text-white/35">
           Yang ada di sekitar

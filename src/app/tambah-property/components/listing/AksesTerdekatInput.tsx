@@ -64,6 +64,7 @@ export const MAKS_PATOKAN = MAKS_HASIL;
 const AMBANG_SCROLL = 6;
 
 const CONTOH_NAMA: Record<AksesTipe, string> = {
+  PINTU_TOL: 'Nama gerbang tol',
   KAMPUS: 'Universitas Brawijaya',
   SEKOLAH: 'SMAN 5 Surabaya',
   STASIUN: 'Stasiun Gubeng',

@@ -20,6 +20,7 @@
 import "server-only";
 import { bacaTempatTerpilih } from "@/lib/tempat/cari";
 import type { KriteriaDekat } from "@/lib/klienMatch";
+import type { TempatTerpilih } from "@/lib/tempat/cari";
 
 /** Bentuk minimum baris preferensi yang dibutuhkan penerjemah. */
 export type PrefDekat = { dekat_nilai?: string | null; dekat_radius?: number | null };
@@ -44,12 +45,10 @@ export async function siapkanDekat(prefs: PrefDekat[]): Promise<Map<string, Krit
   for (const t of token) {
     const tempat = await bacaTempatTerpilih(t);
     if (!tempat) continue;
-    peta.set(t, {
-      ids: tempat.ids,
-      kriteria: tempat.kriteria ?? null,
-      radius: tempat.radius,
-      label: tempat.kelasSemua ? `sekitar ${tempat.label}` : `sekitar ${tempat.nama}`,
-    });
+    const convert = (item: TempatTerpilih): KriteriaDekat => ({ ids: item.ids, kriteria: item.kriteria ?? null, radius: item.radius,
+      label: item.kelasSemua ? `sekitar ${item.label}` : `sekitar ${item.nama}`,
+      ...(item.gabungan ? { gabungan: item.gabungan.map((group) => group.map(convert)) } : {}) });
+    peta.set(t, convert(tempat));
   }
   return peta;
 }
@@ -70,6 +69,6 @@ export function dekatUntuk(
   const dasar = peta.get(t);
   if (!dasar) return { ids: [], kriteria: null, radius: 0, label: t }; // tak dikenali → tak terpenuhi
   const r = p.dekat_radius;
-  if (r && r >= 200 && r <= 20_000) return { ...dasar, radius: r };
+  if (r && r >= 1 && r <= 20_000) return { ...dasar, radius: r, ...(dasar.gabungan ? { gabungan: dasar.gabungan.map((group) => group.map((leaf) => ({ ...leaf, radius: r }))) } : {}) };
   return dasar;
 }

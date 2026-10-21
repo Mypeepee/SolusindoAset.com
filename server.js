@@ -217,6 +217,31 @@ function startPindaiSekitarScheduler(port) {
   console.log('> Scheduler pemindai sekitar aktif (tiap 10 menit, 07-22)')
 }
 
+// Idempotent publication tick. The endpoint also supports an external cron service.
+function startBeritaScheduler(port) {
+  const secret = process.env.CRON_SECRET
+  if (!secret) {
+    console.warn('[berita] CRON_SECRET belum diatur; scheduler publikasi tidak dimulai.')
+    return
+  }
+  const cron = require('node-cron')
+  let running = false
+  const trigger = () => {
+    if (running) return
+    running = true
+    const req = require('http').get({ hostname: 'localhost', port, path: '/api/cron/berita-publish', headers: { Authorization: `Bearer ${secret}` }, timeout: 30000 }, (res) => {
+      res.resume()
+      res.on('end', () => { running = false })
+      res.on('error', () => { running = false })
+      if (res.statusCode !== 200) console.error('[berita] Publikasi terjadwal gagal:', res.statusCode)
+    })
+    req.on('error', (error) => { running = false; console.error('[berita] Scheduler:', error.message) })
+    req.on('timeout', () => req.destroy(new Error('Publication tick timed out')))
+  }
+  cron.schedule('* * * * *', trigger)
+  trigger()
+}
+
 app.prepare().then(() => {
   createServer(async (req, res) => {
     try {
@@ -243,5 +268,6 @@ app.prepare().then(() => {
     startAcaraReminderScheduler(port)
     startAsistenKlienScheduler(port)
     startPindaiSekitarScheduler(port)
+    startBeritaScheduler(port)
   })
 })

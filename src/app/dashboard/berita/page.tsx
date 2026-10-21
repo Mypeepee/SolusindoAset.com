@@ -1,341 +1,644 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import Image from "next/image";
 import { useSession } from "next-auth/react";
-import { Icon } from "@iconify/react";
+import {
+  Archive,
+  ArrowDownUp,
+  ArrowRight,
+  ArrowUpRight,
+  BookOpen,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  CircleHelp,
+  Clock3,
+  FileText,
+  Globe2,
+  Loader2,
+  LockKeyhole,
+  Newspaper,
+  Plus,
+  RefreshCw,
+  SearchX,
+  Send,
+  ShieldCheck,
+  Trash2,
+  Users,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
-import { accentFor, formatTanggal } from "@/lib/beritaUi";
 import type { BeritaListItem } from "@/lib/berita";
+import {
+  beritaPermissions,
+  BERITA_STATUS_LABEL,
+} from "@/lib/beritaPermissions";
+import StatCard from "./components/StatCard";
+import FilterBar from "./components/FilterBar";
+import ArticleListItem, {
+  ArticleSkeleton,
+  type ArticleAction,
+} from "./components/ArticleListItem";
+import { SelectionCheckbox } from "./components/ArticleUI";
+import WorkspaceDialog from "./components/WorkspaceDialog";
+import { beritaRequest, useBeritaWorkspace } from "./components/workspace";
+import styles from "./components/workspace.module.css";
 
-const ALLOWED = ["OWNER", "ADMIN", "PRINCIPAL"];
-
-const STATUS_TABS = [
-  { value: "", label: "Semua" },
-  { value: "PUBLISHED", label: "Terbit" },
-  { value: "DRAFT", label: "Draf" },
-  { value: "SCHEDULED", label: "Terjadwal" },
-  { value: "ARCHIVED", label: "Arsip" },
+const EditorModal = dynamic(() => import("./components/EditorModal"), {
+  ssr: false,
+});
+const QuickPreviewDrawer = dynamic(
+  () => import("./components/QuickPreviewDrawer"),
+  { ssr: false },
+);
+const METRICS = [
+  { label: "Total artikel", status: "", icon: Newspaper, tone: "#a6b7ca" },
+  { label: "Sudah terbit", status: "PUBLISHED", icon: Globe2, tone: "#6ee7b7" },
+  { label: "Dalam draf", status: "DRAFT", icon: FileText, tone: "#a5b4fc" },
+  { label: "Terjadwal", status: "SCHEDULED", icon: Clock3, tone: "#fcd68b" },
 ];
-
-const STATUS_BADGE: Record<string, string> = {
-  PUBLISHED: "bg-emerald-400/15 text-emerald-300 border-emerald-400/30",
-  DRAFT: "bg-slate-400/15 text-slate-300 border-slate-400/25",
-  SCHEDULED: "bg-amber-400/15 text-amber-300 border-amber-400/30",
-  ARCHIVED: "bg-rose-400/15 text-rose-300 border-rose-400/30",
-};
-const STATUS_LABEL: Record<string, string> = {
-  PUBLISHED: "Terbit",
-  DRAFT: "Draf",
-  SCHEDULED: "Terjadwal",
-  ARCHIVED: "Arsip",
+type PendingAction = {
+  ids: string[];
+  action: Exclude<ArticleAction, "PIN">;
+  title?: string;
 };
 
 export default function BeritaDashboardPage() {
   const { data: session, status: sessionStatus } = useSession();
-  const jabatan = String((session?.user as any)?.jabatan || "").toUpperCase();
-  const allowed = ALLOWED.includes(jabatan);
-
-  const [items, setItems] = useState<BeritaListItem[]>([]);
-  const [counts, setCounts] = useState<Record<string, number>>({});
-  const [statusFilter, setStatusFilter] = useState("");
-  const [query, setQuery] = useState("");
-  const [debounced, setDebounced] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [deleteTarget, setDeleteTarget] = useState<BeritaListItem | null>(null);
-  const [deleting, setDeleting] = useState(false);
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(query), 300);
-    return () => clearTimeout(t);
-  }, [query]);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (statusFilter) params.set("status", statusFilter);
-      if (debounced.trim()) params.set("q", debounced.trim());
-      params.set("pageSize", "50");
-      const res = await fetch(`/api/berita/admin?${params.toString()}`, { cache: "no-store" });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      setItems(data.items || []);
-      setCounts(data.statusCounts || {});
-    } catch {
-      toast.error("Gagal memuat daftar berita");
-    } finally {
-      setLoading(false);
-    }
-  }, [statusFilter, debounced]);
+  const permissions = beritaPermissions(session?.user?.jabatan);
+  const workspace = useBeritaWorkspace(
+    sessionStatus === "authenticated" && permissions.canEdit,
+  );
+  const { data, filters, selected, view } = workspace;
+  const [editor, setEditor] = useState<{ id?: string } | null>(null);
+  const [preview, setPreview] = useState<BeritaListItem | null>(null);
+  const [pending, setPending] = useState<PendingAction | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [help, setHelp] = useState(false);
+  const total = Object.values(data?.statusCounts || {}).reduce(
+    (sum, count) => sum + (count || 0),
+    0,
+  );
+  const hasFilters = Object.entries(filters).some(
+    ([key, value]) => key !== "sort" && !!value,
+  );
+  const skeletonCount = data?.items.length || 6;
 
   useEffect(() => {
-    if (allowed) load();
-  }, [allowed, load]);
+    if (data && !workspace.refreshing && workspace.page > data.totalPages)
+      workspace.changePage(data.totalPages);
+  }, [data, workspace.refreshing, workspace.page]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function confirmDelete() {
-    if (!deleteTarget) return;
-    setDeleting(true);
+  const editArticle = useCallback((article: BeritaListItem) => {
+    setPreview(null);
+    setEditor({ id: article.id });
+  }, []);
+  const onAction = useCallback(
+    async (article: BeritaListItem, action: ArticleAction) => {
+      if (action !== "PIN") {
+        setPending({ ids: [article.id], action, title: article.judul });
+        return;
+      }
+      setBusy(true);
+      try {
+        await beritaRequest(`/api/berita/admin/${article.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ berita_utama: !article.berita_utama }),
+        });
+        toast.success(
+          article.berita_utama ? "Headline dilepas." : "Headline diperbarui.",
+        );
+        await workspace.mutate();
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Gagal memperbarui headline.",
+        );
+      } finally {
+        setBusy(false);
+      }
+    },
+    [workspace.mutate],
+  );
+
+  const confirmAction = async () => {
+    if (!pending || busy) return;
+    setBusy(true);
     try {
-      const res = await fetch(`/api/berita/admin/${deleteTarget.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
-      toast.success("Berita dihapus");
-      setDeleteTarget(null);
-      load();
-    } catch {
-      toast.error("Gagal menghapus berita");
+      const result = await beritaRequest<{ count: number }>(
+        "/api/berita/admin/bulk",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: pending.ids, action: pending.action }),
+        },
+      );
+      toast.success(
+        `${result.count} artikel ${pending.action === "DELETE" ? "dihapus" : pending.action === "ARCHIVED" ? "diarsipkan" : pending.action === "PUBLISHED" ? "diterbitkan" : "dikembalikan ke draf"}.`,
+      );
+      setPending(null);
+      workspace.clearSelection();
+      await workspace.mutate();
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Aksi gagal. Silakan coba lagi.",
+      );
     } finally {
-      setDeleting(false);
+      setBusy(false);
     }
-  }
+  };
 
-  if (sessionStatus === "loading") {
+  if (sessionStatus !== "loading" && !permissions.canEdit)
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <Icon icon="solar:refresh-linear" className="animate-spin text-2xl text-emerald-400" />
-      </div>
-    );
-  }
-
-  if (!allowed) {
-    return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-500/10">
-          <Icon icon="solar:lock-keyhole-bold" className="text-3xl text-rose-400" />
-        </div>
-        <h2 className="mt-5 text-lg font-bold text-white">Akses Terbatas</h2>
-        <p className="mt-1.5 max-w-sm text-sm text-slate-500">
-          Hanya Admin / Owner yang dapat mengelola berita.
-        </p>
-        <Link
-          href="/dashboard"
-          className="mt-5 rounded-full border border-white/10 px-5 py-2.5 text-xs font-bold text-slate-300 hover:border-white/25 hover:text-white"
-        >
-          Kembali ke Dashboard
+      <div className={`${styles.workspace} ${styles.accessDenied}`}>
+        <LockKeyhole size={32} />
+        <h1>Akses redaksi terbatas</h1>
+        <p>Workspace ini tersedia untuk Admin dan Owner.</p>
+        <Link href="/dashboard" className={styles.secondaryButton}>
+          Kembali ke dashboard <ArrowRight size={14} />
         </Link>
       </div>
     );
-  }
-
-  const totalAll = Object.values(counts).reduce((a, b) => a + b, 0);
 
   return (
-    <div className="mx-auto max-w-6xl py-6">
-      {/* HEADER */}
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className={styles.workspace}>
+      <header className={styles.pageHeader}>
         <div>
-          <div className="mb-1 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-400">
-            <Icon icon="solar:notebook-bold" /> Redaksi
-          </div>
-          <h1 className="text-2xl font-extrabold text-white">Kelola Berita</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Tulis, terbitkan, dan kelola artikel blog Solusindo Aset.
-          </p>
+          <h1 id="berita-workspace-heading" tabIndex={-1}>
+            Kelola Berita<span className={styles.titleDot}>.</span>
+          </h1>
+          <p>Dari ide menjadi cerita. Kelola setiap tahap publikasi Anda.</p>
         </div>
-        <Link
-          href="/dashboard/berita/new"
-          className="inline-flex items-center gap-2 self-start rounded-xl bg-emerald-400 px-5 py-3 text-sm font-extrabold text-black shadow-lg shadow-emerald-500/20 transition-all hover:bg-emerald-300 active:scale-95 sm:self-auto"
-        >
-          <Icon icon="solar:pen-new-square-bold" /> Tulis Berita
-        </Link>
-      </div>
-
-      {/* STATS */}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Total" value={totalAll} icon="solar:documents-bold" tone="text-white" />
-        <Stat label="Terbit" value={counts.PUBLISHED || 0} icon="solar:check-circle-bold" tone="text-emerald-300" />
-        <Stat label="Draf" value={counts.DRAFT || 0} icon="solar:document-linear" tone="text-slate-300" />
-        <Stat label="Terjadwal" value={counts.SCHEDULED || 0} icon="solar:clock-circle-bold" tone="text-amber-300" />
-      </div>
-
-      {/* FILTERS */}
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="scrollbar-hide flex gap-1.5 overflow-x-auto">
-          {STATUS_TABS.map((t) => (
-            <button
-              key={t.value}
-              onClick={() => setStatusFilter(t.value)}
-              className={`shrink-0 rounded-lg border px-3.5 py-2 text-xs font-bold transition-all ${
-                statusFilter === t.value
-                  ? "border-emerald-400/50 bg-emerald-400/10 text-emerald-300"
-                  : "border-white/10 text-slate-400 hover:border-white/25 hover:text-white"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <div className="relative sm:w-64">
-          <Icon icon="solar:magnifer-linear" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Cari judul…"
-            className="w-full rounded-lg border border-white/10 bg-black/40 py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-slate-600 focus:border-emerald-400/50 focus:outline-none"
-          />
-        </div>
-      </div>
-
-      {/* LIST */}
-      {loading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-24 animate-pulse rounded-2xl border border-white/5 bg-white/[0.02]" />
-          ))}
-        </div>
-      ) : items.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] py-20 text-center">
-          <Icon icon="solar:notebook-broken" className="text-4xl text-slate-600" />
-          <h3 className="mt-4 text-base font-bold text-white">Belum ada berita</h3>
-          <p className="mt-1 text-sm text-slate-500">Mulai tulis artikel pertama Anda.</p>
-          <Link
-            href="/dashboard/berita/new"
-            className="mt-5 rounded-full bg-emerald-400 px-5 py-2.5 text-xs font-extrabold text-black hover:bg-emerald-300"
+        <div className={styles.headerActions}>
+          <button
+            type="button"
+            className={styles.helpButton}
+            onClick={() => setHelp(true)}
           >
-            Tulis Berita
-          </Link>
+            <CircleHelp size={15} />
+            <span>Panduan redaksi</span>
+          </button>
+          <button
+            type="button"
+            className={styles.primaryButton}
+            onClick={() => setEditor({})}
+            disabled={sessionStatus === "loading"}
+          >
+            <Plus size={17} /> Tulis Berita
+            <span className={styles.buttonArrow}>
+              <ArrowUpRight size={15} />
+            </span>
+          </button>
         </div>
-      ) : (
-        <div className="space-y-3">
-          {items.map((b) => {
-            const accent = accentFor(b.kategori);
-            return (
-              <div
-                key={b.id}
-                className="group flex items-center gap-4 rounded-2xl border border-white/10 bg-[#0a0d10] p-3 transition-colors hover:border-white/20"
-              >
-                <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-xl bg-black/40">
-                  {b.gambar_utama ? (
-                    <Image src={b.gambar_utama} alt={b.judul} fill unoptimized className="object-cover" />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-slate-700">
-                      <Icon icon="solar:gallery-broken" className="text-xl" />
-                    </div>
-                  )}
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${STATUS_BADGE[b.status_publish]}`}>
-                      {STATUS_LABEL[b.status_publish]}
-                    </span>
-                    <span className={`text-[11px] font-semibold ${accent.text}`}>{b.kategori}</span>
-                    {b.berita_utama && (
-                      <span className="flex items-center gap-0.5 text-[10px] font-bold text-amber-300">
-                        <Icon icon="solar:star-bold" /> Headline
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="truncate text-sm font-bold text-white">{b.judul}</h3>
-                  <div className="mt-0.5 flex items-center gap-3 text-[11px] text-slate-500">
-                    <span className="flex items-center gap-1">
-                      <Icon icon="solar:eye-linear" /> {b.views}
-                    </span>
-                    <span>{b.readMinutes} min</span>
-                    <span className="hidden sm:inline">
-                      {formatTanggal(b.tanggal_publish || b.tanggal_dibuat)}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex shrink-0 items-center gap-1.5">
-                  {b.status_publish === "PUBLISHED" && (
-                    <Link
-                      href={`/blog/${b.slug}`}
-                      target="_blank"
-                      title="Lihat publik"
-                      className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-slate-400 transition-colors hover:border-emerald-400/40 hover:text-emerald-300"
-                    >
-                      <Icon icon="solar:eye-linear" />
-                    </Link>
-                  )}
-                  <Link
-                    href={`/dashboard/berita/${b.id}`}
-                    title="Edit"
-                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-slate-400 transition-colors hover:border-emerald-400/40 hover:text-emerald-300"
-                  >
-                    <Icon icon="solar:pen-2-linear" />
-                  </Link>
-                  <button
-                    onClick={() => setDeleteTarget(b)}
-                    title="Hapus"
-                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-slate-400 transition-colors hover:border-rose-400/40 hover:text-rose-300"
-                  >
-                    <Icon icon="solar:trash-bin-trash-linear" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* DELETE CONFIRM */}
-      {deleteTarget && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-            onClick={() => !deleting && setDeleteTarget(null)}
+      </header>
+      <section className={styles.statsGrid} aria-label="Ringkasan artikel">
+        {METRICS.map((metric) => (
+          <StatCard
+            key={metric.status}
+            {...metric}
+            value={
+              metric.status
+                ? data?.statusCounts[
+                    metric.status as keyof typeof data.statusCounts
+                  ] || 0
+                : total
+            }
+            active={filters.status === metric.status && !filters.review}
+            onClick={() =>
+              workspace.updateFilters({ status: metric.status, review: "" })
+            }
+            activity={data?.activity || []}
+            loading={workspace.loading}
           />
-          <div className="relative w-full max-w-md rounded-2xl border border-white/10 bg-[#0a0d10] p-6 shadow-2xl">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-500/10">
-              <Icon icon="solar:trash-bin-trash-bold" className="text-2xl text-rose-400" />
-            </div>
-            <h3 className="mt-4 text-center text-lg font-bold text-white">Hapus berita ini?</h3>
-            <p className="mt-1.5 text-center text-sm text-slate-400">
-              <span className="font-semibold text-slate-200">“{deleteTarget.judul}”</span> akan
-              dihapus permanen. Tindakan ini tidak dapat dibatalkan.
-            </p>
-            <div className="mt-6 flex gap-3">
+        ))}
+      </section>
+      <div className={styles.libraryHeader}>
+        <div>
+          <h2>
+            Pustaka artikel
+            <span>{data ? total.toLocaleString("id-ID") : "—"}</span>
+          </h2>
+          <p>Semua cerita Anda, dalam satu ruang kerja.</p>
+        </div>
+        <div className={styles.libraryMeta}>
+          {!!data?.reviewCount && (
+            <button
+              onClick={() =>
+                workspace.updateFilters({ status: "DRAFT", review: "true" })
+              }
+              className={styles.reviewChip}
+            >
+              <span />
+              {data.reviewCount} menunggu review
+              <ArrowRight size={12} />
+            </button>
+          )}
+          <span className={styles.roleChip}>
+            <ShieldCheck size={12} />
+            {session?.user?.jabatan || "REDAKSI"}
+          </span>
+          <button
+            className={styles.iconButton}
+            aria-label="Muat ulang artikel"
+            title="Muat ulang artikel"
+            disabled={workspace.refreshing}
+            onClick={() => workspace.mutate()}
+          >
+            <RefreshCw
+              size={14}
+              className={workspace.refreshing ? "animate-spin" : ""}
+            />
+          </button>
+        </div>
+      </div>
+      <section
+        className={styles.library}
+        aria-label="Daftar dan pengaturan artikel"
+      >
+        <FilterBar
+          filters={filters}
+          onChange={workspace.updateFilters}
+          data={data}
+          view={view}
+          onView={workspace.changeView}
+          reset={workspace.resetFilters}
+        />
+        <div className={styles.listHeading}>
+          <div>
+            {permissions.canPublish && (
+              <SelectionCheckbox
+                label="Pilih semua artikel di halaman ini"
+                checked={workspace.allSelected}
+                mixed={selected.size > 0 && !workspace.allSelected}
+                onChange={workspace.toggleAll}
+                disabled={
+                  workspace.loading ||
+                  workspace.refreshing ||
+                  busy ||
+                  !data?.items.length
+                }
+              />
+            )}
+            <span>
+              {selected.size ? `${selected.size} artikel dipilih` : "ARTIKEL"}
+            </span>
+          </div>
+          <span className={styles.resultCount} role="status" aria-live="polite">
+            {workspace.loading
+              ? "Memuat artikel…"
+              : workspace.refreshing
+                ? "Memperbarui…"
+                : `${data?.total || 0} artikel ditemukan`}
+          </span>
+          <div className={styles.sortControl}>
+            <ArrowDownUp size={12} />
+            <select
+              value={filters.sort}
+              aria-label="Urutkan artikel"
+              onChange={(event) =>
+                workspace.updateFilters({ sort: event.target.value })
+              }
+            >
+              <option value="newest">Terakhir diperbarui</option>
+              <option value="oldest">Paling awal dibuat</option>
+              <option value="views">Paling banyak dibaca</option>
+            </select>
+          </div>
+        </div>
+        <div
+          id="berita-results"
+          role="tabpanel"
+          aria-labelledby={`berita-tab-${filters.status || "all"}`}
+          aria-busy={workspace.loading || workspace.refreshing}
+          className={`${styles.results} ${view === "grid" ? styles.gridResults : ""} ${workspace.refreshing && data ? styles.refreshing : ""}`}
+        >
+          {workspace.error ? (
+            <div className={styles.emptyState} role="alert">
+              <span className={styles.emptyIcon}>
+                <RefreshCw size={25} />
+              </span>
+              <h3>Artikel belum berhasil dimuat.</h3>
+              <p>{workspace.error.message}</p>
               <button
-                onClick={() => setDeleteTarget(null)}
-                disabled={deleting}
-                className="flex-1 rounded-xl border border-white/10 py-3 text-sm font-bold text-slate-300 transition-colors hover:border-white/25 hover:text-white disabled:opacity-60"
+                className={styles.secondaryButton}
+                onClick={() => workspace.mutate()}
               >
-                Batal
+                <RefreshCw size={14} /> Coba lagi
               </button>
+            </div>
+          ) : workspace.loading ? (
+            Array.from({ length: skeletonCount }, (_, index) => (
+              <ArticleSkeleton key={index} view={view} />
+            ))
+          ) : !data?.items.length ? (
+            <div className={styles.emptyState}>
+              <span className={styles.emptyIcon}>
+                {hasFilters ? <SearchX size={29} /> : <BookOpen size={29} />}
+              </span>
+              <span className={styles.eyebrow}>
+                {hasFilters ? "COBA SUDUT PANDANG LAIN" : "CERITA PERTAMA ANDA"}
+              </span>
+              <h3>
+                {hasFilters
+                  ? "Belum ada artikel yang cocok."
+                  : "Ruang untuk cerita selanjutnya."}
+              </h3>
+              <p>
+                {hasFilters
+                  ? "Sesuaikan kata kunci atau filter untuk menemukan artikel Anda."
+                  : "Bagikan wawasan, kabar terbaru, dan ide yang layak dibaca."}
+              </p>
               <button
-                onClick={confirmDelete}
-                disabled={deleting}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-rose-500 py-3 text-sm font-extrabold text-white transition-colors hover:bg-rose-400 disabled:opacity-60"
+                className={styles.primaryButton}
+                onClick={
+                  hasFilters ? workspace.resetFilters : () => setEditor({})
+                }
               >
-                {deleting ? (
+                {hasFilters ? (
                   <>
-                    <Icon icon="solar:refresh-linear" className="animate-spin" /> Menghapus…
+                    <X size={14} /> Hapus filter
                   </>
                 ) : (
-                  "Hapus"
+                  <>
+                    <Plus size={16} /> Tulis berita pertama
+                  </>
                 )}
               </button>
             </div>
+          ) : (
+            data.items.map((article) => (
+              <ArticleListItem
+                key={article.id}
+                article={article}
+                view={view}
+                selected={selected.has(article.id)}
+                selectable={permissions.canPublish}
+                owner={permissions.canPublish}
+                busy={busy || workspace.refreshing}
+                onSelect={workspace.toggle}
+                onPreview={setPreview}
+                onEdit={editArticle}
+                onAction={onAction}
+              />
+            ))
+          )}
+        </div>
+        <footer className={styles.pagination}>
+          <span>
+            {data?.total ? (
+              <>
+                Menampilkan{" "}
+                <strong>
+                  {(workspace.page - 1) * data.pageSize + 1}–
+                  {Math.min(workspace.page * data.pageSize, data.total)}
+                </strong>{" "}
+                dari <strong>{data.total}</strong> artikel
+              </>
+            ) : (
+              "Belum ada artikel untuk ditampilkan"
+            )}
+          </span>
+          <div>
+            <button
+              type="button"
+              disabled={workspace.page <= 1 || workspace.refreshing}
+              onClick={() => workspace.changePage(workspace.page - 1)}
+              aria-label="Halaman sebelumnya"
+            >
+              <ChevronLeft size={15} />
+            </button>
+            <span>
+              Halaman <strong>{workspace.page}</strong> /{" "}
+              {data?.totalPages || 1}
+            </span>
+            <button
+              type="button"
+              disabled={
+                workspace.page >= (data?.totalPages || 1) ||
+                workspace.refreshing
+              }
+              onClick={() => workspace.changePage(workspace.page + 1)}
+              aria-label="Halaman berikutnya"
+            >
+              <ChevronRight size={15} />
+            </button>
           </div>
+        </footer>
+      </section>
+      <footer className={styles.workspaceFooter}>
+        <span>
+          <ShieldCheck size={13} />
+          {permissions.canPublish
+            ? "Anda memegang kendali penuh atas publikasi."
+            : "Artikel Anda ditinjau Owner sebelum dipublikasikan."}
+        </span>
+        {permissions.canAssignRoles && (
+          <Link href="/dashboard/human-resource-management">
+            <Users size={13} /> Kelola tim & peran <ArrowUpRight size={12} />
+          </Link>
+        )}
+      </footer>
+      {selected.size > 0 && permissions.canPublish && (
+        <div
+          className={styles.bulkBar}
+          role="region"
+          aria-label="Aksi massal artikel"
+        >
+          <span className={styles.bulkSelected}>
+            <span>
+              <Check size={13} />
+            </span>
+            {selected.size} artikel dipilih
+          </span>
+          <div className={styles.bulkActions}>
+            <button
+              disabled={busy || workspace.refreshing}
+              onClick={() =>
+                setPending({ ids: [...selected], action: "PUBLISHED" })
+              }
+            >
+              <Send size={14} />
+              <span>Terbitkan</span>
+            </button>
+            <button
+              disabled={busy || workspace.refreshing}
+              onClick={() =>
+                setPending({ ids: [...selected], action: "DRAFT" })
+              }
+            >
+              <FileText size={14} />
+              <span>Jadikan draf</span>
+            </button>
+            <button
+              disabled={busy || workspace.refreshing}
+              onClick={() =>
+                setPending({ ids: [...selected], action: "ARCHIVED" })
+              }
+            >
+              <Archive size={14} />
+              <span>Arsipkan</span>
+            </button>
+            <button
+              disabled={busy || workspace.refreshing}
+              className={styles.dangerAction}
+              onClick={() =>
+                setPending({ ids: [...selected], action: "DELETE" })
+              }
+            >
+              <Trash2 size={14} />
+              <span>Hapus</span>
+            </button>
+          </div>
+          <button
+            className={styles.iconButton}
+            onClick={workspace.clearSelection}
+            aria-label="Batalkan pilihan artikel"
+          >
+            <X size={16} />
+          </button>
         </div>
       )}
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  icon,
-  tone,
-}: {
-  label: string;
-  value: number;
-  icon: string;
-  tone: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-[#0a0d10] p-4">
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-          {label}
-        </span>
-        <Icon icon={icon} className={tone} />
-      </div>
-      <p className={`mt-1 text-2xl font-extrabold tabular-nums ${tone}`}>{value}</p>
+      <QuickPreviewDrawer
+        article={preview}
+        onClose={() => setPreview(null)}
+        onEdit={editArticle}
+      />
+      {editor && (
+        <EditorModal
+          target={editor}
+          onClose={() => setEditor(null)}
+          onSaved={() => {
+            setEditor(null);
+            workspace.mutate();
+          }}
+        />
+      )}
+      <WorkspaceDialog
+        open={!!pending}
+        onOpenChange={(open) => {
+          if (!open && !busy) setPending(null);
+        }}
+        title={
+          pending?.action === "DELETE"
+            ? "Hapus artikel permanen?"
+            : "Konfirmasi perubahan artikel"
+        }
+        description="Periksa perubahan yang akan diterapkan pada artikel terpilih."
+        hideClose={busy}
+      >
+        <div className={styles.confirmBody}>
+          <span
+            className={`${styles.confirmIcon} ${pending?.action === "DELETE" ? styles.confirmDanger : ""}`}
+          >
+            {pending?.action === "DELETE" ? (
+              <Trash2 size={25} />
+            ) : pending?.action === "ARCHIVED" ? (
+              <Archive size={25} />
+            ) : (
+              <Send size={25} />
+            )}
+          </span>
+          <h2>
+            {pending?.action === "DELETE"
+              ? "Hapus cerita ini?"
+              : pending?.action === "PUBLISHED"
+                ? "Siap untuk dibaca dunia?"
+                : pending?.action === "ARCHIVED"
+                  ? "Pindahkan ke arsip?"
+                  : "Kembalikan ke draf?"}
+          </h2>
+          <p>
+            {pending?.title
+              ? `“${pending.title}”`
+              : `${pending?.ids.length || 0} artikel terpilih`}
+            {pending?.action === "DELETE"
+              ? " akan dihapus permanen. Tindakan ini tidak dapat dibatalkan."
+              : pending?.action === "PUBLISHED"
+                ? " akan langsung tersedia untuk publik."
+                : " akan disembunyikan dari halaman publik."}
+          </p>
+          <div className={styles.confirmButtons}>
+            <button
+              disabled={busy}
+              className={styles.secondaryButton}
+              onClick={() => setPending(null)}
+            >
+              Batal
+            </button>
+            <button
+              disabled={busy}
+              className={
+                pending?.action === "DELETE"
+                  ? styles.dangerButton
+                  : styles.primaryButton
+              }
+              onClick={confirmAction}
+            >
+              {busy && <Loader2 size={14} className="animate-spin" />}
+              {pending?.action === "DELETE"
+                ? "Hapus permanen"
+                : pending?.action === "PUBLISHED"
+                  ? "Terbitkan sekarang"
+                  : pending?.action === "ARCHIVED"
+                    ? "Arsipkan artikel"
+                    : `Simpan sebagai ${BERITA_STATUS_LABEL.DRAFT.toLowerCase()}`}
+            </button>
+          </div>
+        </div>
+      </WorkspaceDialog>
+      <WorkspaceDialog
+        open={help}
+        onOpenChange={setHelp}
+        title="Panduan ruang redaksi"
+        description="Cara menulis, meninjau, dan menerbitkan artikel."
+      >
+        <div className={styles.helpBody}>
+          <span className={styles.eyebrow}>ALUR KERJA REDAKSI</span>
+          <h2>Cerita bagus. Alur yang jelas.</h2>
+          <p>
+            Ruang bersama untuk menyusun dan menerbitkan wawasan Solusindo Aset.
+          </p>
+          {[
+            {
+              icon: FileText,
+              title: "01 · Tulis & sempurnakan",
+              text: "Buat draf, tambahkan gambar, dan periksa SEO. Gunakan Ctrl / ⌘ S untuk menyimpan.",
+            },
+            {
+              icon: ShieldCheck,
+              title: "02 · Tinjau bersama",
+              text: "Admin mengajukan draf dan usulan jadwal. Owner memeriksa artikel melalui pratinjau cepat.",
+            },
+            {
+              icon: Send,
+              title: "03 · Terbitkan dengan kendali",
+              text: "Owner menerbitkan, menjadwalkan, memilih headline, dan mengelola arsip. Pilih beberapa artikel untuk aksi massal.",
+            },
+          ].map((step) => (
+            <div key={step.title}>
+              <span>
+                <step.icon size={17} />
+              </span>
+              <section>
+                <h3>{step.title}</h3>
+                <p>{step.text}</p>
+              </section>
+            </div>
+          ))}
+          <button
+            className={styles.primaryButton}
+            onClick={() => setHelp(false)}
+          >
+            Mulai berkarya <ArrowRight size={14} />
+          </button>
+        </div>
+      </WorkspaceDialog>
     </div>
   );
 }

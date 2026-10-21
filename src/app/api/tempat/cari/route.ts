@@ -3,6 +3,7 @@ import { cariTempat, tempatPopuler } from "@/lib/tempat/cari";
 import { adalahKonteksTransaksi } from "@/lib/listingKataKunci";
 import { hitungKataKunci } from "@/lib/listingKataKunci.server";
 import { bacaKueriDekat } from "@/lib/tempat/normalisasi";
+import { parsePropertySearchQuery } from "@/lib/propertySearchQuery";
 
 export const runtime = "nodejs";
 /**
@@ -64,9 +65,12 @@ export async function GET(req: Request) {
      */
     const tx = searchParams.get("tx");
     const konteks = adalahKonteksTransaksi(tx) ? tx : "semua";
+    const parsed = parsePropertySearchQuery(q);
+    const structured = Boolean(parsed.nearby?.kelas) || (!parsed.nearby &&
+      (parsed.regions.length > 0 || parsed.minHarga !== undefined || parsed.maxHarga !== undefined));
 
     const [items, jumlahAlamat] = await Promise.all([
-      cariTempat(q, { kota, batas: Number(searchParams.get("batas")) || 8 }),
+      structured ? Promise.resolve([]) : cariTempat(parsed.nearby?.placeQuery ?? q, { kota, batas: Number(searchParams.get("batas")) || 8 }),
       hitungKataKunci(q, konteks),
     ]);
 
@@ -88,7 +92,7 @@ export async function GET(req: Request) {
     const { niatDekat } = bacaKueriDekat(q);
     const adaTempat = items.length > 0;
     const alamat =
-      jumlahAlamat === null || (adaTempat && (niatDekat || jumlahAlamat === 0))
+      (!structured && jumlahAlamat === null) || (adaTempat && (niatDekat || jumlahAlamat === 0))
         ? null
         : { teks: q.trim(), jumlah: jumlahAlamat };
 

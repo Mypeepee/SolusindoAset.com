@@ -358,7 +358,9 @@ export async function POST(request: NextRequest) {
     const idProject =
       typeof body.id_project === "string" ? body.id_project.trim() : "";
 
-    const walletKey = body.wallet_key;
+    // `wallet_key` dipertahankan untuk kompatibilitas database dan riwayat
+    // lama. Pencatatan baru selalu menggunakan satu buku kas proyek.
+    const walletKey: WalletKey = "utama";
 
     const judulTransaksi =
       typeof body.judul_transaksi === "string"
@@ -373,32 +375,9 @@ export async function POST(request: NextRequest) {
     const impactStatusProject = body.impact_status_project === true;
     const statusProjectTarget = body.status_project_target;
 
-    const autoCoverDeficit = body.auto_cover_deficit === true;
-    // deficit_nominal client hanya hint; besaran defisit dihitung ulang server.
-    const deficitNominal = parseNominal(body.deficit_nominal);
-
-    // Investor penanggung dibaca tanpa bergantung flag client — guard anti-minus
-    // di server yang menentukan wajib/tidaknya.
-    const investorPenanggungId = parseRouteBigInt(
-      body?.investor_penanggung?.id_project_investor
-    );
-
-    const investorPenanggungNama =
-      typeof body?.investor_penanggung?.nama === "string" &&
-      body.investor_penanggung.nama.trim()
-        ? body.investor_penanggung.nama.trim()
-        : null;
-
     if (!idProject) {
       return NextResponse.json(
         { message: "id_project wajib diisi." },
-        { status: 400 }
-      );
-    }
-
-    if (!isWalletKey(walletKey)) {
-      return NextResponse.json(
-        { message: "wallet_key tidak valid." },
         { status: 400 }
       );
     }
@@ -461,20 +440,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (autoCoverDeficit && jenisTransaksi !== "pengeluaran") {
-      return NextResponse.json(
-        {
-          message:
-            "Talangan investor hanya bisa dipakai untuk transaksi pengeluaran.",
-        },
-        { status: 400 }
-      );
-    }
-    // Catatan: besaran defisit & apakah talangan dibutuhkan dihitung ULANG di
-    // server (dari kas + anggaran pos), tidak mempercayai client.
-    // deficitNominal client hanya hint UI.
-    void deficitNominal;
-
     const result = await prisma.$transaction(async (tx) => {
       const project = await tx.project.findUnique({
         where: { id_project: idProject },
@@ -500,7 +465,6 @@ export async function POST(request: NextRequest) {
 
       const currentStatus = normalizeProjectStatus(project.status);
       const targetPendanaan = toDecimal(project.target_pendanaan);
-
       // ── Keadaan dana SEBELUM transaksi ini (server-authoritative) ─────────
       const fundState = await loadFundState(tx, idProject);
 
@@ -513,8 +477,9 @@ export async function POST(request: NextRequest) {
       //   • anggaran pos kurang  → talangan (anggaran pos & kas naik)
       //   • anggaran cukup, kas kurang → setoran modal (hanya kas yang naik)
       // Lihat @/lib/project-kas.
-      const isRecordedExpense =
-        jenisTransaksi === "pengeluaran" && statusTransaksi === "tercatat";
+      // Arus kas baru tidak memakai kuota/dompet anggaran atau talangan
+      // otomatis. Saldo boleh negatif agar catatan mencerminkan kondisi riil.
+      const isRecordedExpense = false;
 
       const plan = isRecordedExpense
         ? planExpense({
@@ -535,7 +500,7 @@ export async function POST(request: NextRequest) {
 
       // Kalau project cuma punya SATU investor, tak ada yang perlu dipilih —
       // kekurangan otomatis dibebankan ke dia.
-      let penanggungId = investorPenanggungId;
+      let penanggungId: bigint | null = null;
 
       if (needsCover && !penanggungId) {
         const kandidat = await tx.projectInvestor.findMany({
@@ -633,7 +598,6 @@ export async function POST(request: NextRequest) {
         // saat penanggung dipilih otomatis karena investornya cuma satu).
         const namaPenanggung =
           investor.agent?.pengguna?.nama_lengkap?.trim() ||
-          investorPenanggungNama ||
           investor.id_agent;
 
         // (a) Bagian yang MENAMBAH ANGGARAN POS (belanja melebihi rencana pos)
@@ -728,7 +692,7 @@ export async function POST(request: NextRequest) {
           id_project_investor: investor.id_project_investor.toString(),
           id_agent: investor.id_agent,
           nama: namaPenanggung,
-          otomatis: investorPenanggungId === null,
+          otomatis: true,
           nominal_tambahan: Number(deficit.toString()),
           tambahan_anggaran_pos: Number(tambahanAnggaran.toString()),
           tambahan_kas: Number(tambahanKas.toString()),

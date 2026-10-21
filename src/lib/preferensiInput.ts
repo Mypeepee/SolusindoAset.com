@@ -31,7 +31,7 @@
 import { turunkanMaksud } from "@/lib/klienMatch";
 
 /** Rentang radius yang sama dengan CHECK di database. */
-const RADIUS_MIN = 200;
+const RADIUS_MIN = 1;
 const RADIUS_MAX = 20_000;
 
 export type PreferensiTertulis = {

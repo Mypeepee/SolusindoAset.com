@@ -94,6 +94,7 @@ import {
   RADIUS_LANDMARK,
   bacaLandmarkJson,
   bangunQueryLandmark,
+  bangunQueryPintuTol,
   petakanLandmark,
   setelJarakLandmark,
   type TempatLandmark,
@@ -413,6 +414,14 @@ async function tanyaOverpass(
 
   sekringSampai = Date.now() + SEKRING_MS;
   throw new Error(`semua server Overpass gagal: ${String(terakhir)}`);
+}
+
+/** Pembaruan kategori pintu tol untuk beberapa cache aset sekaligus.
+ * Memakai antrean, tenggat, dan server cadangan yang sama dengan pemindai. */
+export async function pindaiPintuTol(points: Array<{ lat: number; lng: number }>): Promise<any[]> {
+  const response = await tanyaOverpass(bangunQueryPintuTol(points), undefined, Date.now() + 45_000);
+  if (!Array.isArray(response.json?.elements)) throw new Error("Jawaban peta pintu tol tidak lengkap");
+  return response.json.elements;
 }
 
 /**

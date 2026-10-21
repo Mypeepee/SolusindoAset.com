@@ -24,10 +24,10 @@ export async function generateMetadata({
   if (!post) return { title: "Artikel tidak ditemukan | Solusindo Aset" };
   return {
     title: `${post.judul} | Solusindo Aset`,
-    description: post.ringkasan || undefined,
+    description: post.meta_description || post.ringkasan || undefined,
     openGraph: {
       title: post.judul,
-      description: post.ringkasan || undefined,
+      description: post.meta_description || post.ringkasan || undefined,
       type: "article",
       images: post.gambar_utama ? [{ url: post.gambar_utama }] : undefined,
       publishedTime: post.tanggal_publish || undefined,

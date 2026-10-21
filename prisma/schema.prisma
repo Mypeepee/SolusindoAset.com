@@ -1132,6 +1132,9 @@ model Berita {
   judul            String             @db.VarChar(255)
   slug             String             @unique @db.VarChar(300)
   ringkasan        String?            @db.VarChar(500)
+  meta_description String?            @db.VarChar(160)
+  review_requested_at DateTime?       @db.Timestamptz(6)
+  requested_publish_at DateTime?      @db.Timestamptz(6)
   isi_berita       String
   gambar_utama     String?            @db.VarChar(500)
   galeri_gambar    String?
@@ -1268,6 +1271,8 @@ model BookingSurvei {
   tanggal_survei DateTime @db.Timestamptz(6)
   status         String   @default("PENDING") @db.VarChar(20)
   catatan        String?  @db.Text
+  /// Idempotency key for an explicitly confirmed WhatsApp appointment.
+  chatbot_request_id String? @unique(map: "booking_survei_chatbot_request_unik") @db.VarChar(64)
   tanggal_dibuat DateTime @default(now()) @db.Timestamptz(6)
 
   listing  Listing   @relation(fields: [id_property], references: [id_property], onDelete: Cascade)
@@ -1506,6 +1511,21 @@ model Klien {
   status  status_klien_enum @default(lead_baru)
   catatan String?
 
+  /// Funnel WhatsApp tersimpan terpisah dari catatan/form preferensi manual.
+  chatbot_nomor_whatsapp String? @db.VarChar(20)
+  chatbot_lokasi String? @db.VarChar(150)
+  chatbot_kota String? @db.VarChar(150)
+  chatbot_wilayah String? @db.VarChar(20)
+  chatbot_budget_min Decimal? @db.Decimal(20, 2)
+  chatbot_budget_max Decimal? @db.Decimal(20, 2)
+  chatbot_jenis_aset kategori_properti_enum[] @default([])
+  chatbot_jenis_transaksi jenis_transaksi_enum[] @default([])
+  chatbot_luas_tanah_min Decimal? @db.Decimal(12, 2)
+  chatbot_luas_tanah_max Decimal? @db.Decimal(12, 2)
+  chatbot_kriteria Json?
+  chatbot_preferensi_meta Json?
+  chatbot_terakhir_pada DateTime? @db.Timestamptz(6)
+
   dibuat_pada     DateTime @default(now()) @db.Timestamptz(6)
   diperbarui_pada DateTime @default(now()) @db.Timestamptz(6)
 
@@ -1524,6 +1544,7 @@ model Klien {
   @@index([nomor_whatsapp], map: "idx_klien_wa")
   @@index([tanggal_follow_up], map: "idx_klien_follow_up")
   @@index([tanggal_masuk(sort: Desc)], map: "idx_klien_masuk")
+  @@unique([id_agent, chatbot_nomor_whatsapp], map: "klien_chatbot_wa_unik")
   @@map("klien")
 }
 
@@ -2067,6 +2088,7 @@ enum status_project_enum {
 enum status_pembayaran_project_enum {
   lunas
   menunggu_pembayaran
+  dibayar_sebagian
 }
 
 enum wallet_key_enum {

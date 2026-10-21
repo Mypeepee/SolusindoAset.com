@@ -1,0 +1,10 @@
+import { writeFile } from 'node:fs/promises';
+import { informalPreferenceScenarios, runInformalPreferenceScenario } from './lib/informal-preferences.js';
+const results = [];
+for (const scenario of informalPreferenceScenarios()) results.push(await runInformalPreferenceScenario(scenario));
+const report = '/tmp/kosku-informal-preferences.json';
+const summary = { total: results.length, passed: results.filter((r) => r.passed).length, failed: results.filter((r) => !r.passed).length };
+await writeFile(report, JSON.stringify({ scope: 'Synthetic offline dialogues; no external model, database or WhatsApp messages.', summary, results }, null, 2));
+console.log(JSON.stringify({ ...summary, report }, null, 2));
+for (const result of results.filter((r) => !r.passed).slice(0, 8)) console.log(`${result.name}: ${result.error}`);
+if (summary.failed) process.exitCode = 1;

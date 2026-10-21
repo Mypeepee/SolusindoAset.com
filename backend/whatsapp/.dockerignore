@@ -1,0 +1,10 @@
+node_modules
+.env
+.env.*
+test
+coverage
+*.log
+.git
+.auth
+*.sqlite*
+*.lock

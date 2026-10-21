@@ -183,6 +183,7 @@ export default function DetailClient({
 
   const propertyData = {
     id_property: product.id_property,
+    id_agent: product.id_agent ?? product.agent?.id_agent,
     slug: product.slug || "",
     kode_properti: product.kode_properti ?? "-",
     judul: product.judul,

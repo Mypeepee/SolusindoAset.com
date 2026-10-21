@@ -50,6 +50,9 @@ export interface CatatanBar {
 
 /** Sinkron dengan RADIUS_PILIHAN di src/lib/listingTempatFilter.ts. */
 const RADIUS = [
+  { nilai: 100, label: "100 m" },
+  { nilai: 300, label: "300 m" },
+  { nilai: 500, label: "500 m" },
   { nilai: 1_000, label: "1 km" },
   { nilai: 3_000, label: "3 km" },
   { nilai: 5_000, label: "5 km" },
@@ -169,6 +172,7 @@ export default function TempatAktifBar({
     navigasi((p) => {
       p.delete("dekat");
       p.delete("radius");
+      p.delete("areaDekat");
       // Tebakan berasal dari `q`; membiarkannya berarti tombol "hapus" tidak
       // menghapus apa pun — halaman langsung menebak lagi dari teks yang sama.
       if (ditebak) p.delete("q");
@@ -186,6 +190,7 @@ export default function TempatAktifBar({
     : tempat.nama;
 
   const meta: string[] = [];
+  meta.push(`Radius ${radiusAktif.toLocaleString("id-ID")} m`);
   if (total > 0) meta.push(`${total.toLocaleString("id-ID")} properti`);
   if (tempat.kelasSemua && tempat.cabang) {
     meta.push(`dari ${tempat.cabang.toLocaleString("id-ID")} ${tempat.label.toLowerCase()}`);
@@ -263,7 +268,7 @@ export default function TempatAktifBar({
           >
             {total === 0 ? (
               <span className="text-amber-400">
-                Belum ada properti di radius ini — coba perbesar
+                Belum ada hasil tercatat untuk kriteria ini
               </span>
             ) : (
               meta.join(" · ")
@@ -271,7 +276,7 @@ export default function TempatAktifBar({
           </p>
         </div>
 
-        <div className="hidden shrink-0 items-center gap-2 sm:flex">
+        <div className="hidden shrink-0 items-center gap-2 xl:flex">
           {pengaturRadius}
           <button
             type="button"
@@ -294,7 +299,7 @@ export default function TempatAktifBar({
           type="button"
           onClick={hapus}
           aria-label="Hapus filter tempat"
-          className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl border sm:hidden ${
+          className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl border xl:hidden ${
             gelap ? "border-white/10 text-gray-400" : "border-gray-200 text-gray-500"
           }`}
         >
@@ -303,7 +308,7 @@ export default function TempatAktifBar({
       </div>
 
       <div
-        className={`flex items-center gap-2 border-t px-3 py-2 sm:hidden ${
+        className={`flex items-center gap-2 border-t px-3 py-2 xl:hidden ${
           gelap ? "border-white/[0.07]" : "border-gray-100"
         }`}
       >

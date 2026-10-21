@@ -22,6 +22,7 @@
 // ---------------------------------------------------------------------------
 
 import { Prisma, type PrismaClient } from "@prisma/client";
+import { freshAuctionWhere, isFreshAuction } from "../../backend/whatsapp/services/auction_freshness.js";
 import type {
   jenis_transaksi_enum,
   kategori_properti_enum,
@@ -117,6 +118,7 @@ const PRESISI_LAYAK = ["TITIK", "ALAMAT", "PATOKAN"];
 
 /** Bentuk "dekat X" yang sudah siap dipakai mesin pencocokan. */
 export type KriteriaDekat = {
+  gabungan?: KriteriaDekat[][];
   /** id baris `tempat` yang diwakili pilihan ini. Kosong bila berupa kriteria. */
   ids: bigint[];
   /** Pilihan "jenis tempat" ("hotel mana pun di Surabaya"). */
@@ -288,6 +290,8 @@ export function hargaEfektif(l: {
 /* ── Penyusun WHERE ────────────────────────────────────────────────────── */
 
 export type OpsiMatch = {
+  /** Jam pemeriksaan tunggal untuk SQL dan penyaringan hasil (WIB). */
+  now?: number;
   /** id_property yang tidak boleh muncul: sudah pernah dikirim ke klien ini,
    *  atau justru aset milik klien itu sendiri (titip jual). */
   kecuali?: bigint[];
@@ -308,7 +312,7 @@ export function whereKasar(k: KriteriaMatch, opsi: OpsiMatch = {}): Prisma.Listi
      `where.OR` untuk budget; menambahkan gerbang ber-OR kedua langsung di
      `where.OR` akan MENIMPA gerbang budget tanpa satu pun galat — plafon
      harga klien hilang diam-diam dan hasilnya terlihat "cuma agak longgar". */
-  const dan: Prisma.ListingWhereInput[] = [];
+  const dan: Prisma.ListingWhereInput[] = [freshAuctionWhere(opsi.now)];
 
   const where: Prisma.ListingWhereInput = {
     // Gerbang keras 1: aset yang tidak tersedia bukan rekomendasi, ia kabar buruk.
@@ -374,7 +378,9 @@ export function whereKasar(k: KriteriaMatch, opsi: OpsiMatch = {}): Prisma.Listi
      lambat sekaligus rapuh. */
   if (k.dekat && longgar !== "lokasi") {
     const d = k.dekat;
-    if (d.kriteria) {
+    if (d.gabungan) {
+      dan.push({ OR: d.gabungan.map((group) => ({ AND: group.map((leaf) => whereKasar({ ...k, dekat: leaf }, opsi)) })) });
+    } else if (d.kriteria) {
       const w = d.kriteria.wilayah;
       where.tempatDekat = {
         some: {
@@ -520,6 +526,8 @@ export function lolosKetat(l: ListingRingkas & {
 }, k: KriteriaMatch, opsi: OpsiMatch = {}): boolean {
   const { longgar = null } = opsi;
 
+  if (!isFreshAuction(l, opsi.now)) return false;
+
   // ── Lokasi: hanya tingkat TERDALAM yang diisi yang mengikat ──
   if (longgar !== "lokasi") {
     const kel = normLok(k.loc_kelurahan);
@@ -580,6 +588,7 @@ export async function cariCocok<T extends Parameters<typeof lolosKetat>[0]>(
   k: KriteriaMatch,
   opsi: OpsiMatch & { select?: any; tambahanWhere?: Prisma.ListingWhereInput; maks?: number } = {},
 ): Promise<T[]> {
+  opsi = { ...opsi, now: opsi.now ?? Date.now() };
   /* Digabung lewat `AND`, BUKAN dengan menyebar dua objek jadi satu.
      `whereKasar()` memakai `AND` untuk menampung gerbang-gerbang ber-OR
      (budget, luas, bentuk), dan penyebaran objek akan MENIMPA seluruh isinya
@@ -593,7 +602,7 @@ export async function cariCocok<T extends Parameters<typeof lolosKetat>[0]>(
     where,
     take: Math.min(opsi.maks ?? KOLAM, KOLAM),
     orderBy: [{ is_hot_deal: "desc" }, { tanggal_dibuat: "desc" }],
-    ...(opsi.select ? { select: opsi.select } : {}),
+    ...(opsi.select ? { select: { ...opsi.select, jenis_transaksi: true, tanggal_lelang: true } } : {}),
   })) as unknown as T[];
 
   /* Dibuang di SINI, bukan di tiap pemanggil. Tiga permukaan memakai fungsi
@@ -641,6 +650,7 @@ export function lolosSemuaGerbang(
     nilai_limit_lelang?: Prisma.Decimal | null;
   },
   k: KriteriaMatch,
+  opsi: OpsiMatch = {},
 ): boolean {
   // Gerbang 1 — tersedia. Aset yang tidak tersedia bukan rekomendasi, ia kabar buruk.
   if (l.status_tayang !== undefined && l.status_tayang !== "TERSEDIA") return false;
@@ -686,16 +696,15 @@ export function lolosSemuaGerbang(
   if (k.dekat) {
     const rel = (l as any).tempatDekat as { id_tempat: bigint; jarak_meter: number; presisi: string }[] | undefined;
     if (!Array.isArray(rel)) return false;
-    const d = k.dekat;
-    const cocok = rel.some(r =>
+    const matches = (d: KriteriaDekat): boolean => d.gabungan ? d.gabungan.some((group) => group.every(matches)) : rel.some(r =>
       r.jarak_meter <= d.radius
       && PRESISI_LAYAK.includes(r.presisi)
-      && (d.ids.length === 0 || d.ids.some(i => i === r.id_tempat)),
+      && (d.kriteria ? (r as any).tempat?.kelas === d.kriteria.kelas : d.ids.some(i => i === r.id_tempat)),
     );
-    if (!cocok) return false;
+    if (!matches(k.dekat)) return false;
   }
   // Gerbang 6–8 — lokasi, budget, luas.
-  return lolosKetat(l, k);
+  return lolosKetat(l, k, opsi);
 }
 
 /* ── ASET KEMBAR ───────────────────────────────────────────────────────────
@@ -966,6 +975,7 @@ export async function diagnosaKosong(
 ): Promise<Diagnosa> {
   const dasar: Prisma.ListingWhereInput = {
     status_tayang: "TERSEDIA",
+    AND: [freshAuctionWhere(opsi.now)],
     /* Gerbang yang sama dengan whereKasar(). Kalau diagnosa memakai kolam yang
        lebih longgar, ia akan menjanjikan "12 aset kalau lokasi diperluas" yang
        sebagiannya sepeda motor — saran yang bohong lebih buruk daripada tidak

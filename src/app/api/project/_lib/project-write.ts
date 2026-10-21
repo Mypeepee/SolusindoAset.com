@@ -17,16 +17,20 @@ export type StatusPembayaranProject =
   | "dibatalkan";
 
 /**
- * The DB enum `status_pembayaran_project_enum` only supports two states.
- * Coerce any wider client-side status down to a value Postgres will accept so
- * an unexpected value can never break the insert/update.
+ * Status disimpan apa adanya dalam enum database, tetapi nilai tak dikenal
+ * tetap dinormalisasi agar penulisan data aman.
  */
-export type DbPaymentStatus = "lunas" | "menunggu_pembayaran";
+export type DbPaymentStatus =
+  | "lunas"
+  | "dibayar_sebagian"
+  | "menunggu_pembayaran";
 
 export function toDbPaymentStatus(
   value?: string | null
 ): DbPaymentStatus {
-  return value === "lunas" ? "lunas" : "menunggu_pembayaran";
+  if (value === "lunas") return "lunas";
+  if (value === "dibayar_sebagian") return "dibayar_sebagian";
+  return "menunggu_pembayaran";
 }
 
 export type JenisPendanaan = "terbuka" | "tertutup";

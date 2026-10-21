@@ -10,9 +10,13 @@
  * Tidak ada satu pun angka yang harus diisi manual oleh agent, supaya hasil
  * yang dibacakan ke klien selalu sama dari siapa pun agent-nya.
  *
- * Dua kelompok biaya yang selalu ditanya klien:
- *   A. BALIK NAMA  → persentase dari harga limit + fee jasa tetap.
+ * Tiga kelompok biaya yang selalu ditanya klien:
+ *   A. BALIK NAMA  → persentase dari harga menang + fee jasa tetap.
  *   B. EKSEKUSI    → biaya pengosongan aset yang masih berpenghuni.
+ *   C. FEE AGENT   → 5% dari harga menang lelang.
+ *
+ * Sebelum lelang selesai, harga menang belum tersedia. Semua persentase
+ * diestimasi dari harga limit dan harus menyesuaikan harga menang final.
  */
 
 // ═══════════════════════════════ TIPE ═══════════════════════════════════════
@@ -57,9 +61,10 @@ export interface RincianBiayaLelang {
   luasBangunan: number;
   balikNama: BlokBiaya;
   eksekusi: BlokBiaya;
-  /** Balik nama + eksekusi (tanpa harga aset). */
+  feeAgent: BlokBiaya;
+  /** Seluruh biaya A + eksekusi worst case + C (tanpa harga aset). */
   totalBiaya: number;
-  /** Limit + seluruh biaya. */
+  /** Limit + seluruh biaya dengan skenario eksekusi worst case. */
   totalModal: number;
   /** Band pengosongan yang terpilih — dipakai untuk label & tabel. */
   band: BandPengosongan;
@@ -69,34 +74,8 @@ export interface RincianBiayaLelang {
   luasTempatPerpindahan: number | null;
 }
 
-// ═══════════════════════════ TARIF & KONSTANTA ══════════════════════════════
-
-/** Komponen persentase biaya balik nama. Totalnya 8,5% dari harga limit. */
-export const TARIF_BALIK_NAMA = [
-  { kode: "bea_lelang", label: "Bea Lelang", persen: 0.02 },
-  { kode: "bphtb", label: "BPHTB", persen: 0.05 },
-  { kode: "ppn_lelang", label: "PPN Lelang", persen: 0.011 },
-  { kode: "roya_balik_nama", label: "Roya & Balik Nama", persen: 0.004 },
-] as const;
-
-/** Jumlah seluruh komponen persentase balik nama (8,5%). */
-export const PERSEN_BALIK_NAMA = TARIF_BALIK_NAMA.reduce((a, t) => a + t.persen, 0);
-
-/** Fee jasa pengurusan dokumen — nilai tetap, tidak ikut harga. */
-export const FEE_JASA = 10_000_000;
-
-/** Satu paket armada: 6 truk + 15 kuli, kerja ± 2 jam. */
-export const TARIF_ARMADA = 6_800_000;
-/** Satu paket armada menangani sampai 240 m² luas tanah. */
-export const LUAS_TANAH_PER_PAKET = 240;
-
-/** Konsumsi aparat pelaksana eksekusi: 100 orang × Rp 30.000. */
-export const KONSUMSI_JUMLAH_ORANG = 100;
-export const KONSUMSI_PER_ORANG = 30_000;
-export const BIAYA_KONSUMSI = KONSUMSI_JUMLAH_ORANG * KONSUMSI_PER_ORANG;
-
-/** Tempat perpindahan diperkirakan seluas 50% luas bangunan. */
-export const RASIO_TEMPAT_PERPINDAHAN = 0.5;
+// The same runtime policy is used by the standalone WhatsApp backend.
+import * as policy from '../../backend/whatsapp/services/auction_cost_policy.js';
 
 export interface BandPengosongan {
   /** Batas bawah (inklusif). */
@@ -116,201 +95,32 @@ export interface BandPengosongan {
   tambahanTetap?: number;
 }
 
-/** Tabel biaya eksekusi pengosongan menurut harga limit. */
-export const TABEL_PENGOSONGAN: BandPengosongan[] = [
-  { min: 0, max: 500_000_000, label: "< Rp 500 jt", jatim: 125_000_000, luarJatim: 150_000_000 },
-  {
-    min: 500_000_000,
-    max: 1_500_000_000,
-    label: "Rp 500 jt – Rp 1,5 M",
-    jatim: 150_000_000,
-    luarJatim: 175_000_000,
-  },
-  {
-    min: 1_500_000_000,
-    max: 2_500_000_000,
-    label: "Rp 1,5 M – Rp 2,5 M",
-    jatim: 200_000_000,
-    luarJatim: 225_000_000,
-  },
-  {
-    min: 2_500_000_000,
-    max: 5_000_000_000,
-    label: "Rp 2,5 M – Rp 5 M",
-    jatim: 325_000_000,
-    luarJatim: 350_000_000,
-  },
-  {
-    min: 5_000_000_000,
-    max: 10_000_000_000,
-    label: "Rp 5 M – Rp 10 M",
-    jatim: 625_000_000,
-    luarJatim: 675_000_000,
-  },
-  {
-    min: 10_000_000_000,
-    max: Infinity,
-    label: "> Rp 10 M",
-    jatim: 0,
-    luarJatim: 0,
-    persen: 0.05,
-    tambahanTetap: 150_000_000,
-  },
-];
 
-// ═══════════════════════════ PEMFORMATAN ANGKA ══════════════════════════════
+export const TARIF_BALIK_NAMA = policy.TARIF_BALIK_NAMA;
+export const PERSEN_BALIK_NAMA = policy.PERSEN_BALIK_NAMA;
+export const FEE_JASA = policy.FEE_JASA;
+export const PERSEN_FEE_AGENT = policy.PERSEN_FEE_AGENT;
+export const BATAS_FEE_ADVOKAT = policy.BATAS_FEE_ADVOKAT;
+export const FEE_ADVOKAT_SAMPAI_5_M = policy.FEE_ADVOKAT_SAMPAI_5_M;
+export const FEE_ADVOKAT_DI_ATAS_5_M = policy.FEE_ADVOKAT_DI_ATAS_5_M;
+export const TARIF_ARMADA = policy.TARIF_ARMADA;
+export const LUAS_TANAH_PER_PAKET = policy.LUAS_TANAH_PER_PAKET;
+export const KONSUMSI_JUMLAH_ORANG = policy.KONSUMSI_JUMLAH_ORANG;
+export const KONSUMSI_PER_ORANG = policy.KONSUMSI_PER_ORANG;
+export const BIAYA_KONSUMSI = policy.BIAYA_KONSUMSI;
+export const RASIO_TEMPAT_PERPINDAHAN = policy.RASIO_TEMPAT_PERPINDAHAN;
+export const TABEL_PENGOSONGAN: BandPengosongan[] = policy.TABEL_PENGOSONGAN;
 
-export const formatRupiah = (value: number): string => {
-  if (!value || !isFinite(value)) return "Rp 0";
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(Math.round(value));
-};
-
-/** Versi ringkas untuk ruang sempit: Rp 3,5 M · Rp 605 Jt */
-export const formatRupiahRingkas = (value: number): string => {
-  if (!value || !isFinite(value)) return "Rp 0";
-  const trim = (n: number) => n.toFixed(n % 1 === 0 ? 0 : 1).replace(".", ",");
-  if (value >= 1_000_000_000_000) return `Rp ${trim(value / 1_000_000_000_000)} T`;
-  if (value >= 1_000_000_000) return `Rp ${trim(value / 1_000_000_000)} M`;
-  if (value >= 1_000_000) return `Rp ${Math.round(value / 1_000_000)} Jt`;
-  return formatRupiah(value);
-};
-
-/** "2%", "1,1%", "0,4%" — tanpa nol di belakang koma. */
-export const formatPersen = (persen: number): string =>
-  `${(persen * 100).toFixed(2).replace(/\.?0+$/, "").replace(".", ",")}%`;
-
-// ═════════════════════════════ KALKULASI ════════════════════════════════════
-
-/** Deteksi wilayah dari kolom provinsi listing. */
-export const wilayahDariProvinsi = (provinsi?: string | null): WilayahEksekusi =>
-  /jawa\s*tim|jatim|east\s*java/i.test(String(provinsi || "")) ? "JATIM" : "LUAR_JATIM";
-
-export const cariBandPengosongan = (limit: number): BandPengosongan => {
-  const nilai = Math.max(0, limit || 0);
-  return (
-    TABEL_PENGOSONGAN.find((b) => nilai >= b.min && nilai < b.max) ??
-    TABEL_PENGOSONGAN[TABEL_PENGOSONGAN.length - 1]
-  );
-};
-
-/** Tarif satu band untuk satu wilayah. Band teratas dihitung dari harga limit. */
-export const tarifBand = (
-  band: BandPengosongan,
-  wilayah: WilayahEksekusi,
-  limit: number
-): number => {
-  if (band.persen != null) {
-    return Math.round(limit * band.persen) + (band.tambahanTetap ?? 0);
-  }
-  return wilayah === "JATIM" ? band.jatim : band.luarJatim;
-};
-
-/** Jumlah paket armada: satu paket per 240 m² luas tanah, minimal satu. */
-export const hitungPaketArmada = (luasTanah?: number | null): number => {
-  const luas = Number(luasTanah) || 0;
-  if (luas <= 0) return 1;
-  return Math.max(1, Math.floor(luas / LUAS_TANAH_PER_PAKET));
-};
-
-/** Biaya balik nama: 8,5% dari harga + fee jasa tetap. */
-export const hitungBalikNama = (harga: number): number => {
-  if (!harga || harga <= 0) return 0;
-  return Math.round(harga * PERSEN_BALIK_NAMA) + FEE_JASA;
-};
-
-export function hitungBiayaLelang(input: InputBiayaLelang): RincianBiayaLelang {
-  const limit = Math.max(0, Number(input.limit) || 0);
-  const wilayah = wilayahDariProvinsi(input.provinsi);
-  const luasTanah = Number(input.luasTanah) || 0;
-  const luasBangunan = Number(input.luasBangunan) || 0;
-
-  // ── A. BALIK NAMA ─────────────────────────────────────────────────────────
-  const komponenBalikNama: KomponenBiaya[] = TARIF_BALIK_NAMA.map((t) => ({
-    kode: t.kode,
-    label: t.label,
-    rumus: `${formatPersen(t.persen)} × harga limit`,
-    nominal: Math.round(limit * t.persen),
-    persen: t.persen,
-  }));
-  komponenBalikNama.push({
-    kode: "fee_jasa",
-    label: "Fee Jasa Pengurusan",
-    rumus: "Nilai tetap",
-    nominal: FEE_JASA,
-  });
-  const subtotalBalikNama = komponenBalikNama.reduce((a, k) => a + k.nominal, 0);
-
-  // ── B. EKSEKUSI PENGOSONGAN ───────────────────────────────────────────────
-  const band = cariBandPengosongan(limit);
-  const biayaPengosongan = tarifBand(band, wilayah, limit);
-  const paketArmada = hitungPaketArmada(luasTanah);
-  const luasTempatPerpindahan =
-    luasBangunan > 0 ? Math.round(luasBangunan * RASIO_TEMPAT_PERPINDAHAN) : null;
-
-  const namaWilayah = wilayah === "JATIM" ? "Jawa Timur" : "luar Jawa Timur";
-
-  const komponenEksekusi: KomponenBiaya[] = [
-    {
-      kode: "pengosongan",
-      label: "Eksekusi Pengosongan",
-      labelPesan: "Eksekusi pengosongan",
-      rumus: band.persen
-        ? `${formatPersen(band.persen)} × limit + ${formatRupiahRingkas(band.tambahanTetap ?? 0)}`
-        : `Limit ${band.label} · ${namaWilayah}`,
-      nominal: biayaPengosongan,
-    },
-    {
-      kode: "armada",
-      label: "Transportasi & Tenaga Angkut",
-      labelPesan: `Transportasi 6 truk + 15 kuli${paketArmada > 1 ? ` ×${paketArmada}` : ""}`,
-      rumus:
-        `6 truk + 15 kuli${paketArmada > 1 ? ` × ${paketArmada} paket` : ""}` +
-        (luasTanah > 0 ? ` · LT ${luasTanah} m²` : ""),
-      nominal: TARIF_ARMADA * paketArmada,
-    },
-    {
-      kode: "konsumsi",
-      label: "Konsumsi Aparat",
-      labelPesan: `Konsumsi aparat (${KONSUMSI_JUMLAH_ORANG} orang)`,
-      rumus: `${KONSUMSI_JUMLAH_ORANG} orang × ${formatRupiah(KONSUMSI_PER_ORANG)}`,
-      nominal: BIAYA_KONSUMSI,
-    },
-    {
-      kode: "tempat_perpindahan",
-      label: "Tempat Perpindahan Barang",
-      labelPesan: "Tempat perpindahan barang",
-      rumus: luasTempatPerpindahan
-        ? `Perlu ± ${luasTempatPerpindahan} m² (50% luas bangunan)`
-        : "± 50% luas bangunan",
-      nominal: 0,
-      tentatif: true,
-    },
-  ];
-  const subtotalEksekusi = komponenEksekusi.reduce(
-    (a, k) => a + (k.tentatif ? 0 : k.nominal),
-    0
-  );
-
-  const totalBiaya = subtotalBalikNama + subtotalEksekusi;
-
-  return {
-    limit,
-    wilayah,
-    luasTanah,
-    luasBangunan,
-    balikNama: { label: "Biaya Balik Nama", komponen: komponenBalikNama, subtotal: subtotalBalikNama },
-    eksekusi: { label: "Biaya Eksekusi Pengosongan", komponen: komponenEksekusi, subtotal: subtotalEksekusi },
-    totalBiaya,
-    totalModal: limit + totalBiaya,
-    band,
-    paketArmada,
-    luasTempatPerpindahan,
-  };
-}
+export const formatRupiah: (value: number) => string = policy.formatRupiah;
+export const formatRupiahRingkas: (value: number) => string = policy.formatRupiahRingkas;
+export const formatPersen: (persen: number) => string = policy.formatPersen;
+export const wilayahDariProvinsi: (provinsi?: string | null) => WilayahEksekusi = policy.wilayahDariProvinsi;
+export const cariBandPengosongan: (limit: number) => BandPengosongan = policy.cariBandPengosongan;
+export const tarifBand: (band: BandPengosongan, wilayah: WilayahEksekusi, limit: number) => number = policy.tarifBand;
+export const hitungPaketArmada: (luasTanah?: number | null) => number = policy.hitungPaketArmada;
+export const hitungBalikNama: (harga: number) => number = policy.hitungBalikNama;
+export const hitungFeeAdvokat: (harga: number) => number = policy.hitungFeeAdvokat;
+export const hitungBiayaLelang: (input: InputBiayaLelang) => RincianBiayaLelang = policy.hitungBiayaLelang;
 
 // ═══════════════════ TEKS SALINAN UNTUK KLIEN (WHATSAPP) ════════════════════
 
@@ -337,7 +147,7 @@ export function formatPesanBiayaLelang(
   rincian: RincianBiayaLelang,
   konteks: KonteksPesanBiaya = {}
 ): string {
-  const { balikNama, eksekusi, limit } = rincian;
+  const { balikNama, eksekusi, feeAgent, limit } = rincian;
   const L: string[] = [];
 
   L.push("*ESTIMASI BIAYA PEMBELIAN LELANG*");
@@ -352,11 +162,12 @@ export function formatPesanBiayaLelang(
   L.push(GARIS);
   L.push("*HARGA LIMIT*");
   L.push(`*${formatRupiah(limit)}*`);
-  L.push("_Biaya di bawah menyesuaikan harga menang lelang._");
+  L.push("_Komponen persentase di bawah dihitung dari harga menang lelang; saat ini diestimasi dari harga limit._");
 
   L.push("");
   L.push(GARIS);
   L.push("*A. BIAYA BALIK NAMA*");
+  L.push("_Komponen persentase mengikuti harga menang lelang._");
   balikNama.komponen.forEach((k) => {
     const label = k.persen ? `${k.label} ${formatPersen(k.persen)}` : k.label;
     L.push(`• ${label} — ${formatRupiah(k.nominal)}`);
@@ -365,21 +176,32 @@ export function formatPesanBiayaLelang(
 
   L.push("");
   L.push(GARIS);
-  L.push("*B. BIAYA EKSEKUSI PENGOSONGAN*");
-  L.push(`_Berlaku bila aset masih berpenghuni._`);
+  L.push("*B. PENYELESAIAN PENGOSONGAN*");
+  L.push("_Biaya pengosongan selalu menggunakan estimasi eksekusi pengadilan worst case._");
   eksekusi.komponen.forEach((k) => {
     L.push(
       `• ${k.labelPesan ?? k.label} — ${k.tentatif ? "_tentatif_" : formatRupiah(k.nominal)}`
     );
   });
-  L.push(`▸ *Subtotal: ${formatRupiah(eksekusi.subtotal)}*`);
+  L.push(`▸ *Estimasi worst case: ${formatRupiah(eksekusi.subtotal)}*`);
 
   L.push("");
   L.push(GARIS);
-  L.push("*TOTAL ESTIMASI MODAL*");
+  L.push("*C. FEE AGENT*");
+  L.push("_Dihitung dari harga menang lelang._");
+  feeAgent.komponen.forEach((k) => {
+    const label = k.persen ? `${k.label} ${formatPersen(k.persen)}` : k.label;
+    L.push(`• ${label} — ${formatRupiah(k.nominal)}`);
+  });
+  L.push(`▸ *Subtotal: ${formatRupiah(feeAgent.subtotal)}*`);
+
+  L.push("");
+  L.push(GARIS);
+  L.push("*ESTIMASI MODAL — WORST CASE*");
   L.push(`*${formatRupiah(rincian.totalModal)}*`);
+  L.push(`_Limit ${formatRupiahRingkas(limit)}_`);
   L.push(
-    `_Limit ${formatRupiahRingkas(limit)} + biaya ${formatRupiahRingkas(rincian.totalBiaya)}_`
+    `_Balik nama ${formatRupiahRingkas(balikNama.subtotal)} + eksekusi ${formatRupiahRingkas(eksekusi.subtotal)} + fee agent ${formatRupiahRingkas(feeAgent.subtotal)}_`
   );
 
   L.push("");

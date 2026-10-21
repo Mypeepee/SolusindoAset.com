@@ -1,0 +1,10 @@
+import { writeFile } from 'node:fs/promises';
+import { quantityRangeScenarios, simulateQuantityRange } from './lib/quantity-range-dialogues.js';
+const results = [];
+for (const scenario of quantityRangeScenarios()) results.push(await simulateQuantityRange(scenario));
+const summary = { total: results.length, passed: results.filter((item) => item.passed).length, failed: results.filter((item) => !item.passed).length };
+const report = '/private/tmp/kosku-quantity-ranges.json';
+await writeFile(report, JSON.stringify({ scope: 'Offline budget/land range conversations through the actual MessageProcessor; inventory, WhatsApp and client capture are mocked.', summary, results }, null, 2));
+console.log(JSON.stringify({ ...summary, report }));
+for (const result of results.filter((item) => !item.passed).slice(0, 10)) console.log(JSON.stringify(result));
+if (summary.failed) process.exitCode = 1;

@@ -12,6 +12,7 @@
 
 import { setLocationParams, type SelectedRegion } from "@/lib/regionSearch";
 import { serializeTypes, parseTypeParamToDisplays } from "@/lib/propertyType";
+import { applyPropertySearchQuery, parsePropertySearchQuery } from "./propertySearchQuery";
 
 /** `beli` dipertahankan sebagai ID (label-nya saja yang tampil "Jual") supaya
  *  tidak perlu migrasi nilai yang sudah tersebar di URL & komponen lain. */
@@ -141,6 +142,8 @@ export interface TempatDipilih {
    * "Di sekitar UNESA" vs "Di sekitar semua kampus di Malang".
    */
   kelasSemua?: boolean;
+  /** Daerah aset yang menyertai pencarian tempat, termasuk kecamatan. */
+  wilayah?: string;
 }
 
 export interface SearchFormState {
@@ -280,6 +283,7 @@ export function buildSearchParams(state: SearchFormState, tab: TxTab): URLSearch
 
   if (state.dekat) {
     params.set("dekat", state.dekat.nilai);
+    if (state.dekat.wilayah) params.set("areaDekat", state.dekat.wilayah);
     // Radius hanya ditulis bila BERBEDA dari bawaan kelasnya. URL yang bersih
     // lebih mudah dibaca saat dibagikan lewat WhatsApp, dan bawaan yang tidak
     // ditulis bebas diperbaiki nanti tanpa mematikan tautan lama.
@@ -322,6 +326,23 @@ export function buildSearchParams(state: SearchFormState, tab: TxTab): URLSearch
     if (maxLb) params.set("maxLB", maxLb);
   }
 
+  applyPropertySearchQuery(params);
   params.set("page", "1");
   return params;
+}
+
+/** Memilih saran mempertahankan budget, jarak, dan daerah dalam ketikan. */
+export function selectSearchPlace(state: SearchFormState, tempat: TempatDipilih | null, tab: TxTab): SearchFormState {
+  if (!tempat) return { ...state, dekat: null, radius: "" };
+  const parsed = parsePropertySearchQuery(state.keyword);
+  const params = buildSearchParams({ ...state, dekat: tempat }, tab);
+  const rent = isRentTab(tab);
+  return {
+    ...state,
+    dekat: { ...tempat, wilayah: parsed.nearby?.wilayah ?? tempat.wilayah },
+    radius: params.get("radius") ?? "",
+    keyword: parsed.nearby?.keyword ?? "",
+    ...(parsed.minHarga === undefined ? {} : { [rent ? "minRent" : "minPrice"]: formatIdNumber(params.get("minHarga") ?? "") }),
+    ...(parsed.maxHarga === undefined ? {} : { [rent ? "maxRent" : "maxPrice"]: formatIdNumber(params.get("maxHarga") ?? "") }),
+  };
 }

@@ -20,6 +20,7 @@ import {
   activeRangeKeys,
   buildSearchParams,
   buildSearchState,
+  selectSearchPlace,
   destinationFor,
   EMPTY_SEARCH_STATE,
   formatIdNumber,
@@ -166,17 +167,10 @@ export function useSearchForm({
    *  saat mengklik sebuah saran: satu klik, satu hasil. */
   const pilihTempat = useCallback(
     (tempat: SearchFormState["dekat"]) => {
-      setFormData((f) => {
-        const next: SearchFormState = { ...f, dekat: tempat, radius: "" };
-        // Kata kunci yang tadi diketik ("deket unesa") sudah terwakili chip;
-        // membiarkannya berarti hasilnya disaring dua kali — sekali sebagai
-        // tempat, sekali sebagai teks yang tidak akan cocok ke alamat mana pun.
-        if (tempat) next.keyword = "";
-        return next;
-      });
+      setFormData((f) => selectSearchPlace(f, tempat, activeTab));
       setOpenDropdown(null);
     },
-    [],
+    [activeTab],
   );
 
   const isKosSelected = formData.types.includes("Kos");
@@ -262,6 +256,12 @@ export function useSearchForm({
         return;
       }
       const params = buildSearchParams(state, tab);
+      if (params.has("minHarga") && params.has("maxHarga") &&
+          Number(params.get("minHarga")) > Number(params.get("maxHarga"))) {
+        toast.error("Harga minimum melebihi budget maksimum. Sesuaikan filter harga.");
+        shake();
+        return;
+      }
       setSearching(true);
       setOpenDropdown(null);
       router.push(`${destinationFor(tab)}?${params.toString()}`);

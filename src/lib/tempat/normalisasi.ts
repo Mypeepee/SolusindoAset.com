@@ -33,6 +33,7 @@ export type KelasTempat =
   | "PASAR"
   | "MINIMARKET"
   | "STASIUN"
+  | "PINTU_TOL"
   | "TERMINAL"
   | "BANDARA"
   | "HALTE"
@@ -89,6 +90,7 @@ export const KELAS_TEMPAT: Record<KelasTempat, KonfigKelas> = {
   RUMAH_SAKIT: { label: "Rumah Sakit",   icon: "solar:hospital-bold-duotone",            warna: "#ef4444", jangkauan: "LANDMARK", bobot: 88 },
   BANDARA:     { label: "Bandara",       icon: "solar:plane-bold-duotone",               warna: "#0ea5e9", jangkauan: "LANDMARK", bobot: 86 },
   STASIUN:     { label: "Stasiun",       icon: "solar:tram-bold-duotone",                warna: "#0284c7", jangkauan: "LANDMARK", bobot: 84 },
+  PINTU_TOL:   { label: "Pintu Tol",     icon: "mdi:boom-gate",                         warna: "#f59e0b", jangkauan: "LANDMARK", bobot: 85 },
   MALL:        { label: "Mall",          icon: "solar:shop-2-bold-duotone",              warna: "#a855f7", jangkauan: "LANDMARK", bobot: 82 },
   TERMINAL:    { label: "Terminal",      icon: "solar:bus-bold-duotone",                 warna: "#0891b2", jangkauan: "LANDMARK", bobot: 80 },
   STADION:     { label: "Stadion",       icon: "solar:basketball-bold-duotone",          warna: "#22c55e", jangkauan: "LANDMARK", bobot: 78 },
@@ -175,6 +177,8 @@ const KATA_SAMBUNG = new Set(["dan", "di", "ke", "the", "of", "yang"]);
  * kehilangan informasi ke arah yang salah.
  */
 const EJAAN: Array<[RegExp, string]> = [
+  [/\b(?:gerbang tol|akses tol|exit tol|toll gate|toll booth)\b/g, "pintu tol"],
+  [/^gt\s+/g, "pintu tol "],
   [/\bplaza\b/g, "plasa"],
   [/\bapotik\b/g, "apotek"],
   [/\buniversitas\b/g, "univ"],
@@ -313,6 +317,7 @@ const KATA_KELAS: Array<[KelasTempat, string[]]> = [
   ["PASAR", ["pasar", "pasar tradisional"]],
   ["MINIMARKET", ["minimarket", "supermarket", "swalayan", "toko kelontong"]],
   ["STASIUN", ["stasiun", "stasiun kereta"]],
+  ["PINTU_TOL", ["pintu tol", "gerbang tol", "akses tol", "exit tol", "toll gate", "toll booth", "tol"]],
   ["TERMINAL", ["terminal", "terminal bus"]],
   ["BANDARA", ["bandara", "bandar udara", "airport"]],
   ["HALTE", ["halte", "halte bus", "shelter"]],
@@ -364,7 +369,7 @@ export function kelasDariKata(kueriNormal: string): KelasTempat | null {
 }
 
 /** Kata jenis yang dikenali — dipakai UI untuk memberi contoh. */
-export const CONTOH_KATA_KELAS = ["kampus", "sekolah", "rumah sakit", "mall", "pasar"];
+export const CONTOH_KATA_KELAS = ["kampus", "sekolah", "rumah sakit", "stasiun", "mall", "tempat makan", "pintu tol"];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MEMBACA JENIS DARI NAMANYA
@@ -406,6 +411,7 @@ const PENANDA_KUAT: Array<[KelasTempat, string[]]> = [
   ["PASAR", ["pasar"]],
   ["MALL", ["mall", "plaza", "supermall", "trade center"]],
   ["STASIUN", ["stasiun"]],
+  ["PINTU_TOL", ["pintu tol", "gerbang tol", "toll gate", "toll booth", "gt"]],
   ["TERMINAL", ["terminal", "pelabuhan"]],
   ["BANDARA", ["bandara", "bandar udara"]],
   ["IBADAH", [
@@ -415,7 +421,7 @@ const PENANDA_KUAT: Array<[KelasTempat, string[]]> = [
   ]],
   ["HOTEL", ["hotel", "wisma", "penginapan", "homestay", "losmen", "guest house"]],
   ["STADION", ["stadion", "gor", "gelanggang"]],
-  ["MINIMARKET", ["minimarket", "swalayan", "supermarket"]],
+  ["MINIMARKET", ["minimarket", "swalayan", "supermarket", "indomaret", "alfamart", "alfamidi", "lawson", "circle k"]],
   ["HALTE", ["halte", "shelter"]],
   ["WISATA", ["museum", "kebun binatang", "taman wisata", "taman hiburan"]],
   ["GYM", ["gym"]],
@@ -432,6 +438,7 @@ const PENANDA_KUAT: Array<[KelasTempat, string[]]> = [
  * punya jenis sendiri dari penanda kuat "apotek".
  */
 const PENANDA_LEMAH: Array<[KelasTempat, string[]]> = [
+  ["MALL", ["mall", "plaza", "plasa", "supermall"]],
   ["KULINER", [
     "mie", "bakmi", "bakso", "soto", "warung", "warteg", "depot", "rumah makan",
     "resto", "restoran", "cafe", "kafe", "kopi", "coffee", "kedai", "seafood",
@@ -585,6 +592,7 @@ export function akronimDari(nama: string): string | null {
  * pencocokan awalan.
  */
 const KATA_JENIS = [
+  "pintu", "gerbang", "tol", "gt",
   "rs", "rsu", "rsud", "rsup", "rsia", "pkm", "klinik", "apotek",
   "univ", "poltek", "institut", "akademi", "kampus", "sekolah", "tinggi",
   "sd", "sdn", "smp", "smpn", "sma", "sman", "smk", "smkn", "mi", "mts", "ma",

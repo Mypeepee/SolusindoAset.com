@@ -35,6 +35,7 @@ import ContohKetikan, {
   type JenisContoh,
 } from "@/components/search/ContohKetikan";
 import { buildFilterChips, emptySummaryFor } from "@/lib/searchSummary";
+import { parsePropertySearchQuery } from "@/lib/propertySearchQuery";
 import {
   DURASI_OPTIONS,
   GENDER_OPTIONS,
@@ -244,6 +245,12 @@ export default function MobileSearchDock({
   const chips = useMemo(() => buildFilterChips(state, tab), [state, tab]);
   const count = chips.length;
   const keyword = state.keyword.trim();
+  const parsedQuery = parsePropertySearchQuery(keyword);
+  const structuredQuery = Boolean(parsedQuery.nearby?.kelas) || (!parsedQuery.nearby &&
+    (parsedQuery.regions.length > 0 || parsedQuery.minHarga !== undefined || parsedQuery.maxHarga !== undefined));
+  const alamatAktif = structuredQuery
+    ? { teks: keyword, jumlah: kueriSaran === keyword ? alamat?.jumlah ?? null : null }
+    : alamat;
 
   /**
    * Ambil saran tempat sambil diketik. Aturannya sama persis dengan
@@ -324,9 +331,9 @@ export default function MobileSearchDock({
 
   const modePopuler =
     Boolean(onPilihTempat) && !state.dekat && keyword.length < 2 && populer.length > 0;
-  const daftarSaran = modePopuler ? populer : saranTempat;
+  const daftarSaran = structuredQuery ? [] : modePopuler ? populer : saranTempat;
 
-  const adaAlamat = Boolean(alamat) && !modePopuler;
+  const adaAlamat = Boolean(alamatAktif) && !modePopuler;
 
   const panelSaranTerbuka =
     Boolean(onPilihTempat) &&
@@ -716,6 +723,7 @@ export default function MobileSearchDock({
                           <Icon icon="solar:close-circle-bold" className="shrink-0 text-sm opacity-60" />
                         </button>
                       )}
+                      <div className="relative">
                       <input
                         ref={keywordRef}
                         type="text"
@@ -740,7 +748,7 @@ export default function MobileSearchDock({
                           // kosong) Enter tetap mencari biasa — menekan Enter
                           // di kotak kosong tidak boleh mendarat di "semua
                           // kampus" tanpa diminta.
-                          if (!modePopuler && saranTempat.length > 0) {
+                          if (!modePopuler && saranTempat.length > 0 && !structuredQuery && !parsedQuery.nearby) {
                             pilihSaran(saranTempat[0]);
                             return;
                           }
@@ -798,7 +806,7 @@ export default function MobileSearchDock({
                         <div className="absolute inset-y-0 right-2 flex items-center gap-1.5">
                           {keywordMode && (
                             <span className="rounded-full bg-primary/15 px-1.5 py-[2px] text-[9px] font-black uppercase tracking-wider text-primary">
-                              {keywordMode === "id" ? "ID" : "Alamat"}
+                              {keywordMode === "id" ? "ID" : parsedQuery.nearby ? "Dekat" : parsedQuery.regions.length ? "Wilayah" : "Alamat"}
                             </span>
                           )}
                           <button
@@ -821,15 +829,17 @@ export default function MobileSearchDock({
                         </div>
                       )}
 
+                      </div>
+
                       <TempatSaranPanel
                         anchorRef={kotakKeywordRef}
                         inline
                         open={panelSaranTerbuka}
                         items={daftarSaran}
-                        memuat={memuatSaran}
+                        memuat={memuatSaran && !structuredQuery}
                         kueri={kueriSaran || keyword}
                         populer={modePopuler}
-                        alamat={adaAlamat ? alamat : null}
+                        alamat={adaAlamat ? alamatAktif : null}
                         onPilihAlamat={submitAndClose}
                         onContoh={(teks) => {
                           patch({ keyword: teks });

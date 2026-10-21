@@ -91,10 +91,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Co-broke hanya bisa diajukan oleh agent yang login, dengan data klien sendiri.
-    let cobrokeAgent: { id_agent: string; id_pengguna: string; nama_kantor: string; pengguna: { nama_lengkap: string } } | null = null;
+    let cobrokeAgent: { id_agent: string; id_pengguna: string; nama_kantor: string; pengguna: { nama_lengkap: string; peran: string } } | null = null;
     if (body.source === "cobroke") {
       const session = await getServerSession(authOptions);
-      const agentId = (session?.user as any)?.agentId as string | undefined;
+      const agentId = (session?.user?.peran ?? session?.user?.role) === "AGENT"
+        ? session?.user?.agentId
+        : null;
       if (!session?.user?.id || !agentId) {
         return NextResponse.json(
           { ok: false, error: "Unauthorized. Hanya agent yang bisa mengajukan co-broke." },
@@ -109,12 +111,18 @@ export async function POST(req: NextRequest) {
       }
       cobrokeAgent = await prisma.agent.findUnique({
         where: { id_agent: agentId },
-        select: { id_agent: true, id_pengguna: true, nama_kantor: true, pengguna: { select: { nama_lengkap: true } } },
+        select: { id_agent: true, id_pengguna: true, nama_kantor: true, pengguna: { select: { nama_lengkap: true, peran: true } } },
       });
       if (!cobrokeAgent) {
         return NextResponse.json(
           { ok: false, error: "Akun agent tidak ditemukan" },
           { status: 404 },
+        );
+      }
+      if (cobrokeAgent.id_pengguna !== session.user.id || cobrokeAgent.pengguna.peran !== "AGENT") {
+        return NextResponse.json(
+          { ok: false, error: "Hanya agent yang bisa mengajukan co-broke." },
+          { status: 403 },
         );
       }
     }

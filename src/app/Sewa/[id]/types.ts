@@ -188,9 +188,9 @@ export interface SewaDetailData {
   tanggalDiupdate: string | null;
 }
 
-/** Kartu "Kos Serupa" di bawah halaman detail. */
+/** Kartu "Sewa Serupa" di bawah halaman detail. */
 /**
- * Item "Kos serupa" = PropertyDB, bentuk yang dimakan kartu bersama
+ * Item "Sewa serupa" = PropertyDB, bentuk yang dimakan kartu bersama
  * (@/components/property/PropertyCard) — kartu yang sama persis dengan yang
  * dipakai halaman daftar /Sewa, /Jual, /Lelang & /Carikos.
  *

@@ -1,0 +1,11 @@
+import { writeFile } from 'node:fs/promises';
+import { multiCategoryScenarios, runMultiCategoryScenario } from './lib/multi-category-dialogues.js';
+import { summarizeLanguageResults } from './lib/language-dialogues.js';
+const results = [];
+for (const scenario of multiCategoryScenarios()) results.push(await runMultiCategoryScenario(scenario));
+const { random_sample: _random, ...summary } = summarizeLanguageResults(results);
+const path = '/tmp/kosku-multi-category-simulations.json';
+await writeFile(path, JSON.stringify({ scope: 'Enumerated offline regression, no external AI, DB or messages.', summary, results }, null, 2));
+console.log(JSON.stringify({ ...summary, report: path }, null, 2));
+for (const failure of results.filter((result) => !result.passed).slice(0, 30)) console.log(`${failure.name}: ${failure.error}`);
+if (summary.failed) process.exitCode = 1;

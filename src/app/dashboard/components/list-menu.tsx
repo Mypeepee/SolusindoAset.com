@@ -41,6 +41,8 @@ export interface MenuItem {
       icon: "solar:presentation-graph-linear",
       href: "/dashboard/project"
     },
+    { label: "Chatbot", icon: "solar:chat-round-dots-linear", href: "/dashboard/chatbot-integration" },
+    { label: "AI Bot Playground", icon: "solar:code-square-linear", href: "/dashboard/chatbot-playground" },
     {
       label: "Agents",
       icon: "solar:user-id-linear",
@@ -69,6 +71,8 @@ export interface MenuItem {
     crm: { label: "Client", icon: "solar:users-group-rounded-linear", href: "/dashboard/crm" },
     project: { label: "Project", icon: "solar:presentation-graph-linear", href: "/dashboard/project" },
     berita: { label: "Berita", icon: "solar:notebook-linear", href: "/dashboard/berita" },
+    chatbot: { label: "Chatbot", icon: "solar:chat-round-dots-linear", href: "/dashboard/chatbot-integration" },
+    playground: { label: "AI Bot Playground", icon: "solar:code-square-linear", href: "/dashboard/chatbot-playground" },
   };
 
   // Jabatan yang boleh mengelola berita (sinkron dengan API + middleware).
@@ -172,4 +176,3 @@ export interface MenuItem {
       href: "/dashboard/social"
     },
   ];
-  

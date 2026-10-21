@@ -10,6 +10,9 @@ import "server-only";
  */
 
 import prisma from "@/lib/prisma";
+import { applyPropertySearchQuery, parsePropertySearchQuery } from "./propertySearchQuery";
+import { whereHargaListing } from "./listingSortRuntime";
+import { buildTempatWhere, siapkanTempat } from "./listingTempatFilter";
 import {
   TRANSAKSI,
   buildKataKunciWhere,
@@ -43,16 +46,28 @@ export async function hitungKataKunci(
   const teks = String(q ?? "").trim();
   if (teks.length < MIN_KATA_HITUNG) return null;
 
-  const where = buildKataKunciWhere(teks);
-  if (!where) return null;
+  const parsed = parsePropertySearchQuery(teks);
 
   try {
+    const params = new URLSearchParams({ q: teks });
+    applyPropertySearchQuery(params);
+    const siap = parsed.nearby
+      ? await siapkanTempat(Object.fromEntries(params), { q: params.get("q") ?? undefined })
+      : { q: parsed.keyword, tempat: null };
+    const where = buildKataKunciWhere(siap.q);
+    const near = buildTempatWhere(siap.tempat);
+    if (!where && !near && parsed.minHarga === undefined && parsed.maxHarga === undefined) return null;
+    const price = await whereHargaListing(
+      konteks === "beli" ? "JUAL" : konteks === "sewa" ? "SEWA" : konteks === "lelang" ? "LELANG" : "SEMUA",
+      parsed.minHarga,
+      parsed.maxHarga,
+    );
     return await prisma.listing.count({
       where: {
         status_tayang: "TERSEDIA",
         bukan_properti: false,
         ...TRANSAKSI[konteks],
-        ...where,
+        AND: [where, price, near].filter((part): part is NonNullable<typeof part> => Boolean(part)),
       },
     });
   } catch {

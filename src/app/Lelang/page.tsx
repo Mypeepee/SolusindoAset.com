@@ -7,6 +7,7 @@ import FilterCommandBar from "@/components/listing/filterbar/FilterCommandBar";
 import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { buildLocationWhere } from "@/lib/listingLocationFilter";
+import { propertySearchRedirect } from "@/lib/propertySearchQuery";
 import { buildKataKunciWhere } from "@/lib/listingKataKunci";
 import {
   ambilJarakKeTempat,
@@ -125,6 +126,8 @@ async function getReferralPresenter(code: string | null | undefined) {
 }
 
 export default async function SearchPage({ searchParams }: Props) {
+  const searchRedirect = propertySearchRedirect("/Lelang", searchParams);
+  if (searchRedirect) redirect(searchRedirect);
   // Divalidasi, bukan Number() mentah: "?page=abc" dulu jadi NaN → skip NaN →
   // Prisma error → halaman 500.
   const page = parseHalaman(searchParams.page);

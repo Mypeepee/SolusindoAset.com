@@ -5,6 +5,8 @@ import path from "path";
 import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
 import { prisma } from "@/lib/prisma";
 import { docxToPdf } from "@/lib/server/docxToPdf";
+import { mouPaymentFields } from "@/lib/server/mouPaymentTerms.mjs";
+import { mouCostFields } from "@/lib/server/mouCostFields.mjs";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -56,7 +58,7 @@ function fmtRp(n: number): string {
   return n.toLocaleString("id-ID");
 }
 
-async function fillDocx(templatePath: string, data: Record<string, string>): Promise<Buffer> {
+async function fillDocx(templatePath: string, data: Record<string, string | boolean>): Promise<Buffer> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const PizZip = require("pizzip");
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -99,7 +101,6 @@ export async function POST(req: Request) {
         alamat_klien: true,
         harga_deal: true,
         harga_limit: true,
-        persentase_komisi: true,
         biaya_baliknama: true,
         biaya_pengosongan: true,
         termasuk_baliknama: true,
@@ -109,6 +110,8 @@ export async function POST(req: Request) {
           select: {
             alamat_lengkap: true,
             luas_tanah: true,
+            luas_bangunan: true,
+            provinsi: true,
             legalitas: true,
             nomor_legalitas: true,
             uang_jaminan: true,
@@ -136,7 +139,7 @@ export async function POST(req: Request) {
     const alamat_klien = get("alamat_klien", trx.alamat_klien ?? "");
 
     const alamat_lengkap  = trx.listing.alamat_lengkap ?? "";
-    const luas_tanah      = trx.listing.luas_tanah ? `${Number(trx.listing.luas_tanah)} m²` : "";
+    const luas_tanah      = trx.listing.luas_tanah ? `${Number(trx.listing.luas_tanah)}` : "";
     const legalitas       = trx.listing.legalitas ?? "";
     const nomor_legalitas = trx.listing.nomor_legalitas ?? "";
 
@@ -152,8 +155,6 @@ export async function POST(req: Request) {
     if (isPersen) {
       const harga_limit_num      = toNum(trx.harga_limit) || toNum((trx.listing as any).nilai_limit_lelang);
       const max_bid_num          = toNum(trx.maksimum_bidding);
-      const biaya_pengosongan_num = toNum(trx.biaya_pengosongan);
-      const komisi_pct           = toNum(trx.persentase_komisi) * 100;
 
       data = {
         id_transaksi:                trx.id_transaksi ?? String(trx.id),
@@ -164,14 +165,12 @@ export async function POST(req: Request) {
         terbilang_harga_limit:       terbilang(harga_limit_num),
         maksimum_bidding:            fmtRp(max_bid_num),
         terbilang_maksimum_bidding:  terbilang(max_bid_num),
-        komisi_persen:               `${komisi_pct}`,
-        biaya_baliknama:             fmtRp(biaya_baliknama_num),
-        terbilang_baliknama:         terbilang(biaya_baliknama_num),
-        biaya_pengosongan:           fmtRp(biaya_pengosongan_num),
-        terbilang_biaya_pengosongan: terbilang(biaya_pengosongan_num),
+        maksimum_bidding_display: max_bid_num > 0
+          ? `Rp ${fmtRp(max_bid_num)} (${terbilang(max_bid_num)})` : '[BELUM DITENTUKAN KLIEN]',
+        ...mouPaymentFields(harga_limit_num),
+        ...mouCostFields({ limit: harga_limit_num, province: trx.listing.provinsi,
+          landArea: toNum(trx.listing.luas_tanah), buildingArea: toNum(trx.listing.luas_bangunan) }),
         uang_jaminan, terbilang_uang_jaminan,
-        termasuk_pengosongan: biaya_pengosongan_num > 0,
-        termasuk_baliknama:   biaya_baliknama_num > 0,
       };
       templateFile = "MOU_Template_persentase_final.docx";
     } else {
@@ -218,7 +217,7 @@ export async function POST(req: Request) {
     const safe = (trx.id_transaksi ?? String(trx.id)).replace(/[^a-zA-Z0-9]/g, "_");
     const filename = `MOU_${safe}.pdf`;
 
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(new Uint8Array(pdfBuffer), {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",

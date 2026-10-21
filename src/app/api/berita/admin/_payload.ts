@@ -1,5 +1,9 @@
 // Normalizes raw editor input into Prisma-ready berita fields.
-import { BERITA_KATEGORI, BERITA_STATUS, type BeritaStatus } from "@/lib/berita";
+import {
+  BERITA_KATEGORI,
+  BERITA_STATUS,
+  type BeritaStatus,
+} from "@/lib/beritaUi";
 
 export type NormalizedBerita = {
   judul: string;
@@ -14,6 +18,9 @@ export type NormalizedBerita = {
   berita_unggulan: boolean;
   berita_utama: boolean;
   tanggal_publish: Date | null;
+  meta_description: string | null;
+  review_requested_at: Date | null;
+  requested_publish_at: Date | null;
 };
 
 function str(v: unknown): string {
@@ -26,6 +33,15 @@ function toJsonArray(v: unknown): string | null {
     return arr.length ? JSON.stringify(arr) : null;
   }
   if (typeof v === "string" && v.trim()) {
+    // Partial updates merge database records whose arrays are already JSON strings.
+    if (v.trim().startsWith("[")) {
+      try {
+        const parsed: unknown = JSON.parse(v);
+        if (Array.isArray(parsed)) return toJsonArray(parsed);
+      } catch {
+        /* Legacy comma-separated values remain supported. */
+      }
+    }
     const arr = v
       .split(",")
       .map((x) => x.trim())
@@ -35,9 +51,34 @@ function toJsonArray(v: unknown): string | null {
   return null;
 }
 
-export function validateBerita(body: any): { ok: true } | { ok: false; error: string } {
+export function validateBerita(
+  body: any,
+): { ok: true } | { ok: false; error: string } {
   if (!str(body?.judul)) return { ok: false, error: "Judul wajib diisi." };
-  if (!str(body?.isi_berita)) return { ok: false, error: "Isi berita wajib diisi." };
+  if (!str(body?.isi_berita))
+    return { ok: false, error: "Isi berita wajib diisi." };
+  if (str(body.judul).length > 255)
+    return { ok: false, error: "Judul maksimal 255 karakter." };
+  if (str(body.ringkasan).length > 500)
+    return { ok: false, error: "Ringkasan maksimal 500 karakter." };
+  if (str(body.meta_description).length > 160)
+    return { ok: false, error: "Meta description maksimal 160 karakter." };
+  if (
+    str(body.penulis).length > 100 ||
+    str(body.sumber_berita).length > 200 ||
+    str(body.gambar_utama).length > 500
+  )
+    return { ok: false, error: "Detail artikel melebihi batas karakter." };
+  if ((toJsonArray(body.tag)?.length || 0) > 255)
+    return { ok: false, error: "Tag terlalu panjang." };
+  if (
+    body.gambar_utama &&
+    !/^(https?:\/\/|\/(?!\/))/i.test(str(body.gambar_utama))
+  )
+    return {
+      ok: false,
+      error: "Gunakan URL gambar HTTP(S) atau path lokal yang valid.",
+    };
   return { ok: true };
 }
 
@@ -58,6 +99,8 @@ export function normalizeBerita(body: any): NormalizedBerita {
   if (!tanggal_publish && (status === "PUBLISHED" || status === "SCHEDULED")) {
     tanggal_publish = new Date();
   }
+  if (status === "PUBLISHED" && tanggal_publish && tanggal_publish > new Date())
+    tanggal_publish = new Date();
 
   return {
     judul: str(body.judul),
@@ -72,5 +115,14 @@ export function normalizeBerita(body: any): NormalizedBerita {
     berita_unggulan: !!body?.berita_unggulan,
     berita_utama: !!body?.berita_utama,
     tanggal_publish,
+    meta_description: str(body.meta_description) || null,
+    review_requested_at:
+      status === "DRAFT" && body.submit_review === true ? new Date() : null,
+    requested_publish_at:
+      status === "DRAFT" &&
+      body.submit_review === true &&
+      body.requested_publish_at
+        ? new Date(body.requested_publish_at)
+        : null,
   };
 }

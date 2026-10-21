@@ -27,6 +27,13 @@ export async function middleware(req: NextRequest) {
       return NextResponse.redirect(url);
     }
 
+    if ((pathname.startsWith("/dashboard/chatbot-integration") || pathname.startsWith("/dashboard/chatbot-playground")) && token.jabatan !== "OWNER") {
+      const url = req.nextUrl.clone();
+      url.pathname = "/dashboard";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+
     // ✅ Halaman Agents (HRM) hanya untuk PRINCIPAL & OWNER
     if (pathname.startsWith("/dashboard/human-resource-management")) {
       const jabatan = String((token as any).jabatan || "").toUpperCase();

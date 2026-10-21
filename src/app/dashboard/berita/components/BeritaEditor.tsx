@@ -1,35 +1,57 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import Image from "next/image";
-import { Icon } from "@iconify/react";
+import { useSession } from "next-auth/react";
+import {
+  ArrowLeft,
+  Check,
+  ChevronDown,
+  Clock3,
+  FileText,
+  Loader2,
+  Pin,
+  Save,
+  Send,
+  Settings2,
+  ShieldCheck,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
-import markdownToHtml from "@/utils/markdownToHtml";
+import type { BeritaDetail } from "@/lib/berita";
+import { beritaPermissions } from "@/lib/beritaPermissions";
 import {
   BERITA_KATEGORI,
   readingMinutes,
   slugify,
+  type BeritaStatus,
 } from "@/lib/beritaUi";
+import { beritaRequest } from "./workspace";
+import MarkdownEditor from "./MarkdownEditor";
+import MediaUploader from "./MediaUploader";
+import SeoPanel from "./SeoPanel";
+import PublishingTimer from "./PublishingTimer";
+import styles from "./workspace.module.css";
 
-type FormState = {
+type EditorForm = {
   judul: string;
   slug: string;
   ringkasan: string;
   isi_berita: string;
   gambar_utama: string;
   kategori: string;
-  tag: string; // comma separated in UI
+  tag: string;
   penulis: string;
   sumber_berita: string;
-  status_publish: string;
-  berita_unggulan: boolean;
+  meta_description: string;
+  status_publish: BeritaStatus;
   berita_utama: boolean;
-  tanggal_publish: string; // datetime-local value
+  berita_unggulan: boolean;
+  tanggal_publish: string;
+  requested_publish_at: string;
 };
-
-const EMPTY: FormState = {
+const EMPTY: EditorForm = {
   judul: "",
   slug: "",
   ringkasan: "",
@@ -39,683 +61,596 @@ const EMPTY: FormState = {
   tag: "",
   penulis: "",
   sumber_berita: "",
+  meta_description: "",
   status_publish: "DRAFT",
-  berita_unggulan: false,
   berita_utama: false,
+  berita_unggulan: false,
   tanggal_publish: "",
+  requested_publish_at: "",
 };
 
-const STATUS_OPTIONS = [
-  { value: "DRAFT", label: "Draf", icon: "solar:document-linear", hint: "Tersimpan, belum tayang" },
-  { value: "PUBLISHED", label: "Terbitkan", icon: "solar:check-circle-bold", hint: "Tayang publik sekarang" },
-  { value: "SCHEDULED", label: "Terjadwal", icon: "solar:clock-circle-linear", hint: "Tayang pada tanggal tertentu" },
-  { value: "ARCHIVED", label: "Arsip", icon: "solar:archive-linear", hint: "Disembunyikan dari publik" },
-];
-
-function toDatetimeLocal(iso?: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+// The publication controls always represent Asia/Jakarta, regardless of the device timezone.
+export function toJakartaInput(iso?: string | null) {
+  if (!iso || !Number.isFinite(Date.parse(iso))) return "";
+  return new Date(Date.parse(iso) + 7 * 3600000).toISOString().slice(0, 16);
 }
+const fromJakartaInput = (value: string) =>
+  value ? new Date(`${value}:00+07:00`).toISOString() : null;
 
-export default function BeritaEditor({ id }: { id?: string }) {
+type Props = {
+  id?: string;
+  embedded?: boolean;
+  onSaved?: () => void;
+  onCancel?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
+  onSavingChange?: (saving: boolean) => void;
+};
+export default function BeritaEditor({
+  id,
+  embedded = false,
+  onSaved,
+  onCancel,
+  onDirtyChange,
+  onSavingChange,
+}: Props) {
   const router = useRouter();
-  const isEdit = !!id;
-
-  const [form, setForm] = useState<FormState>(EMPTY);
+  const { data: session, status: sessionStatus } = useSession();
+  const permissions = beritaPermissions(session?.user?.jabatan);
+  const [form, setForm] = useState<EditorForm>(EMPTY);
+  const [initial, setInitial] = useState(JSON.stringify(EMPTY));
   const [slugTouched, setSlugTouched] = useState(false);
-  const [loading, setLoading] = useState(isEdit);
+  const [loading, setLoading] = useState(!!id);
+  const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState<"write" | "preview">("write");
-  const [previewHtml, setPreviewHtml] = useState("");
-  const [uploading, setUploading] = useState(false);
+  const [mediaBusy, setMediaBusy] = useState(false);
+  const [revision, setRevision] = useState(false);
+  const [requested, setRequested] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const titleRef = useRef<HTMLTextAreaElement>(null);
+  const dirty = JSON.stringify(form) !== initial;
+  const words = form.isi_berita.trim().split(/\s+/).filter(Boolean).length;
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
-    setForm((f) => ({ ...f, [key]: value }));
-
-  // Load existing record in edit mode.
   useEffect(() => {
-    if (!isEdit) return;
-    let alive = true;
-    (async () => {
-      try {
-        const res = await fetch(`/api/berita/admin/${id}`, { cache: "no-store" });
-        if (!res.ok) throw new Error();
-        const { item } = await res.json();
-        if (!alive) return;
-        setForm({
-          judul: item.judul || "",
-          slug: item.slug || "",
+    onDirtyChange?.(dirty || mediaBusy);
+  }, [dirty, mediaBusy, onDirtyChange]);
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (dirty || mediaBusy) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty, mediaBusy]);
+
+  useEffect(() => {
+    if (!id || sessionStatus !== "authenticated") return;
+    const controller = new AbortController();
+    setLoading(true);
+    setLoadError("");
+    beritaRequest<{ item: BeritaDetail }>(`/api/berita/admin/${id}`, {
+      signal: controller.signal,
+    })
+      .then(({ item }) => {
+        const copy = !permissions.canPublish && item.status_publish !== "DRAFT";
+        const next: EditorForm = {
+          judul: item.judul,
+          slug: copy ? "" : item.slug,
           ringkasan: item.ringkasan || "",
-          isi_berita: item.isi_berita || "",
+          isi_berita: item.isi_berita,
           gambar_utama: item.gambar_utama || "",
-          kategori: item.kategori || BERITA_KATEGORI[0],
-          tag: Array.isArray(item.tag) ? item.tag.join(", ") : "",
-          penulis: item.penulis || "",
+          kategori: item.kategori,
+          tag: item.tag.join(", "),
+          penulis: item.penulis,
           sumber_berita: item.sumber_berita || "",
-          status_publish: item.status_publish || "DRAFT",
-          berita_unggulan: !!item.berita_unggulan,
-          berita_utama: !!item.berita_utama,
-          tanggal_publish: toDatetimeLocal(item.tanggal_publish),
-        });
-        setSlugTouched(true);
-      } catch {
-        toast.error("Gagal memuat berita");
-        router.push("/dashboard/berita");
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [id, isEdit, router]);
-
-  // Auto-slug from title until the user edits the slug manually.
-  useEffect(() => {
-    if (!slugTouched) set("slug", slugify(form.judul));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.judul, slugTouched]);
-
-  // Render markdown preview.
-  useEffect(() => {
-    if (tab !== "preview") return;
-    let alive = true;
-    markdownToHtml(form.isi_berita || "_Belum ada konten._").then((html) => {
-      if (alive) setPreviewHtml(html);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [tab, form.isi_berita]);
-
-  const readMins = useMemo(() => readingMinutes(form.isi_berita), [form.isi_berita]);
-  const words = useMemo(
-    () => form.isi_berita.trim().split(/\s+/).filter(Boolean).length,
-    [form.isi_berita]
-  );
-
-  // Markdown toolbar — wraps selection or inserts a snippet.
-  const applyMd = useCallback(
-    (kind: string) => {
-      const ta = textareaRef.current;
-      if (!ta) return;
-      const start = ta.selectionStart;
-      const end = ta.selectionEnd;
-      const value = ta.value;
-      const sel = value.slice(start, end);
-      let insert = sel;
-      let cursorOffset = 0;
-
-      switch (kind) {
-        case "bold":
-          insert = `**${sel || "teks tebal"}**`;
-          break;
-        case "italic":
-          insert = `*${sel || "teks miring"}*`;
-          break;
-        case "h2":
-          insert = `\n## ${sel || "Sub Judul"}\n`;
-          break;
-        case "h3":
-          insert = `\n### ${sel || "Sub-sub Judul"}\n`;
-          break;
-        case "quote":
-          insert = `\n> ${sel || "Kutipan penting"}\n`;
-          break;
-        case "ul":
-          insert = `\n- ${sel || "Poin pertama"}\n- Poin kedua\n`;
-          break;
-        case "ol":
-          insert = `\n1. ${sel || "Langkah pertama"}\n2. Langkah kedua\n`;
-          break;
-        case "link":
-          insert = `[${sel || "teks tautan"}](https://)`;
-          cursorOffset = insert.length - 1;
-          break;
-        case "image":
-          insert = `![${sel || "deskripsi"}](https://)`;
-          cursorOffset = insert.length - 1;
-          break;
-        case "hr":
-          insert = `\n\n---\n\n`;
-          break;
-        default:
-          return;
-      }
-
-      const next = value.slice(0, start) + insert + value.slice(end);
-      set("isi_berita", next);
-      requestAnimationFrame(() => {
-        ta.focus();
-        const pos = start + (cursorOffset || insert.length);
-        ta.setSelectionRange(pos, pos);
+          meta_description: item.meta_description || "",
+          status_publish: copy ? "DRAFT" : item.status_publish,
+          berita_utama: copy ? false : item.berita_utama,
+          berita_unggulan: copy ? false : item.berita_unggulan,
+          tanggal_publish: toJakartaInput(item.tanggal_publish),
+          requested_publish_at: toJakartaInput(item.requested_publish_at),
+        };
+        setForm(next);
+        setInitial(JSON.stringify(next));
+        setSlugTouched(!copy);
+        setRevision(copy);
+        setRequested(!!item.review_requested_at);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) setLoadError(error.message);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
       });
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  );
+    return () => controller.abort();
+  }, [id, permissions.canPublish, retry, sessionStatus]);
 
-  async function handleUpload(file: File) {
-    setUploading(true);
-    try {
-      const fd = new FormData();
-      fd.append("image", file);
-      const res = await fetch("/api/berita/upload", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Gagal mengunggah");
-      set("gambar_utama", data.url);
-      toast.success("Gambar diunggah");
-    } catch (e: any) {
-      toast.error(e?.message || "Gagal mengunggah gambar");
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  async function save() {
-    if (!form.judul.trim()) {
-      toast.error("Judul wajib diisi");
-      return;
-    }
-    if (!form.isi_berita.trim()) {
-      toast.error("Isi berita wajib diisi");
-      return;
-    }
-    setSaving(true);
-    try {
-      const payload = {
-        ...form,
-        tag: form.tag,
-        tanggal_publish: form.tanggal_publish
-          ? new Date(form.tanggal_publish).toISOString()
-          : null,
-      };
-      const res = await fetch(
-        isEdit ? `/api/berita/admin/${id}` : "/api/berita/admin",
-        {
-          method: isEdit ? "PATCH" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        }
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Gagal menyimpan");
-      toast.success(isEdit ? "Perubahan disimpan" : "Berita dibuat");
+  const update = <K extends keyof EditorForm>(key: K, value: EditorForm[K]) =>
+    setForm((current) => ({
+      ...current,
+      [key]: value,
+      ...(key === "judul" && !slugTouched
+        ? { slug: slugify(String(value)) }
+        : {}),
+    }));
+  const cancel = () => {
+    if (saving) return;
+    if (onCancel) onCancel();
+    else if (
+      !dirty ||
+      window.confirm("Tutup editor? Perubahan yang belum disimpan akan hilang.")
+    )
       router.push("/dashboard/berita");
-      router.refresh();
-    } catch (e: any) {
-      toast.error(e?.message || "Gagal menyimpan berita");
-    } finally {
-      setSaving(false);
-    }
-  }
+  };
 
-  if (loading) {
+  const save = useCallback(
+    async (submitReview = false) => {
+      if (saving || mediaBusy) return;
+      if (!form.judul.trim() || !form.isi_berita.trim()) {
+        toast.error("Judul dan isi artikel wajib diisi.");
+        titleRef.current?.focus();
+        return;
+      }
+      const schedule =
+        permissions.canPublish && form.status_publish === "SCHEDULED"
+          ? form.tanggal_publish
+          : submitReview
+            ? form.requested_publish_at
+            : "";
+      if (
+        (permissions.canPublish &&
+          form.status_publish === "SCHEDULED" &&
+          !schedule) ||
+        (schedule && Date.parse(`${schedule}:00+07:00`) <= Date.now())
+      ) {
+        toast.error("Pilih waktu penayangan di masa mendatang (WIB).");
+        return;
+      }
+      setSaving(true);
+      onSavingChange?.(true);
+      try {
+        const payload = {
+          ...form,
+          slug: slugify(form.slug || form.judul),
+          status_publish: permissions.canPublish
+            ? form.status_publish
+            : "DRAFT",
+          berita_utama: permissions.canPublish ? form.berita_utama : undefined,
+          berita_unggulan: permissions.canPublish
+            ? form.berita_unggulan
+            : undefined,
+          tanggal_publish:
+            permissions.canPublish &&
+            ["PUBLISHED", "SCHEDULED"].includes(form.status_publish)
+              ? fromJakartaInput(form.tanggal_publish)
+              : null,
+          submit_review: submitReview,
+          requested_publish_at: submitReview
+            ? fromJakartaInput(form.requested_publish_at)
+            : null,
+        };
+        await beritaRequest(
+          id && !revision ? `/api/berita/admin/${id}` : "/api/berita/admin",
+          {
+            method: id && !revision ? "PATCH" : "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          },
+        );
+        setInitial(JSON.stringify(form));
+        onDirtyChange?.(false);
+        toast.success(
+          submitReview
+            ? "Artikel diajukan untuk review Owner."
+            : revision
+              ? "Revisi tersimpan sebagai draf baru."
+              : "Artikel berhasil disimpan.",
+        );
+        if (onSaved) onSaved();
+        else {
+          router.push("/dashboard/berita");
+          router.refresh();
+        }
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Gagal menyimpan artikel.",
+        );
+      } finally {
+        setSaving(false);
+        onSavingChange?.(false);
+      }
+    },
+    [
+      form,
+      id,
+      mediaBusy,
+      onDirtyChange,
+      onSavingChange,
+      onSaved,
+      permissions.canPublish,
+      revision,
+      router,
+      saving,
+    ],
+  );
+  useEffect(() => {
+    const keydown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        save();
+      }
+    };
+    window.addEventListener("keydown", keydown);
+    return () => window.removeEventListener("keydown", keydown);
+  }, [save]);
+
+  if (!permissions.canEdit && sessionStatus !== "loading")
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <Icon icon="solar:refresh-linear" className="animate-spin text-2xl text-emerald-400" />
+      <div className={styles.accessDenied}>
+        <ShieldCheck size={30} />
+        <h2>Akses redaksi terbatas</h2>
+        <p>Masuk sebagai Admin atau Owner untuk menulis berita.</p>
       </div>
     );
-  }
+  if (loading || sessionStatus === "loading")
+    return (
+      <div className={styles.editorLoading} role="status">
+        <Loader2 className="animate-spin" size={24} />
+        <span>Menyiapkan ruang menulis…</span>
+      </div>
+    );
+  if (loadError)
+    return (
+      <div className={styles.editorLoading} role="alert">
+        <p>{loadError}</p>
+        <button
+          className={styles.primaryButton}
+          onClick={() => setRetry(retry + 1)}
+        >
+          Coba lagi
+        </button>
+        <button className={styles.secondaryButton} onClick={cancel}>
+          Kembali
+        </button>
+      </div>
+    );
 
   return (
-    <div className="mx-auto max-w-6xl py-6">
-      {/* HEADER BAR */}
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/dashboard/berita"
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 text-slate-400 transition-colors hover:border-emerald-400/40 hover:text-emerald-300"
-          >
-            <Icon icon="solar:arrow-left-linear" className="text-lg" />
-          </Link>
-          <div>
-            <h1 className="text-xl font-bold text-white">
-              {isEdit ? "Edit Berita" : "Tulis Berita Baru"}
-            </h1>
-            <p className="text-xs text-slate-500">
-              {words} kata • {readMins} menit baca
-            </p>
-          </div>
+    <div
+      className={`${styles.editorWorkspace} ${!embedded ? styles.standaloneEditor : ""}`}
+    >
+      <header className={styles.editorHeader}>
+        <button
+          type="button"
+          className={styles.iconButton}
+          onClick={cancel}
+          aria-label="Tutup editor"
+        >
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <span className={styles.eyebrow}>RUANG REDAKSI</span>
+          <h2>
+            {id
+              ? revision
+                ? "Revisi artikel"
+                : "Edit berita"
+              : "Tulis berita"}
+          </h2>
         </div>
-        <div className="flex items-center gap-2.5">
-          {form.slug && (
-            <Link
-              href={`/blog/${form.slug}`}
-              target="_blank"
-              className="hidden items-center gap-1.5 rounded-xl border border-white/10 px-4 py-2.5 text-sm font-semibold text-slate-300 transition-colors hover:border-white/25 hover:text-white sm:inline-flex"
-            >
-              <Icon icon="solar:eye-linear" /> Lihat
-            </Link>
+        <span className={styles.saveState}>
+          {dirty ? (
+            <>
+              <span /> Perubahan belum disimpan
+            </>
+          ) : (
+            <>
+              <Check size={13} />
+              {id ? "Tersimpan" : "Draf baru"}
+            </>
           )}
+        </span>
+        <div className={styles.editorHeaderActions}>
           <button
-            onClick={save}
-            disabled={saving}
-            className="inline-flex items-center gap-2 rounded-xl bg-emerald-400 px-6 py-2.5 text-sm font-extrabold text-black shadow-lg shadow-emerald-500/20 transition-all hover:bg-emerald-300 active:scale-95 disabled:opacity-60"
+            disabled={saving || mediaBusy}
+            className={
+              permissions.canPublish
+                ? styles.primaryButton
+                : styles.secondaryButton
+            }
+            onClick={() => save()}
           >
             {saving ? (
-              <>
-                <Icon icon="solar:refresh-linear" className="animate-spin" /> Menyimpan…
-              </>
+              <Loader2 size={14} className="animate-spin" />
             ) : (
-              <>
-                <Icon icon="solar:diskette-bold" /> Simpan
-              </>
+              <Save size={14} />
             )}
+            <span>
+              {permissions.canPublish
+                ? form.status_publish === "SCHEDULED"
+                  ? "Jadwalkan"
+                  : form.status_publish === "PUBLISHED"
+                    ? "Simpan & terbitkan"
+                    : "Simpan artikel"
+                : "Simpan draf"}
+            </span>
+          </button>
+          {!permissions.canPublish && (
+            <button
+              disabled={saving || mediaBusy}
+              className={styles.primaryButton}
+              onClick={() => save(true)}
+            >
+              <Send size={14} />
+              <span>Ajukan review</span>
+            </button>
+          )}
+          <button
+            disabled={saving}
+            className={styles.iconButton}
+            onClick={cancel}
+            aria-label="Tutup ruang menulis"
+          >
+            <X size={18} />
           </button>
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* MAIN COLUMN */}
-        <div className="space-y-5 lg:col-span-2">
-          {/* Title */}
-          <Field>
-            <textarea
-              value={form.judul}
-              onChange={(e) => set("judul", e.target.value)}
-              placeholder="Judul berita yang menarik…"
-              rows={2}
-              className="w-full resize-none bg-transparent text-2xl font-extrabold leading-tight text-white placeholder:text-slate-600 focus:outline-none"
-            />
-          </Field>
-
-          {/* Excerpt */}
-          <Field label="Ringkasan" hint={`${form.ringkasan.length}/500`}>
-            <textarea
-              value={form.ringkasan}
-              onChange={(e) => set("ringkasan", e.target.value.slice(0, 500))}
-              placeholder="Ringkasan singkat yang muncul di kartu & hasil pencarian…"
-              rows={2}
-              className="w-full resize-none bg-transparent text-sm text-slate-300 placeholder:text-slate-600 focus:outline-none"
-            />
-          </Field>
-
-          {/* Content editor */}
-          <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#0a0d10]">
-            {/* tabs + toolbar */}
-            <div className="flex items-center justify-between border-b border-white/5 bg-white/[0.02] px-3 py-2">
-              <div className="flex gap-1">
-                <TabBtn active={tab === "write"} onClick={() => setTab("write")} icon="solar:pen-2-linear">
-                  Tulis
-                </TabBtn>
-                <TabBtn active={tab === "preview"} onClick={() => setTab("preview")} icon="solar:eye-linear">
-                  Pratinjau
-                </TabBtn>
+      </header>
+      <div className={styles.editorScroll}>
+        <div className={styles.editorColumns}>
+          <main className={styles.writingColumn}>
+            {revision && (
+              <p className={styles.reviewNotice}>
+                <ShieldCheck size={16} /> Revisi disimpan sebagai draf baru
+                untuk ditinjau Owner. Artikel yang sedang tayang tetap tersedia.
+              </p>
+            )}
+            {requested && (
+              <p className={styles.reviewNotice}>
+                <Clock3 size={15} /> Artikel ini menunggu review Owner.
+              </p>
+            )}
+            <div className={styles.writingPaper}>
+              <div className={styles.writingEyebrow}>
+                <FileText size={13} /> ARTIKEL BARU
+                <span>{readingMinutes(form.isi_berita)} menit baca</span>
               </div>
-              {tab === "write" && (
-                <div className="flex flex-wrap items-center gap-0.5">
-                  <TbBtn onClick={() => applyMd("bold")} icon="solar:text-bold-bold" title="Tebal" />
-                  <TbBtn onClick={() => applyMd("italic")} icon="solar:text-italic-bold" title="Miring" />
-                  <Sep />
-                  <TbBtn onClick={() => applyMd("h2")} icon="solar:text-field-focus-linear" title="Sub Judul" label="H2" />
-                  <TbBtn onClick={() => applyMd("h3")} icon="solar:text-field-linear" title="Sub-sub" label="H3" />
-                  <Sep />
-                  <TbBtn onClick={() => applyMd("ul")} icon="solar:list-bold" title="Bullet" />
-                  <TbBtn onClick={() => applyMd("ol")} icon="solar:list-arrow-down-bold" title="Numbered" />
-                  <TbBtn onClick={() => applyMd("quote")} icon="solar:quote-up-bold" title="Kutipan" />
-                  <Sep />
-                  <TbBtn onClick={() => applyMd("link")} icon="solar:link-bold" title="Tautan" />
-                  <TbBtn onClick={() => applyMd("image")} icon="solar:gallery-add-bold" title="Gambar" />
-                  <TbBtn onClick={() => applyMd("hr")} icon="solar:minus-square-linear" title="Garis" />
-                </div>
-              )}
-            </div>
-
-            {tab === "write" ? (
+              <label className="sr-only" htmlFor="article-title">
+                Judul artikel
+              </label>
               <textarea
-                ref={textareaRef}
+                ref={titleRef}
+                id="article-title"
+                autoFocus={!id}
+                className={styles.titleInput}
+                value={form.judul}
+                maxLength={255}
+                rows={2}
+                placeholder="Tuliskan judul yang berarti."
+                onChange={(event) => update("judul", event.target.value)}
+              />
+              <label className="sr-only" htmlFor="article-summary">
+                Ringkasan artikel
+              </label>
+              <textarea
+                id="article-summary"
+                className={styles.summaryInput}
+                value={form.ringkasan}
+                maxLength={500}
+                rows={3}
+                placeholder="Tambahkan ringkasan yang mengundang pembaca untuk tahu lebih jauh…"
+                onChange={(event) => update("ringkasan", event.target.value)}
+              />
+              <MarkdownEditor
                 value={form.isi_berita}
-                onChange={(e) => set("isi_berita", e.target.value)}
-                placeholder={"Tulis isi berita di sini (mendukung Markdown)…\n\n## Sub judul\n\nParagraf pembuka yang kuat.\n\n- Poin penting\n- Poin lainnya\n\n> Kutipan menonjol"}
-                rows={22}
-                className="w-full resize-y bg-transparent px-4 py-4 font-mono text-sm leading-relaxed text-slate-200 placeholder:text-slate-600 focus:outline-none"
+                onChange={(value) => update("isi_berita", value)}
               />
-            ) : (
-              <div
-                className="article-body min-h-[400px] px-5 py-5"
-                dangerouslySetInnerHTML={{ __html: previewHtml }}
-              />
-            )}
-            <div className="flex items-center justify-between border-t border-white/5 px-4 py-2 text-[11px] text-slate-500">
-              <span className="flex items-center gap-1.5">
-                <Icon icon="solar:markdown-bold" /> Markdown didukung
+            </div>
+            <div className={styles.writingFooter}>
+              <span>
+                {words.toLocaleString("id-ID")} kata ·{" "}
+                {readingMinutes(form.isi_berita)} menit baca
               </span>
-              <span>{words} kata</span>
+              <span>Ctrl / ⌘ S untuk menyimpan</span>
             </div>
-          </div>
-        </div>
-
-        {/* SIDEBAR */}
-        <div className="space-y-5">
-          {/* Publish box */}
-          <Panel title="Publikasi" icon="solar:rocket-2-bold">
-            <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              Status
-            </label>
-            <div className="grid grid-cols-2 gap-1.5">
-              {STATUS_OPTIONS.map((s) => (
-                <button
-                  key={s.value}
-                  onClick={() => set("status_publish", s.value)}
-                  title={s.hint}
-                  className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-2 text-xs font-bold transition-all ${
-                    form.status_publish === s.value
-                      ? "border-emerald-400/50 bg-emerald-400/10 text-emerald-300"
-                      : "border-white/10 text-slate-400 hover:border-white/25 hover:text-white"
-                  }`}
-                >
-                  <Icon icon={s.icon} className="text-sm" />
-                  {s.label}
-                </button>
-              ))}
-            </div>
-
-            {form.status_publish === "SCHEDULED" && (
-              <div className="mt-3">
-                <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                  Tanggal Tayang
-                </label>
-                <input
-                  type="datetime-local"
-                  value={form.tanggal_publish}
-                  onChange={(e) => set("tanggal_publish", e.target.value)}
-                  className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white [color-scheme:dark] focus:border-emerald-400/50 focus:outline-none"
-                />
-              </div>
-            )}
-
-            <div className="mt-4 space-y-2.5 border-t border-white/5 pt-3.5">
-              <Toggle
-                label="Jadikan Headline"
-                hint="Tampil besar di atas blog"
-                checked={form.berita_utama}
-                onChange={(v) => set("berita_utama", v)}
-              />
-              <Toggle
-                label="Artikel Unggulan"
-                hint="Ditandai sebagai pilihan redaksi"
-                checked={form.berita_unggulan}
-                onChange={(v) => set("berita_unggulan", v)}
-              />
-            </div>
-          </Panel>
-
-          {/* Cover image */}
-          <Panel title="Gambar Utama" icon="solar:gallery-bold">
-            <div className="relative mb-3 aspect-[16/10] w-full overflow-hidden rounded-xl border border-white/10 bg-black/40">
-              {form.gambar_utama ? (
-                <Image
-                  src={form.gambar_utama}
-                  alt="Cover"
-                  fill
-                  unoptimized
-                  className="object-cover"
-                />
+          </main>
+          <aside
+            className={styles.editorSidebar}
+            aria-label="Pengaturan artikel"
+          >
+            <section className={styles.editorPanel}>
+              <h3>
+                <Send size={15} />
+                {permissions.canPublish
+                  ? "Pengaturan publikasi"
+                  : "Pengajuan publikasi"}
+                <span className={styles.ownerLabel}>
+                  {permissions.canPublish ? "OWNER" : "ADMIN"}
+                </span>
+              </h3>
+              {permissions.canPublish ? (
+                <>
+                  <label className={styles.fieldLabel}>
+                    Status artikel
+                    <span className={styles.selectWrap}>
+                      <select
+                        value={form.status_publish}
+                        onChange={(event) =>
+                          update(
+                            "status_publish",
+                            event.target.value as BeritaStatus,
+                          )
+                        }
+                      >
+                        <option value="DRAFT">
+                          Draf — belum dipublikasikan
+                        </option>
+                        <option value="PUBLISHED">
+                          Terbit — tayang sekarang
+                        </option>
+                        <option value="SCHEDULED">
+                          Terjadwal — atur waktu tayang
+                        </option>
+                        <option value="ARCHIVED">
+                          Arsip — simpan di arsip
+                        </option>
+                      </select>
+                      <ChevronDown size={13} />
+                    </span>
+                  </label>
+                  {form.status_publish === "SCHEDULED" && (
+                    <label className={styles.fieldLabel}>
+                      Waktu penayangan · WIB
+                      <input
+                        aria-label="Jadwal publikasi WIB"
+                        type="datetime-local"
+                        min={toJakartaInput(new Date().toISOString())}
+                        value={form.tanggal_publish}
+                        onChange={(event) =>
+                          update("tanggal_publish", event.target.value)
+                        }
+                      />
+                      <PublishingTimer value={form.tanggal_publish} />
+                    </label>
+                  )}
+                  {requested && form.requested_publish_at && (
+                    <button
+                      className={styles.useSchedule}
+                      onClick={() =>
+                        setForm((current) => ({
+                          ...current,
+                          tanggal_publish: current.requested_publish_at,
+                          status_publish: "SCHEDULED",
+                        }))
+                      }
+                    >
+                      Gunakan usulan jadwal:{" "}
+                      {form.requested_publish_at.replace("T", " ")} WIB
+                    </button>
+                  )}
+                  <div className={styles.editorToggles}>
+                    <label>
+                      <span>
+                        <Pin size={14} /> Jadikan headline
+                      </span>
+                      <input
+                        type="checkbox"
+                        role="switch"
+                        checked={form.berita_utama}
+                        onChange={(event) =>
+                          update("berita_utama", event.target.checked)
+                        }
+                      />
+                    </label>
+                    <label>
+                      <span>
+                        <Sparkles size={14} /> Pilihan redaksi
+                      </span>
+                      <input
+                        type="checkbox"
+                        role="switch"
+                        checked={form.berita_unggulan}
+                        onChange={(event) =>
+                          update("berita_unggulan", event.target.checked)
+                        }
+                      />
+                    </label>
+                  </div>
+                </>
               ) : (
-                <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-slate-600">
-                  <Icon icon="solar:gallery-broken" className="text-3xl" />
-                  <span className="text-[11px]">Belum ada gambar</span>
-                </div>
+                <>
+                  <p className={styles.panelHint}>
+                    Simpan draf kapan saja. Owner meninjau dan menyetujui
+                    publikasi artikel Anda.
+                  </p>
+                  <label className={styles.fieldLabel}>
+                    Usulan jadwal · WIB (opsional)
+                    <input
+                      type="datetime-local"
+                      value={form.requested_publish_at}
+                      min={toJakartaInput(new Date().toISOString())}
+                      onChange={(event) =>
+                        update("requested_publish_at", event.target.value)
+                      }
+                    />
+                  </label>
+                </>
               )}
-              {uploading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-                  <Icon icon="solar:refresh-linear" className="animate-spin text-xl text-emerald-400" />
-                </div>
-              )}
-            </div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleUpload(f);
-                e.target.value = "";
-              }}
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={() => fileRef.current?.click()}
-                disabled={uploading}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-400/20 disabled:opacity-60"
-              >
-                <Icon icon="solar:upload-minimalistic-bold" /> Unggah
-              </button>
-              {form.gambar_utama && (
-                <button
-                  onClick={() => set("gambar_utama", "")}
-                  className="flex items-center justify-center rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-slate-400 transition-colors hover:border-rose-400/40 hover:text-rose-300"
+            </section>
+            <section className={styles.editorPanel}>
+              <h3>
+                <Settings2 size={15} /> Detail artikel
+              </h3>
+              <label className={styles.fieldLabel}>
+                Kategori
+                <select
+                  value={form.kategori}
+                  onChange={(event) => update("kategori", event.target.value)}
                 >
-                  <Icon icon="solar:trash-bin-trash-linear" />
-                </button>
-              )}
-            </div>
-            <input
-              value={form.gambar_utama}
-              onChange={(e) => set("gambar_utama", e.target.value)}
-              placeholder="atau tempel URL gambar…"
-              className="mt-2 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-slate-300 placeholder:text-slate-600 focus:border-emerald-400/50 focus:outline-none"
-            />
-          </Panel>
-
-          {/* Meta */}
-          <Panel title="Detail" icon="solar:settings-bold">
-            <SideField label="Kategori">
-              <select
-                value={form.kategori}
-                onChange={(e) => set("kategori", e.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white focus:border-emerald-400/50 focus:outline-none"
-              >
-                {BERITA_KATEGORI.map((k) => (
-                  <option key={k} value={k} className="bg-[#0a0d10]">
-                    {k}
-                  </option>
-                ))}
-              </select>
-            </SideField>
-
-            <SideField label="Slug (URL)">
-              <div className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-black/40 px-2.5 py-2 focus-within:border-emerald-400/50">
-                <span className="text-xs text-slate-600">/blog/</span>
+                  {BERITA_KATEGORI.map((category) => (
+                    <option key={category}>{category}</option>
+                  ))}
+                </select>
+              </label>
+              <label className={styles.fieldLabel}>
+                Penulis
                 <input
-                  value={form.slug}
-                  onChange={(e) => {
-                    setSlugTouched(true);
-                    set("slug", e.target.value);
-                  }}
-                  className="w-full bg-transparent text-sm text-white focus:outline-none"
+                  value={form.penulis}
+                  maxLength={100}
+                  placeholder={session?.user?.name || "Tim Redaksi"}
+                  onChange={(event) => update("penulis", event.target.value)}
                 />
-              </div>
-            </SideField>
-
-            <SideField label="Penulis">
-              <input
-                value={form.penulis}
-                onChange={(e) => set("penulis", e.target.value)}
-                placeholder="Default: nama Anda"
-                className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-emerald-400/50 focus:outline-none"
+              </label>
+              <label className={styles.fieldLabel}>
+                Tag & kata kunci
+                <input
+                  value={form.tag}
+                  maxLength={220}
+                  placeholder="properti, investasi, lelang"
+                  onChange={(event) => update("tag", event.target.value)}
+                />
+                <small>
+                  Pisahkan dengan koma. Tag pertama menjadi kata kunci SEO.
+                </small>
+              </label>
+              <label className={styles.fieldLabel}>
+                Sumber (opsional)
+                <input
+                  value={form.sumber_berita}
+                  maxLength={200}
+                  placeholder="Nama sumber / referensi"
+                  onChange={(event) =>
+                    update("sumber_berita", event.target.value)
+                  }
+                />
+              </label>
+            </section>
+            <section className={styles.editorPanel}>
+              <h3>
+                <Sparkles size={15} /> Gambar utama
+              </h3>
+              <MediaUploader
+                value={form.gambar_utama}
+                onChange={(value) => update("gambar_utama", value)}
+                onBusyChange={setMediaBusy}
               />
-            </SideField>
-
-            <SideField label="Tag" hint="pisahkan dengan koma">
-              <input
-                value={form.tag}
-                onChange={(e) => set("tag", e.target.value)}
-                placeholder="lelang, kpr, investasi"
-                className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-emerald-400/50 focus:outline-none"
-              />
-            </SideField>
-
-            <SideField label="Sumber (opsional)">
-              <input
-                value={form.sumber_berita}
-                onChange={(e) => set("sumber_berita", e.target.value)}
-                placeholder="mis. KPKNL, BPS"
-                className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-emerald-400/50 focus:outline-none"
-              />
-            </SideField>
-          </Panel>
+            </section>
+            <SeoPanel
+              title={form.judul}
+              slug={form.slug}
+              description={form.meta_description}
+              cover={form.gambar_utama}
+              content={form.isi_berita}
+              keyword={form.tag.split(",")[0] || ""}
+              onSlug={(value) => {
+                setSlugTouched(true);
+                update("slug", value);
+              }}
+              onDescription={(value) => update("meta_description", value)}
+            />
+          </aside>
         </div>
       </div>
     </div>
-  );
-}
-
-/* ── tiny presentational helpers ─────────────────────────────── */
-function Field({
-  children,
-  label,
-  hint,
-}: {
-  children: React.ReactNode;
-  label?: string;
-  hint?: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-[#0a0d10] px-4 py-3.5">
-      {label && (
-        <div className="mb-1 flex items-center justify-between">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-            {label}
-          </span>
-          {hint && <span className="text-[11px] text-slate-600">{hint}</span>}
-        </div>
-      )}
-      {children}
-    </div>
-  );
-}
-
-function Panel({
-  title,
-  icon,
-  children,
-}: {
-  title: string;
-  icon: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-[#0a0d10] p-4">
-      <h3 className="mb-3.5 flex items-center gap-2 text-sm font-bold text-white">
-        <Icon icon={icon} className="text-emerald-400" />
-        {title}
-      </h3>
-      {children}
-    </div>
-  );
-}
-
-function SideField({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="mb-3 last:mb-0">
-      <label className="mb-1.5 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-        {label}
-        {hint && <span className="font-normal normal-case text-slate-600">{hint}</span>}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-function TabBtn({
-  active,
-  onClick,
-  icon,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
-        active ? "bg-emerald-400/15 text-emerald-300" : "text-slate-400 hover:text-white"
-      }`}
-    >
-      <Icon icon={icon} /> {children}
-    </button>
-  );
-}
-
-function TbBtn({
-  onClick,
-  icon,
-  title,
-  label,
-}: {
-  onClick: () => void;
-  icon: string;
-  title: string;
-  label?: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      title={title}
-      type="button"
-      className="flex h-8 min-w-8 items-center justify-center gap-1 rounded-md px-1.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-emerald-300"
-    >
-      <Icon icon={icon} className="text-base" />
-      {label && <span className="text-[10px] font-bold">{label}</span>}
-    </button>
-  );
-}
-
-function Sep() {
-  return <span className="mx-0.5 h-5 w-px bg-white/10" />;
-}
-
-function Toggle({
-  label,
-  hint,
-  checked,
-  onChange,
-}: {
-  label: string;
-  hint?: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <button
-      onClick={() => onChange(!checked)}
-      className="flex w-full items-center justify-between gap-3 text-left"
-    >
-      <span>
-        <span className="block text-sm font-semibold text-slate-200">{label}</span>
-        {hint && <span className="block text-[11px] text-slate-500">{hint}</span>}
-      </span>
-      <span
-        className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-          checked ? "bg-emerald-400" : "bg-white/15"
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
-            checked ? "translate-x-[1.15rem]" : "translate-x-0.5"
-          }`}
-        />
-      </span>
-    </button>
   );
 }

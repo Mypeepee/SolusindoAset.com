@@ -4,7 +4,7 @@
  * ────────────────────────────────────────────────────────────────────────────
  * RINCIAN BIAYA — bottom sheet di mobile, dialog di desktop.
  * ────────────────────────────────────────────────────────────────────────────
- * Dibaca dari atas ke bawah tanpa satu pun isian: total dulu, lalu dua pos
+ * Dibaca dari atas ke bawah tanpa satu pun isian: total dulu, lalu tiga pos
  * biaya beserta komponennya, ditutup rekap dan tombol salin. Semua angka
  * berasal dari data listing lewat src/lib/lelangBiaya.ts, jadi agent tidak
  * perlu menghitung, memilih wilayah, atau mengisi luas apa pun.
@@ -81,14 +81,18 @@ function KartuPos({
   judul: string;
   subtitel?: string;
   subtotal: number;
-  aksen: "emerald" | "amber";
+  aksen: "emerald" | "amber" | "violet" | "sky";
   komponen: KomponenBiaya[];
   children?: React.ReactNode;
 }) {
   const warna =
     aksen === "emerald"
       ? { chip: "bg-emerald-400/15 text-emerald-300 border-emerald-400/30", garis: "bg-emerald-400" }
-      : { chip: "bg-amber-400/15 text-amber-300 border-amber-400/30", garis: "bg-amber-400" };
+      : aksen === "amber"
+        ? { chip: "bg-amber-400/15 text-amber-300 border-amber-400/30", garis: "bg-amber-400" }
+        : aksen === "violet"
+          ? { chip: "bg-violet-400/15 text-violet-300 border-violet-400/30", garis: "bg-violet-400" }
+          : { chip: "bg-sky-400/15 text-sky-300 border-sky-400/30", garis: "bg-sky-400" };
 
   return (
     <section className="rounded-2xl border border-white/[0.07] bg-white/[0.02] overflow-hidden">
@@ -206,13 +210,22 @@ export default function RincianBiayaSheet({
 
   if (!mounted) return null;
 
-  const { balikNama, eksekusi, totalModal, totalBiaya, band, wilayah } = rincian;
+  const {
+    balikNama,
+    eksekusi,
+    feeAgent,
+    totalModal,
+    totalBiaya,
+    band,
+    wilayah,
+  } = rincian;
   const namaWilayah = wilayah === "JATIM" ? "Jawa Timur" : "Luar Jawa Timur";
 
   const rekap = [
     { label: "Harga limit", nilai: limit },
     { label: "Biaya balik nama", nilai: balikNama.subtotal },
-    { label: "Biaya eksekusi", nilai: eksekusi.subtotal },
+    { label: "Eksekusi (worst case)", nilai: eksekusi.subtotal },
+    { label: "Fee agent", nilai: feeAgent.subtotal },
   ];
 
   return (
@@ -255,7 +268,7 @@ export default function RincianBiayaSheet({
                 </span>
               </div>
               <p className="mt-2.5 text-[10px] uppercase tracking-[0.18em] text-slate-400">
-                Total Modal Dibutuhkan
+              Modal Worst Case
               </p>
               <p className="mt-1 text-[27px] sm:text-[30px] font-black text-white leading-none tabular-nums">
                 {formatRupiah(totalModal)}
@@ -287,7 +300,7 @@ export default function RincianBiayaSheet({
           <KartuPos
             kode="A"
             judul="Biaya Balik Nama"
-            subtitel="8,5% dari harga limit + fee jasa"
+            subtitel="8,5% dari harga menang lelang + fee jasa"
             subtotal={balikNama.subtotal}
             aksen="emerald"
             komponen={balikNama.komponen}
@@ -295,8 +308,8 @@ export default function RincianBiayaSheet({
 
           <KartuPos
             kode="B"
-            judul="Biaya Eksekusi Pengosongan"
-            subtitel={`Tarif ${namaWilayah} · berlaku bila aset masih berpenghuni`}
+            judul="Eksekusi Pengadilan"
+            subtitel={`Estimasi worst case · tarif ${namaWilayah}`}
             subtotal={eksekusi.subtotal}
             aksen="amber"
             komponen={eksekusi.komponen}
@@ -379,6 +392,15 @@ export default function RincianBiayaSheet({
             )}
           </KartuPos>
 
+          <KartuPos
+            kode="C"
+            judul="Fee Agent"
+            subtitel="5% dari harga menang lelang"
+            subtotal={feeAgent.subtotal}
+            aksen="violet"
+            komponen={feeAgent.komponen}
+          />
+
           {/* ── Rekap: penjumlahan yang bisa dibacakan langsung ke klien ── */}
           <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.07] to-white/[0.02] px-4 py-3.5">
             {rekap.map((r) => (
@@ -389,13 +411,15 @@ export default function RincianBiayaSheet({
                 </span>
               </div>
             ))}
-            <div className="mt-2 pt-2.5 border-t border-white/10 flex items-center justify-between gap-3">
-              <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-300">
-                Total Modal
-              </span>
-              <span className="text-[18px] font-black text-white tabular-nums leading-none">
-                {formatRupiah(totalModal)}
-              </span>
+            <div className="mt-2 pt-2.5 border-t border-white/10 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-300">
+                  Modal worst case
+                </span>
+                <span className="text-[18px] font-black text-white tabular-nums leading-none">
+                  {formatRupiah(totalModal)}
+                </span>
+              </div>
             </div>
           </div>
 
