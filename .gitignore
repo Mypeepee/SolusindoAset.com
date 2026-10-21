@@ -51,6 +51,7 @@ backend/keys/
 /Kosku.com.zip.next/cache
 .next/cache
 .next/
+/.next-staging/
 
 # Local runtime, database backups and service logs
 .runtime/

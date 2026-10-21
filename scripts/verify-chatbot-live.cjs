@@ -6,7 +6,7 @@ require('@next/env').loadEnvConfig(path.resolve(__dirname, '..'), false);
 const { PrismaClient } = require('@prisma/client');
 const { encode } = require('next-auth/jwt');
 const db = new PrismaClient();
-const origin = 'http://127.0.0.1:3000';
+const origin = new URL(process.env.CHATBOT_CHECK_ORIGIN || 'http://127.0.0.1:3000').origin;
 
 async function main() {
   const health = await fetch('http://127.0.0.1:3100/health', { signal: AbortSignal.timeout(5000) });
@@ -32,6 +32,21 @@ async function main() {
   };
   const session = await request('/api/auth/session');
   assert.equal(session.user.id, owner.id_pengguna);
+  await request('/api/dashboard/chatbot/whatsapp');
+  // Invalid input checks pairing permissions without requesting a real code.
+  const pairing = await fetch(origin + '/api/dashboard/chatbot/whatsapp', {
+    method: 'POST', headers, body: JSON.stringify({ action: 'pairing_code', phone: 'invalid' }),
+    signal: AbortSignal.timeout(15000),
+  });
+  assert.equal(pairing.status, 400, 'Owner pairing requests must reach phone validation, including behind the tunnel.');
+  assert.equal((await pairing.json()).error, 'INVALID_PHONE');
+  if (process.argv.includes('--pairing-only')) {
+    const view = await request('/api/dashboard/chatbot/whatsapp?view=pairing');
+    console.log(JSON.stringify({ check: 'live_pairing_permissions', passed: true, origin,
+      owner_session: true, pairing_permissions: true, qr_available: !!view.qr,
+      operator_whatsapp_connected: healthData.whatsapp_connected, real_whatsapp_messages_sent: 0 }));
+    return;
+  }
   const context = await request('/api/dashboard/chatbot/playground');
   assert.ok(context.property?.id, 'Playground must read a real public listing.');
   const conversationId = randomUUID();
@@ -47,7 +62,7 @@ async function main() {
   });
   assert.ok(typeof second.reply === 'string' && second.reply.length > 20, 'Expected a consultation reply.');
   console.log(JSON.stringify({ check: 'live_dashboard_chatbot', passed: true, backend_healthy: true,
-    owner_session: true, real_property: true, property_reply: true, consultation_reply: true,
+    owner_session: true, pairing_permissions: true, real_property: true, property_reply: true, consultation_reply: true,
     generation: second.generation || null, operator_whatsapp_connected: healthData.whatsapp_connected,
     real_whatsapp_messages_sent: 0 }));
 }

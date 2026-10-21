@@ -5,6 +5,7 @@ const { readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 const ts = require('typescript');
 const { NextRequest, NextResponse } = require('next/server');
+require('./register-typescript.cjs');
 
 const request = (body, headers = {}) => new NextRequest('http://localhost:3000/api/dashboard/chatbot/whatsapp', {
   method: 'POST', headers: { origin: 'http://localhost:3000', 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body),
@@ -15,7 +16,9 @@ function route(access = { agentId: 'AG108', base: 'http://backend.invalid', toke
   }).outputText;
   const module = { exports: {} };
   new Function('require', 'module', 'exports', code)((name) => name === '@/lib/chatbot/server-access'
-    ? { resolveChatbotAgent: async () => access } : require(name), module, module.exports);
+    ? { resolveChatbotAgent: async () => access }
+    : name === '@/lib/chatbot/request-origin' ? require('../src/lib/chatbot/request-origin.ts')
+    : require(name), module, module.exports);
   return module.exports;
 }
 

@@ -6,13 +6,16 @@ const ts = require('typescript');
 const { NextRequest } = require('next/server');
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
+require('./register-typescript.cjs');
 
 function load(relative, dependencies = {}) {
   const code = ts.transpileModule(readFileSync(resolve(__dirname, '..', relative), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
   }).outputText;
   const module = { exports: {} };
-  new Function('require', 'module', 'exports', code)((name) => Object.hasOwn(dependencies, name) ? dependencies[name] : require(name), module, module.exports);
+  new Function('require', 'module', 'exports', code)((name) => Object.hasOwn(dependencies, name) ? dependencies[name]
+    : name === '@/lib/chatbot/request-origin' ? require('../src/lib/chatbot/request-origin.ts')
+    : require(name), module, module.exports);
   return module.exports;
 }
 const endpoint = 'http://localhost:3000/api/dashboard/chatbot/conversations';

@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Build a replacement separately while the current production server runs.
+  distDir: process.env.NEXT_BUILD_DIR || ".next",
   reactStrictMode: false,
   swcMinify: true,
   // Jangan kirim header "X-Powered-By: Next.js" (kecil, tapi gratis).

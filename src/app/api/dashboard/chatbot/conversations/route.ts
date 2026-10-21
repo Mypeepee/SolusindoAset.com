@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveChatbotAgent } from "@/lib/chatbot/server-access";
+import { isSameOriginRequest } from "@/lib/chatbot/request-origin";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const headers = { "Cache-Control": "private, no-store", Vary: "Cookie" };
 const fail = (error: string, status: number) => NextResponse.json({ error }, { status, headers });
 async function proxy(request: NextRequest, write: boolean) {
   try {
-    if (write && (request.headers.get("origin") !== request.nextUrl.origin || request.headers.get("sec-fetch-site") === "cross-site")) return fail("FORBIDDEN", 403);
+    if (write && !isSameOriginRequest(request)) return fail("FORBIDDEN", 403);
     const target = await resolveChatbotAgent();
     if (target instanceof NextResponse) return target;
     let suffix = "";

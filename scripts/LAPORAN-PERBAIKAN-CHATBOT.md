@@ -85,3 +85,24 @@ WhatsApp AG108 sudah menyediakan QR, tetapi belum terhubung karena pengguna
 belum melakukan pemindaian. Buka Dashboard -> Chatbot Integration dan pindai QR
 dengan WhatsApp -> Perangkat tertaut. Status ini tidak menghalangi Playground.
 Tidak ada pesan WhatsApp nyata yang dikirim selama pengujian.
+
+Lanjutan pada 22 Oktober 2026: permintaan pairing dari akun Owner melalui
+domain publik awalnya gagal HTTP 403 walaupun GET status berhasil HTTP 200.
+Penyebabnya perbandingan langsung Origin browser dengan URL internal Next.js.
+Endpoint WhatsApp, percakapan dan konfirmasi stok sekarang memakai helper
+validasi origin yang sama dengan Playground. Hak Owner dan autentikasi backend
+tetap diberlakukan; origin asing dan header forwarding palsu tetap ditolak.
+
+Perbaikan lulus 21 tes regresi, build produksi berhasil, dan build baru sudah
+dipasang. Pemeriksaan nyata melalui `https://solusindoaset.com` membuktikan
+POST koneksi berhasil HTTP 202, tampilan QR merespons HTTP 200, dan permintaan
+pairing mencapai validasi nomor. Probe ini tidak meminta kode untuk nomor nyata.
+Pemeriksaan dapat diulang dengan `CHATBOT_CHECK_ORIGIN` menunjuk domain publik
+dan `node scripts/verify-chatbot-live.cjs --pairing-only`.
+
+Pemeriksaan percakapan menemukan kuota harian free tier Gemini 2.5 Flash habis.
+Model cadangan `gemini-3.5-flash-lite` tersedia dengan kunci yang sama dan telah
+dikonfigurasi melalui `LLM_FALLBACK_MODEL`. Transport AI nyata berhasil memakai
+fallback serta menghasilkan JSON tervalidasi. Uji lengkap dashboard, pairing,
+pembacaan properti dan percakapan melalui domain publik kembali lulus. Akun
+WhatsApp masih menunggu pemindaian QR atau penautan dengan nomor oleh pengguna.

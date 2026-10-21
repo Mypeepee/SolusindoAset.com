@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assetCheckQueue } from "@/lib/chatbot/asset-checks";
+import { isSameOriginRequest } from "@/lib/chatbot/request-origin";
 import { CHATBOT_HEADERS as headers, chatbotError as fail, readChatbotBody, resolveChatbotAgent } from "@/lib/chatbot/server-access";
 
 export const runtime = "nodejs";
@@ -19,7 +20,7 @@ export async function GET() {
 
 export async function PATCH(request: NextRequest) {
   try {
-    if (request.headers.get("origin") !== request.nextUrl.origin || request.headers.get("sec-fetch-site") === "cross-site") return fail("FORBIDDEN", 403);
+    if (!isSameOriginRequest(request)) return fail("FORBIDDEN", 403);
     const access = await resolveChatbotAgent();
     if (access instanceof NextResponse) return access;
     if (!request.headers.get("content-type")?.startsWith("application/json")) return fail("INVALID_REQUEST", 400);
@@ -40,7 +41,7 @@ export async function PATCH(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    if (request.headers.get("origin") !== request.nextUrl.origin || request.headers.get("sec-fetch-site") === "cross-site") return fail("FORBIDDEN", 403);
+    if (!isSameOriginRequest(request)) return fail("FORBIDDEN", 403);
     const access = await resolveChatbotAgent();
     if (access instanceof NextResponse) return access;
     if (!request.headers.get("content-type")?.startsWith("application/json")) return fail("INVALID_REQUEST", 400);
