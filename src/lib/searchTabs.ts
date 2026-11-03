@@ -11,7 +11,7 @@
  */
 
 import { setLocationParams, type SelectedRegion } from "@/lib/regionSearch";
-import { serializeTypes, parseTypeParamToDisplays } from "@/lib/propertyType";
+import { serializeTypes, parseTypeParamToDisplays, BUY_PROPERTY_TYPES, TYPE_DB_TO_DISPLAY } from "@/lib/propertyType";
 import { applyPropertySearchQuery, parsePropertySearchQuery } from "./propertySearchQuery";
 
 /** `beli` dipertahankan sebagai ID (label-nya saja yang tampil "Jual") supaya
@@ -39,9 +39,7 @@ export const PROPERTY_ICONS: Record<string, string> = {
   Kos: "solar:bed-bold-duotone",
 };
 
-export const BUY_TYPES = sortAlpha([
-  "Rumah", "Tanah", "Gudang", "Apartemen", "Pabrik", "Ruko", "Toko", "Hotel & Villa",
-]);
+export const BUY_TYPES = sortAlpha(BUY_PROPERTY_TYPES.map((type) => TYPE_DB_TO_DISPLAY[type]));
 
 /**
  * Tipe yang relevan untuk SEWA. Empat teratas adalah yang paling dicari dan

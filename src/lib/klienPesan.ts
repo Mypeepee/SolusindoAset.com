@@ -135,7 +135,7 @@ export function pesanRekomendasi(opsi: {
        memikirkan Anda. */
     const kepala = aset.length > 1 ? `${i + 1}. *${a.judul}*` : `*${a.judul}*`;
     baris.push(kepala);
-    baris.push(`   ${rupiahRingkas(a.harga)}${opsi.otomatis && a.jenis_transaksi === "LELANG" ? " (harga limit lelang)" : ""}`);
+    baris.push(`   💰 *${rupiahRingkas(a.harga)}*${opsi.otomatis && a.jenis_transaksi === "LELANG" ? " (harga limit lelang)" : ""}`);
     const auctionDate = a.tanggal_lelang ? new Date(a.tanggal_lelang).getTime() : NaN;
     if (a.jenis_transaksi === "LELANG" && Number.isFinite(auctionDate)) baris.push(`   🗓️ Lelang tercatat: ${new Intl.DateTimeFormat("id-ID", { dateStyle: "long", timeZone: "Asia/Jakarta" }).format(auctionDate)}${auctionDate <= now ? " (jadwal sudah lewat)" : ""}`);
 
@@ -147,9 +147,9 @@ export function pesanRekomendasi(opsi: {
     if (a.luas_bangunan) spek.push(`LB ${a.luas_bangunan} m²`);
     if (a.kamar_tidur)   spek.push(`${a.kamar_tidur} KT`);
     if (a.kamar_mandi)   spek.push(`${a.kamar_mandi} KM`);
-    if (spek.length) baris.push(`   ${spek.join(" · ")}`);
+    if (spek.length) baris.push(`   📐 ${spek.join(" · ")}`);
 
-    baris.push(`   ${urlListing(a, idAgent)}`);
+    baris.push(`   🔗 ${urlListing(a, idAgent)}`);
     baris.push("");
   });
 

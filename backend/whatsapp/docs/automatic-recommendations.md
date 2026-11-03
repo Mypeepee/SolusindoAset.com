@@ -18,6 +18,25 @@ ini tersimpan per agen dan nomor, termasuk saat percakapan sedang dijeda.
 
 ## Perilaku
 
+- Rekomendasi otomatis mendahulukan **tanggal listing dibuat** yang paling
+  baru (`tanggal_dibuat`), kemudian ID terbesar jika tanggalnya sama. Tanggal
+  kosong ditempatkan setelah tanggal yang diketahui. Harga murah, label hot
+  deal, tanggal edit, dan waktu masuk antrean tidak mengalahkan urutan ini.
+  Seluruh filter kecocokan dan batas umur jadwal lelang tetap berlaku.
+- Pemilihan pagi memeriksa semua preferensi tersimpan klien sebelum mengambil
+  empat aset. Preferensi pertama tidak menghabiskan jatah dengan aset lama.
+  Urutan terbaru berlaku sejak query kandidat, antrean, sampai draf terakhir;
+  aset kembar disatukan sebelum pengurutan akhir.
+- Pesan otomatis meminta **pratinjau foto aset pertama** pada tautan detailnya.
+  Baileys menerima judul, deskripsi, thumbnail, dan gambar besar yang diunggah
+  sebagai `thumbnail-link`. Foto diambil dari proxy publik domain sendiri,
+  dengan kode agen tetap pada tautan. Pembaca pratinjau hanya diaktifkan untuk
+  tautan listing publik yang sesuai; URL percakapan lain tidak diambil backend.
+- Listing tanpa foto tetap dikirim dengan judul dan tautan. Jika pengambilan
+  gambar gagal, teks dan tautan tetap dikirim sebagai satu pesan tanpa mengulang
+  pengiriman WhatsApp. Nomor pilihan tetap sesuai daftar yang disimpan untuk
+  tindak lanjut. Pada Cloud API, pengiriman otomatis memakai
+  `text.preview_url=true` sesuai [referensi pesan teks Meta](https://whatsapp.github.io/WhatsApp-Nodejs-SDK/api-reference/messages/text/).
 - Setiap menit, maksimal 200 listing baru per agen diproses; backlog dilanjutkan
   pada menit berikutnya. Pemindaian pertama menyimpan ID listing terakhir sebagai
   titik awal untuk pemindai listing baru. Pemindai pagi terpisah memeriksa stok
@@ -55,6 +74,9 @@ ini tersimpan per agen dan nomor, termasuk saat percakapan sedang dijeda.
 - Isi pesan berasal dari data publik, menyapa nama klien, menampilkan harga
   (harga limit untuk lelang), lokasi, LT/LB, URL dengan kode agen pengirim, ajakan
   survei dan nama agen. Tidak ada generasi fakta/harga oleh LLM.
+- Harga dicetak tebal, dengan penanda 💰 harga, 📍 lokasi, 📐 spesifikasi,
+  🗓️ jadwal dan 🔗 tautan. Antarproperti dipisahkan baris kosong. Balasan
+  pencarian bot memakai penanda yang sama, ditambah ikon jenis transaksi.
 - Balasan “nomor 2” merujuk daftar yang dikirim, termasuk setelah restart dan
   saat WhatsApp menggunakan alias LID. Pengiriman tidak memalsukan waktu chat
   klien atau mengaktifkan ulang percakapan yang sedang ditangani manusia.
@@ -84,6 +106,12 @@ diklaim masih bisa diikuti; yang lebih dari satu bulan dilewati sepenuhnya.
 Aturan yang sama berlaku untuk pencarian aset CRM, hasil pencarian chatbot,
 dan pemeriksaan terakhir kiriman manual dari CRM/email.
 
+Antrean menyimpan `listed_at` untuk mengingat tanggal pembuatan aset setelah
+restart. Kolom SQLite ditambahkan otomatis tanpa menghapus antrean, histori
+terkirim, atau penahanan kiriman berstatus tidak pasti. Pemeriksaan pagi mengisi
+tanggal kandidat lama yang masih pending. Versi urutan ikut diperiksa supaya
+pemeriksaan pagi dengan aturan lama dapat diulang; deduplikasi tetap berlaku.
+
 Sebelum menyentuh WhatsApp, status `sending` disimpan. Jika proses mati atau
 transport melaporkan hasil tidak pasti, kiriman menjadi `uncertain`, tidak diulang.
 Panel menyediakan **Periksa chat**, **Sudah terkirim** dan **Lewati kiriman**.
@@ -102,6 +130,7 @@ dihapus dari antrean sesudah pencatatan CRM selesai; ID deduplikasi tetap disimp
 node --test scripts/test-chatbot-recommendations.cjs
 cd backend/whatsapp
 node --test test/new_property_notifications.test.js
+node --test test/recommendation_preview.test.js test/baileys.test.js test/providers.test.js
 node --test test/notification_followups.test.js
 node scripts/simulate-notification-followups.js
 ```
@@ -113,3 +142,26 @@ untuk draf yang belum benar-benar dikirim. Playground tidak menjalankan worker.
 
 Transkrip hasil eksekusi tersimpan di
 [simulasi-rekomendasi-otomatis.md](simulasi-rekomendasi-otomatis.md).
+
+## Dependensi dan penerapan perubahan 22 Oktober 2026
+
+Backend secara eksplisit memerlukan `sharp@0.34.5` dan
+`link-preview-js@3.2.0`. Sebelumnya pembaca pratinjau tidak terpasang, sedangkan
+Sharp yang tersedia di backend gagal dimuat. Pemeriksaan gambar menggunakan
+pembentuk media dan protokol Baileys asli dengan upload tiruan, tanpa menghubungi
+klien. URL foto publik aset contoh `150215` juga berhasil membalas JPEG 1200×630.
+
+Sesudah memperbarui kode API Next.js dan backend, jalankan `npm ci` di
+`backend/whatsapp`, lalu restart layanan yang mengirim rekomendasi. Tidak perlu
+migrasi Postgres. Perubahan dari workspace ini belum dideploy ke produksi.
+
+Tes mencakup urutan tanggal dibanding hot deal/harga/waktu antre, penggabungan
+preferensi, batas query kandidat, migrasi antrean, thumbnail dan gambar besar,
+kegagalan foto, URL pratinjau yang tidak sesuai aset, serta pemilihan nomor
+sesudah pesan otomatis diterima. Tidak ada pesan WhatsApp sungguhan dikirim
+saat pengujian.
+
+Hasil pemeriksaan pengembangan: 1.203 tes backend dan 52 tes API/pencocokan
+terkait lulus. Pemeriksaan TypeScript untuk modul rekomendasi beserta dependensi
+yang diimpornya lulus. Ini bukan uji pengiriman ke WhatsApp pelanggan ataupun
+pernyataan bahwa build seluruh aplikasi sudah lulus.

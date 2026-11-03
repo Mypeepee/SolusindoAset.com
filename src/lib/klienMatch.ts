@@ -22,7 +22,9 @@
 // ---------------------------------------------------------------------------
 
 import { Prisma, type PrismaClient } from "@prisma/client";
-import { freshAuctionWhere, isFreshAuction } from "../../backend/whatsapp/services/auction_freshness.js";
+import { auctionFreshnessCutoff, freshAuctionWhere, isFreshAuction } from "../../backend/whatsapp/services/auction_freshness.js";
+import { kunciDiskon, type LokasiDiskon, type MetrikDiskon } from "@/lib/preferensiDiskon";
+export { kunciDiskon } from "@/lib/preferensiDiskon";
 import type {
   jenis_transaksi_enum,
   kategori_properti_enum,
@@ -69,7 +71,23 @@ export function turunkanMaksud(
 
 /* ── Bentuk preferensi yang dibaca mesin ───────────────────────────────── */
 
+export async function siapkanDiskon(prefs: readonly (Pick<KriteriaMatch, "maksud" | "diskon_jenis" | "diskon_persen"> & LokasiDiskon)[]) {
+  if (!prefs.some(p => p.diskon_jenis)) return new Map<string, ReadonlySet<string>>();
+  const resolver = await import("@/lib/klienDiskon.server");
+  return resolver.siapkanDiskon(prefs);
+}
+
+export async function siapkanBuktiDiskon(prefs: readonly (Pick<KriteriaMatch, "maksud" | "diskon_jenis" | "diskon_persen"> & LokasiDiskon)[]) {
+  if (!prefs.some(p => p.diskon_jenis)) return new Map<string, ReadonlyMap<string, MetrikDiskon>>();
+  const resolver = await import("@/lib/klienDiskon.server");
+  return resolver.siapkanBuktiDiskon(prefs);
+}
+
 export type KriteriaMatch = {
+  diskon_jenis?: string | null;
+  diskon_persen?: number | null;
+  /** Resolved canonical evidence. An unresolved discount must never match. */
+  diskon_ids?: ReadonlySet<string>;
   id_preferensi?: bigint | number;
   maksud: maksud_preferensi_enum;
   /** null = SEMUA tipe. Klien menyebut daerah & anggaran jauh lebih dulu
@@ -266,12 +284,11 @@ export function fotoPertama(raw?: string | null): string {
   return `https://drive.google.com/thumbnail?id=${f}`;
 }
 
-/** Harga yang dipakai membandingkan dengan budget.
- *  `harga_efektif` adalah kolom turunan yang diisi trigger dan sudah benar
- *  untuk semua jenis transaksi (termasuk lelang, lihat
- *  migration_lelang_harga_efektif.sql) — tapi baris yang dibuat SEBELUM
- *  triggernya ada bisa saja masih NULL, dan baris seperti itu tidak boleh
- *  lenyap dari pencarian tanpa suara. Karena itu ada jalur cadangan. */
+/** Harga yang dipakai membandingkan dengan budget dan menampilkan hasil.
+ *  Lelang memakai limit putaran listing ini, sama dengan mesin riwayat yang
+ *  menghitung diskonnya. Kolom turunan atau harga promo tidak boleh mengganti
+ *  limit tersebut. Tanpa limit positif, riwayat memakai harga listing.
+ *  Transaksi lain memakai harga efektif, dengan cadangan untuk data lama. */
 export function hargaEfektif(l: {
   harga_efektif?: Prisma.Decimal | null;
   harga: Prisma.Decimal | number;
@@ -279,9 +296,13 @@ export function hargaEfektif(l: {
   nilai_limit_lelang?: Prisma.Decimal | null;
   jenis_transaksi?: string;
 }): number {
+  if (String(l.jenis_transaksi).toUpperCase() === "LELANG") {
+    const limit = Number(l.nilai_limit_lelang);
+    if (Number.isFinite(limit) && limit > 0) return limit;
+    const harga = Number(l.harga);
+    return Number.isFinite(harga) && harga > 0 ? harga : 0;
+  }
   if (l.harga_efektif != null) return Number(l.harga_efektif);
-  if (String(l.jenis_transaksi).toUpperCase() === "LELANG" && l.nilai_limit_lelang != null)
-    return Number(l.nilai_limit_lelang);
   const h = Number(l.harga);
   const p = l.harga_promo != null ? Number(l.harga_promo) : 0;
   return p > 0 && p < h ? p : h;
@@ -305,6 +326,11 @@ export type OpsiMatch = {
  *  `lolosKetat()`. Yang HARAM di sini adalah membuang baris yang seharusnya
  *  cocok, karena tidak ada tahap berikutnya yang bisa mengembalikannya. */
 export function whereKasar(k: KriteriaMatch, opsi: OpsiMatch = {}): Prisma.ListingWhereInput {
+  return susunWhere(k, opsi, true);
+}
+
+/** Only the empty-result diagnostic may inspect listings outside the date gate. */
+function susunWhere(k: KriteriaMatch, opsi: OpsiMatch, saringTanggal: boolean): Prisma.ListingWhereInput {
   const { kecuali = [], longgar = null } = opsi;
 
   /* Syarat yang butuh OR dikumpulkan di sini lalu dipasang sebagai `AND`.
@@ -312,7 +338,9 @@ export function whereKasar(k: KriteriaMatch, opsi: OpsiMatch = {}): Prisma.Listi
      `where.OR` untuk budget; menambahkan gerbang ber-OR kedua langsung di
      `where.OR` akan MENIMPA gerbang budget tanpa satu pun galat — plafon
      harga klien hilang diam-diam dan hasilnya terlihat "cuma agak longgar". */
-  const dan: Prisma.ListingWhereInput[] = [freshAuctionWhere(opsi.now)];
+  const dan: Prisma.ListingWhereInput[] = saringTanggal ? [freshAuctionWhere(opsi.now)] : [];
+  // Apply before take: a discounted match must not disappear outside the pool.
+  if (k.diskon_jenis) dan.push({ id_property: { in: [...(k.diskon_ids || [])].map(id => BigInt(id)) } });
 
   const where: Prisma.ListingWhereInput = {
     // Gerbang keras 1: aset yang tidak tersedia bukan rekomendasi, ia kabar buruk.
@@ -457,23 +485,33 @@ export function whereKasar(k: KriteriaMatch, opsi: OpsiMatch = {}): Prisma.Listi
     }
   }
 
-  /* Budget disaring di SQL karena angka tidak punya masalah ejaan — TAPI
-     baris ber-harga_efektif NULL sengaja diloloskan; tahap kedua menghitung
-     harganya lewat jalur cadangan. Tanpa cabang OR ini, listing lama akan
-     lenyap dari seluruh rekomendasi tanpa satu pun pesan galat. */
+  /* Pakai sumber harga yang sama dengan hargaEfektif() SEBELUM batas kolam.
+     Limit lelang bisa sudah diperbarui sementara harga_efektif masih lama.
+     Harga putaran pertama hanya pembanding diskon, bukan syarat budget.
+     Transaksi lain dengan harga_efektif NULL diperiksa lewat cadangan di JS. */
   const bmin = angka(k.budget_min);
   const bmaxAsli = angka(k.budget_max);
   const bmax = longgar === "budget" && bmaxAsli ? bmaxAsli * 1.1 : bmaxAsli;
   if (bmin !== null || bmax !== null) {
+    const rentang = {
+      ...(bmin !== null ? { gte: new Prisma.Decimal(bmin) } : {}),
+      ...(bmax !== null ? { lte: new Prisma.Decimal(bmax) } : {}),
+    };
     dan.push({
       OR: [
         {
-          harga_efektif: {
-            ...(bmin !== null ? { gte: new Prisma.Decimal(bmin) } : {}),
-            ...(bmax !== null ? { lte: new Prisma.Decimal(bmax) } : {}),
-          },
+          jenis_transaksi: "LELANG",
+          nilai_limit_lelang: { gt: 0, ...rentang },
         },
-        { harga_efektif: null },
+        {
+          jenis_transaksi: "LELANG",
+          OR: [{ nilai_limit_lelang: null }, { nilai_limit_lelang: { lte: 0 } }],
+          harga: { gt: 0, ...rentang },
+        },
+        {
+          jenis_transaksi: { not: "LELANG" },
+          OR: [{ harga_efektif: rentang }, { harga_efektif: null }],
+        },
       ],
     });
   }
@@ -524,9 +562,13 @@ export function lolosKetat(l: ListingRingkas & {
   kota?: string | null; kecamatan?: string | null; kelurahan?: string | null; provinsi?: string | null;
   jenis_transaksi?: string; nilai_limit_lelang?: Prisma.Decimal | null;
 }, k: KriteriaMatch, opsi: OpsiMatch = {}): boolean {
+  return isFreshAuction(l, opsi.now) && lolosKriteria(l, k, opsi);
+}
+
+function lolosKriteria(l: Parameters<typeof lolosKetat>[0], k: KriteriaMatch, opsi: OpsiMatch): boolean {
   const { longgar = null } = opsi;
 
-  if (!isFreshAuction(l, opsi.now)) return false;
+  if (k.diskon_jenis && !k.diskon_ids?.has(String(l.id_property))) return false;
 
   // ── Lokasi: hanya tingkat TERDALAM yang diisi yang mengikat ──
   if (longgar !== "lokasi") {
@@ -545,6 +587,7 @@ export function lolosKetat(l: ListingRingkas & {
   const bmin = angka(k.budget_min);
   const bmaxAsli = angka(k.budget_max);
   const bmax = longgar === "budget" && bmaxAsli ? bmaxAsli * 1.1 : bmaxAsli;
+  if ((bmin !== null || bmax !== null) && (!Number.isFinite(harga) || harga <= 0)) return false;
   if (bmin !== null && harga < bmin) return false;
   if (bmax !== null && harga > bmax) return false;
 
@@ -579,6 +622,7 @@ export function lolosKetat(l: ListingRingkas & {
 const KOLAM = 1200;
 
 export type HasilCocok<T> = { item: T; skor: number; alasan: string[] };
+type OpsiCari = OpsiMatch & { select?: any; tambahanWhere?: Prisma.ListingWhereInput; maks?: number; urut?: "terbaru" };
 
 /** Pencarian lengkap dua tahap. INI yang dipakai semua pemanggil — endpoint
  *  match maupun cron. Tidak ada yang boleh memakai whereKasar() sendirian:
@@ -586,9 +630,22 @@ export type HasilCocok<T> = { item: T; skor: number; alasan: string[] };
 export async function cariCocok<T extends Parameters<typeof lolosKetat>[0]>(
   prisma: PrismaClient,
   k: KriteriaMatch,
-  opsi: OpsiMatch & { select?: any; tambahanWhere?: Prisma.ListingWhereInput; maks?: number } = {},
+  opsi: OpsiCari = {},
+): Promise<T[]> {
+  return cariDenganTanggal<T>(prisma, k, opsi, true);
+}
+
+async function cariDenganTanggal<T extends Parameters<typeof lolosKetat>[0]>(
+  prisma: PrismaClient,
+  k: KriteriaMatch,
+  opsi: OpsiCari,
+  saringTanggal: boolean,
 ): Promise<T[]> {
   opsi = { ...opsi, now: opsi.now ?? Date.now() };
+  if (k.diskon_jenis && !k.diskon_ids) {
+    const resolved = await siapkanDiskon([k]);
+    k = { ...k, diskon_ids: resolved.get(kunciDiskon(k)) ?? new Set() };
+  }
   /* Digabung lewat `AND`, BUKAN dengan menyebar dua objek jadi satu.
      `whereKasar()` memakai `AND` untuk menampung gerbang-gerbang ber-OR
      (budget, luas, bentuk), dan penyebaran objek akan MENIMPA seluruh isinya
@@ -596,20 +653,27 @@ export async function cariCocok<T extends Parameters<typeof lolosKetat>[0]>(
      luas, dan syarat bentuk hilang sekaligus, tanpa satu pun galat. */
   const tambahan = opsi.tambahanWhere;
   const where: Prisma.ListingWhereInput = tambahan
-    ? { AND: [whereKasar(k, opsi), tambahan] }
-    : whereKasar(k, opsi);
+    ? { AND: [susunWhere(k, opsi, saringTanggal), tambahan] }
+    : susunWhere(k, opsi, saringTanggal);
   const kolam = (await prisma.listing.findMany({
     where,
     take: Math.min(opsi.maks ?? KOLAM, KOLAM),
-    orderBy: [{ is_hot_deal: "desc" }, { tanggal_dibuat: "desc" }],
-    ...(opsi.select ? { select: { ...opsi.select, jenis_transaksi: true, tanggal_lelang: true } } : {}),
+    orderBy: opsi.urut === "terbaru"
+      ? [{ tanggal_dibuat: { sort: "desc", nulls: "last" } }, { id_property: "desc" }]
+      : [{ is_hot_deal: "desc" }, { tanggal_dibuat: "desc" }],
+    ...(opsi.select ? { select: {
+      ...opsi.select, jenis_transaksi: true, tanggal_lelang: true,
+      harga: true, harga_promo: true, harga_efektif: true, nilai_limit_lelang: true,
+    } } : {}),
   })) as unknown as T[];
 
   /* Dibuang di SINI, bukan di tiap pemanggil. Tiga permukaan memakai fungsi
      ini — layar Asisten Aset, panel ringkasan, dan cron email — dan kembaran
      yang lolos di salah satunya akan terbaca sebagai kerusakan di situ saja,
      lalu dikejar sebagai bug yang berbeda. */
-  return buangKembar(kolam.filter(l => lolosKetat(l, k, opsi)) as any) as unknown as T[];
+  return buangKembar(kolam.filter(l =>
+    lolosKriteria(l, k, opsi) && (!saringTanggal || isFreshAuction(l, opsi.now)),
+  ) as any) as unknown as T[];
 }
 
 /** SELURUH gerbang, dijalankan di JavaScript — tanpa satu pun query.
@@ -739,11 +803,13 @@ export function sidikAset(l: {
   luas_bangunan?: Prisma.Decimal | null;
   harga_efektif?: Prisma.Decimal | null;
   harga?: Prisma.Decimal | number;
+  jenis_transaksi?: string;
+  nilai_limit_lelang?: Prisma.Decimal | null;
   kelurahan?: string | null;
   kota?: string | null;
 }): string | null {
   if (l.kategori === undefined || l.kota === undefined) return null;
-  const harga = l.harga_efektif != null ? Number(l.harga_efektif) : Number(l.harga ?? 0);
+  const harga = hargaEfektif({ ...l, harga: l.harga ?? 0 });
   if (!harga) return null;
   const lt = l.luas_tanah ? Number(l.luas_tanah) : 0;
   const lb = l.luas_bangunan ? Number(l.luas_bangunan) : 0;
@@ -804,6 +870,7 @@ export type ListingRingkas = {
   harga_efektif: Prisma.Decimal | null;
   harga: Prisma.Decimal;
   harga_promo: Prisma.Decimal | null;
+  nilai_limit_lelang?: Prisma.Decimal | null;
   luas_tanah: Prisma.Decimal | null;
   luas_bangunan: Prisma.Decimal | null;
   kamar_tidur: number | null;
@@ -842,7 +909,7 @@ export function skorListing(l: ListingRingkas, k: KriteriaMatch): number {
   // benar-benar ada; menurunkan peringkatnya sudah cukup, karena aset seperti
   // itu tetap unggul lewat foto dan kelengkapan datanya.
   const bmax = angka(k.budget_max);
-  const harga = Number(l.harga_efektif ?? l.harga);
+  const harga = hargaEfektif(l);
   if (bmax && harga > 0) {
     const rasio = harga / bmax;
     skor +=
@@ -909,7 +976,7 @@ export function alasanCocok(l: ListingRingkas, k: KriteriaMatch): string[] {
   }
 
   const bmax = angka(k.budget_max);
-  const harga = Number(l.harga_efektif ?? l.harga);
+  const harga = hargaEfektif(l);
   if (bmax && harga > 0 && harga <= bmax) {
     const selisih = bmax - harga;
     if (selisih > 0) out.push(`${ringkasRupiah(selisih)} di bawah plafon`);
@@ -966,6 +1033,13 @@ export type Diagnosa = {
   adaBudget: boolean;
   adaLuas: boolean;
   adaBentuk: boolean;
+  /** Same criteria and exclusions; date-ineligible records are never offered. */
+  lelangTersaringTanggal: number;
+  lelangTanpaJadwal: number;
+  jadwalLelangTerakhir: string | null;
+  batasTanggalLelang: string;
+  jikaDiskonDiabaikan: number;
+  adaDiskon: boolean;
 };
 
 export async function diagnosaKosong(
@@ -973,6 +1047,12 @@ export async function diagnosaKosong(
   k: KriteriaMatch,
   opsi: OpsiMatch = {},
 ): Promise<Diagnosa> {
+  opsi = { ...opsi, now: opsi.now ?? Date.now() };
+  if (k.diskon_jenis && !k.diskon_ids) {
+    const resolved = await siapkanDiskon([k]);
+    k = { ...k, diskon_ids: resolved.get(kunciDiskon(k)) ?? new Set() };
+  }
+  const batasTanggal = auctionFreshnessCutoff(opsi.now);
   const dasar: Prisma.ListingWhereInput = {
     status_tayang: "TERSEDIA",
     AND: [freshAuctionWhere(opsi.now)],
@@ -1002,13 +1082,27 @@ export async function diagnosaKosong(
      menjanjikan "4 aset kalau plafon dinaikkan" padahal setelah normalisasi
      lokasi hasilnya nol — dan saran yang bohong lebih buruk daripada tidak
      ada saran. */
-  const [total, budget, lokasi, luas, bentuk] = await Promise.all([
+  const [total, budget, lokasi, luas, bentuk, lelangLama, tanpaDiskon] = await Promise.all([
     prisma.listing.count({ where: dasar }),
     adaBudget ? cariCocok(prisma, k, { ...opsi, longgar: "budget" }).then(r => r.length) : Promise.resolve(0),
     lok.nilai ? cariCocok(prisma, k, { ...opsi, longgar: "lokasi" }).then(r => r.length) : Promise.resolve(0),
     adaLuas ? cariCocok(prisma, k, { ...opsi, longgar: "luas" }).then(r => r.length) : Promise.resolve(0),
     adaBentuk ? cariCocok(prisma, k, { ...opsi, longgar: "bentuk" }).then(r => r.length) : Promise.resolve(0),
+    transaksiUntuk(k.maksud, k.jenis_transaksi).includes("LELANG")
+      ? cariDenganTanggal(prisma, k, {
+          ...opsi,
+          tambahanWhere: {
+            jenis_transaksi: "LELANG",
+            OR: [{ tanggal_lelang: { lt: batasTanggal } }, { tanggal_lelang: null }],
+          },
+        }, false)
+      : Promise.resolve([]),
+    k.diskon_jenis
+      ? cariCocok(prisma, { ...k, diskon_jenis: null, diskon_persen: null, diskon_ids: undefined }, opsi).then(r => r.length)
+      : Promise.resolve(0),
   ]);
+
+  const jadwal = lelangLama.flatMap(l => l.tanggal_lelang ? [l.tanggal_lelang.getTime()] : []);
 
   return {
     totalTanpaFilterLunak: total,
@@ -1020,5 +1114,11 @@ export async function diagnosaKosong(
     adaBudget,
     adaLuas,
     adaBentuk,
+    lelangTersaringTanggal: lelangLama.length,
+    lelangTanpaJadwal: lelangLama.filter(l => !l.tanggal_lelang).length,
+    jadwalLelangTerakhir: jadwal.length ? new Date(Math.max(...jadwal)).toISOString() : null,
+    batasTanggalLelang: batasTanggal.toISOString(),
+    jikaDiskonDiabaikan: tanpaDiskon,
+    adaDiskon: !!k.diskon_jenis,
   };
 }

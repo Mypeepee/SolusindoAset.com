@@ -5,7 +5,7 @@ import {
   motion,
   useMotionValue,
   useTransform,
-  useSpring,
+  useReducedMotion,
   useScroll,
   type MotionValue,
 } from "framer-motion";
@@ -19,7 +19,7 @@ import { Icon } from "@iconify/react";
    - animated mesh-grid + scanline
    - word-by-word headline reveal
    - infinite marquee untuk fear strip
-   - 3D tilt promise cards w/ animated gradient border
+   - compact promise cards with inline icons and headings
    ============================================================ */
 
 const fears = [
@@ -284,140 +284,41 @@ const PromiseCard: React.FC<{
   desc: string;
   index: number;
 }> = ({ num, icon, title, desc, index }) => {
-  const cardRef = useRef<HTMLDivElement>(null);
-  const mx = useMotionValue(0);
-  const my = useMotionValue(0);
-
-  const rxSpring = useSpring(useTransform(my, [-100, 100], [4, -4]), {
-    stiffness: 140,
-    damping: 18,
-  });
-  const rySpring = useSpring(useTransform(mx, [-100, 100], [-4, 4]), {
-    stiffness: 140,
-    damping: 18,
-  });
-
-  const sx = useMotionValue(-9999);
-  const sy = useMotionValue(-9999);
-  const cardSpotlight = useTransform(
-    [sx, sy] as unknown as MotionValue<number>[],
-    ([x, y]: number[]) =>
-      `radial-gradient(280px circle at ${x}px ${y}px, rgba(52, 211, 153, 0.14), transparent 60%)`
-  );
-
-  const handleMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const r = cardRef.current?.getBoundingClientRect();
-    if (!r) return;
-    const localX = e.clientX - r.left;
-    const localY = e.clientY - r.top;
-    mx.set(localX - r.width / 2);
-    my.set(localY - r.height / 2);
-    sx.set(localX);
-    sy.set(localY);
-  };
-  const handleLeave = () => {
-    mx.set(0);
-    my.set(0);
-    sx.set(-9999);
-    sy.set(-9999);
-  };
+  const reduceMotion = useReducedMotion();
 
   return (
-    <motion.div
-      ref={cardRef}
-      onMouseMove={handleMove}
-      onMouseLeave={handleLeave}
-      initial={{ opacity: 0, y: 28 }}
+    <motion.article
+      initial={reduceMotion ? false : { opacity: 0, y: 12 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-60px" }}
       transition={{
-        delay: index * 0.08,
-        duration: 0.6,
+        delay: reduceMotion ? 0 : index * 0.05,
+        duration: reduceMotion ? 0 : 0.35,
         ease: [0.21, 0.47, 0.32, 0.98],
       }}
-      style={{
-        transformStyle: "preserve-3d",
-        perspective: 1000,
-        rotateX: rxSpring,
-        rotateY: rySpring,
-      }}
-      className="group/card relative rounded-2xl [transform-style:preserve-3d]"
+      className="group/card min-w-0 rounded-xl border border-white/[0.08] bg-[#0B0F17]/80 p-4 transition-colors duration-200 hover:border-emerald-400/25 motion-reduce:transition-none"
     >
-      {/* Animated rotating gradient border — visible on hover */}
-      <div
-        className="pointer-events-none absolute -inset-px rounded-2xl opacity-40 group-hover/card:opacity-100 transition-opacity duration-500"
-        style={{
-          background:
-            "conic-gradient(from var(--angle, 0deg), rgba(52,211,153,0.55), rgba(20,184,166,0.04) 40%, rgba(52,211,153,0.55) 80%, rgba(20,184,166,0.04))",
-          WebkitMask:
-            "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
-          mask: "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
-          WebkitMaskComposite: "xor",
-          maskComposite: "exclude",
-          padding: "1px",
-          animation: "spin-border 9s linear infinite",
-        }}
-      />
-
-      {/* Card body */}
-      <div className="relative rounded-2xl bg-[#0B0F17]/95 backdrop-blur-xl p-5 sm:p-6 overflow-hidden h-full flex flex-col">
-        {/* Hover spotlight */}
-        <motion.div
-          className="pointer-events-none absolute inset-0"
-          style={{ background: cardSpotlight }}
-        />
-
-        {/* HUD corner ticks */}
-        <span className="pointer-events-none absolute top-2 left-2 h-2 w-2 border-l border-t border-emerald-400/40" />
-        <span className="pointer-events-none absolute bottom-2 right-2 h-2 w-2 border-r border-b border-emerald-400/40" />
-
-        {/* Top row: number + icon */}
-        <div className="relative flex items-start justify-between mb-5">
-          <span
-            className="text-[10px] tracking-[0.35em] uppercase font-mono font-bold text-emerald-300/80"
-            style={{ transform: "translateZ(15px)" }}
-          >
-            / {num}
-          </span>
-          <div
-            className="shrink-0 h-11 w-11 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.05] flex items-center justify-center group-hover/card:border-emerald-400/50 group-hover/card:bg-emerald-400/[0.1] group-hover/card:shadow-[0_0_22px_rgba(52,211,153,0.25)] transition-all duration-500"
-            style={{ transform: "translateZ(30px)" }}
-          >
-            <Icon icon={icon} className="text-[22px] text-emerald-300" />
-          </div>
-        </div>
-
-        {/* Title */}
-        <h3
-          className="relative text-[17px] sm:text-[18px] font-extrabold text-white leading-snug tracking-tight"
-          style={{ transform: "translateZ(20px)" }}
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden="true"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-400/[0.08] text-emerald-300"
         >
+          <Icon icon={icon} className="text-lg" />
+        </span>
+        <h4 className="min-w-0 flex-1 text-[15px] sm:text-base font-bold leading-snug tracking-tight text-white">
           {title}
-        </h3>
-
-        {/* Animated underline */}
-        <div className="relative mt-3 mb-3 h-px w-10 overflow-hidden bg-emerald-400/20">
-          <motion.div
-            className="absolute inset-y-0 w-full bg-gradient-to-r from-emerald-400/0 via-emerald-400 to-emerald-400/0"
-            animate={{ x: ["-100%", "200%"] }}
-            transition={{
-              duration: 2.8,
-              repeat: Infinity,
-              ease: "easeInOut",
-              repeatDelay: 2 + (index % 4) * 0.4,
-            }}
-          />
-        </div>
-
-        {/* Desc */}
-        <p
-          className="relative text-white/65 text-[13px] sm:text-[13.5px] leading-relaxed"
-          style={{ transform: "translateZ(10px)" }}
+        </h4>
+        <span
+          aria-hidden="true"
+          className="shrink-0 self-start pt-1 font-mono text-[10px] tabular-nums text-emerald-300/60"
         >
-          {desc}
-        </p>
+          {num}
+        </span>
       </div>
-    </motion.div>
+      <p className="mt-2.5 text-[13px] sm:text-[13.5px] leading-relaxed text-white/65">
+        {desc}
+      </p>
+    </motion.article>
   );
 };
 
@@ -444,22 +345,6 @@ const ExecutiveSummary: React.FC = () => {
       <motion.div
         style={{ top: beamY }}
         className="hidden lg:block absolute left-1/2 -translate-x-1/2 w-[2px] h-32 bg-gradient-to-b from-transparent via-emerald-400/60 to-transparent blur-[2px] z-[1]"
-      />
-
-      {/* Local keyframes for spinning border */}
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `
-        @keyframes spin-border {
-          to { --angle: 360deg; }
-        }
-        @property --angle {
-          syntax: '<angle>';
-          initial-value: 0deg;
-          inherits: false;
-        }
-      `,
-        }}
       />
 
       <div className="container relative z-10 mx-auto px-4 sm:px-6 max-w-screen-xl">
@@ -614,7 +499,7 @@ const ExecutiveSummary: React.FC = () => {
         </motion.div>
 
         {/* ───── EMPAT JANJI ───── */}
-        <div className="mt-10 sm:mt-14 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+        <div className="mt-6 sm:mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {promises.map((p, i) => (
             <PromiseCard
               key={p.num}
@@ -633,7 +518,7 @@ const ExecutiveSummary: React.FC = () => {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.7 }}
-          className="mt-14 sm:mt-16 max-w-3xl mx-auto text-center"
+          className="mt-8 sm:mt-10 max-w-3xl mx-auto text-center"
         >
           <p className="text-white/75 text-base sm:text-xl leading-relaxed font-light italic">
             &ldquo;Anda tidak perlu menjadi ahli hukum untuk membeli properti.{" "}

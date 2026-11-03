@@ -27,15 +27,25 @@ import { Icon } from "@iconify/react";
 import { isNumericOnly, type TempatDipilih } from "@/lib/searchTabs";
 import TempatSaranPanel, { type SaranTempatUi } from "./TempatSaranPanel";
 import ContohKetikan, { type JenisContoh } from "./ContohKetikan";
-import { parsePropertySearchQuery, surabayaRegionLabel } from "@/lib/propertySearchQuery";
+import {
+  parsePropertySearchQuery,
+  surabayaRegionLabel,
+} from "@/lib/propertySearchQuery";
 
 type Theme = "light" | "dark";
 
 const THEMES: Record<
   Theme,
   {
-    label: string; input: string; badgeId: string; badgeText: string;
-    badgeTempat: string; badgeContoh: string; clear: string; icon: string; chip: string;
+    label: string;
+    input: string;
+    badgeId: string;
+    badgeText: string;
+    badgeTempat: string;
+    badgeContoh: string;
+    clear: string;
+    icon: string;
+    chip: string;
   }
 > = {
   light: {
@@ -87,6 +97,9 @@ export default function KeywordField({
   onPilihTempat,
   kota = null,
   tx = "semua",
+  onComposingChange,
+  maxLength,
+  animatedPlaceholder = true,
 }: {
   id: string;
   label: string;
@@ -110,6 +123,10 @@ export default function KeywordField({
    * diklik — angka yang benar untuk halaman lain adalah janji yang meleset.
    */
   tx?: "semua" | "beli" | "sewa" | "lelang";
+  onComposingChange?: (composing: boolean) => void;
+  maxLength?: number;
+  /** Fixed field-specific hint for embedded search bars; Home keeps its examples. */
+  animatedPlaceholder?: boolean;
 }) {
   const t = THEMES[theme];
   const inputRef = useRef<HTMLInputElement>(null);
@@ -124,9 +141,10 @@ export default function KeywordField({
    */
   const [populer, setPopuler] = useState<SaranTempatUi[]>([]);
   /** Tawaran "cari sebagai alamat" + jumlahnya — lihat catatan di panel. */
-  const [alamat, setAlamat] = useState<{ teks: string; jumlah: number | null } | null>(
-    null,
-  );
+  const [alamat, setAlamat] = useState<{
+    teks: string;
+    jumlah: number | null;
+  } | null>(null);
   const [memuat, setMemuat] = useState(false);
   const [fokus, setFokus] = useState(false);
   const [aktif, setAktif] = useState(0);
@@ -140,12 +158,19 @@ export default function KeywordField({
 
   const trimmed = value.trim();
   const parsedQuery = parsePropertySearchQuery(trimmed);
-  const structuredQuery = Boolean(parsedQuery.nearby?.kelas) || (!parsedQuery.nearby &&
-    (parsedQuery.regions.length > 0 || parsedQuery.minHarga !== undefined || parsedQuery.maxHarga !== undefined));
+  const structuredQuery =
+    Boolean(parsedQuery.nearby?.kelas) ||
+    (!parsedQuery.nearby &&
+      (parsedQuery.regions.length > 0 ||
+        parsedQuery.minHarga !== undefined ||
+        parsedQuery.maxHarga !== undefined));
   // Cakupan wilayah sudah diketahui lokal. Saran tetap siap saat API jumlah
   // properti lambat, gagal, atau masih menjawab ketikan sebelumnya.
   const alamatAktif = structuredQuery
-    ? { teks: trimmed, jumlah: kueriTerakhir === trimmed ? alamat?.jumlah ?? null : null }
+    ? {
+        teks: trimmed,
+        jumlah: kueriTerakhir === trimmed ? (alamat?.jumlah ?? null) : null,
+      }
     : alamat;
   const mode: "id" | "alamat" | null =
     trimmed === "" ? null : isNumericOnly(trimmed) ? "id" : "alamat";
@@ -263,6 +288,7 @@ export default function KeywordField({
       modePopuler);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.nativeEvent.isComposing) return;
     if (e.key === "Enter" && (structuredQuery || parsedQuery.nearby)) {
       e.preventDefault();
       onSubmit();
@@ -351,7 +377,13 @@ export default function KeywordField({
                     : "Akan dicari sebagai alamat — atau sebagai tempat, kalau namanya dikenali"
               }
             >
-              {mode === "id" ? "ID" : parsedQuery.nearby ? "Dekat" : parsedQuery.regions.length ? "Wilayah" : "Alamat"}
+              {mode === "id"
+                ? "ID"
+                : parsedQuery.nearby
+                  ? "Dekat"
+                  : parsedQuery.regions.length
+                    ? "Wilayah"
+                    : "Alamat"}
             </span>
           )
         )}
@@ -379,7 +411,10 @@ export default function KeywordField({
             <Icon icon={dekat.icon} className="text-sm" />
           </span>
           <span className="truncate">{dekat.nama}</span>
-          <Icon icon="solar:close-circle-bold" className="shrink-0 text-sm opacity-60" />
+          <Icon
+            icon="solar:close-circle-bold"
+            className="shrink-0 text-sm opacity-60"
+          />
         </button>
       )}
 
@@ -401,11 +436,24 @@ export default function KeywordField({
             type="text"
             inputMode="text"
             autoComplete="off"
+            maxLength={maxLength}
+            onCompositionStart={() => onComposingChange?.(true)}
+            onCompositionEnd={() => onComposingChange?.(false)}
             value={value}
             // Placeholder asli dikosongkan saat contoh berputar mengambil alih
             // — dua teks di posisi yang sama akan saling menimpa.
-            placeholder={dekat ? "Tambah kata kunci (opsional)" : ""}
-            aria-describedby={`${id}-contoh`}
+            placeholder={
+              dekat
+                ? "Tambah kata kunci (opsional)"
+                : animatedPlaceholder
+                  ? ""
+                  : placeholder
+            }
+            aria-describedby={
+              animatedPlaceholder && !value && !dekat
+                ? `${id}-contoh`
+                : undefined
+            }
             onChange={(e) => onChange(e.target.value)}
             onFocus={() => setFokus(true)}
             // Jeda sebelum menutup: klik pada baris saran terjadi SETELAH blur,
@@ -416,13 +464,14 @@ export default function KeywordField({
             className={`w-full bg-transparent outline-none font-bold text-sm placeholder:font-medium truncate ${t.input}`}
           />
 
-          {!value && !dekat && (
+          {animatedPlaceholder && !value && !dekat && (
             <span
               id={`${id}-contoh`}
               aria-live="off"
               className="pointer-events-none absolute inset-0 flex items-center overflow-hidden"
             >
               <ContohKetikan
+                includeNearbyExamples={Boolean(onPilihTempat)}
                 onJenis={setJenisContoh}
                 className="ketikan-hantu truncate text-sm font-medium leading-none"
                 // Bagian yang diam sengaja lebih redup daripada bagian yang

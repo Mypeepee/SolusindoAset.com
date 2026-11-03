@@ -17,22 +17,25 @@ export const dynamic = "force-dynamic";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 3; // 3 hari
 
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: { code: string } },
 ) {
-  const origin = req.nextUrl.origin;
-  const code = normalizeAgentCode(decodeURIComponent(params?.code || ""));
+  // Next sudah men-decode route params; jangan decode dua kali (mis. "%").
+  const code = normalizeAgentCode(params?.code || "");
+
+  // Location relatif selalu mengikuti domain yang dibuka pengunjung. Origin
+  // Next bisa berupa localhost:3000 di balik reverse proxy / Cloudflare Tunnel.
+  const redirect = (location: string) =>
+    new NextResponse(null, { status: 307, headers: { Location: location } });
 
   // Kode tidak valid -> ke home tanpa atribusi.
   if (!code || !/^AG\d+$/.test(code)) {
-    return NextResponse.redirect(new URL("/", origin));
+    return redirect("/");
   }
 
-  const dest = new URL("/", origin);
-  dest.searchParams.set("ref", code);
-  dest.searchParams.set("daftar", "1");
+  const query = new URLSearchParams({ ref: code, daftar: "1" });
 
-  const res = NextResponse.redirect(dest);
+  const res = redirect(`/?${query}`);
   res.cookies.set("ref_code", code, {
     maxAge: COOKIE_MAX_AGE,
     path: "/",

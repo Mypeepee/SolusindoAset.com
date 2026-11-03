@@ -1,0 +1,962 @@
+/* Planner business variant. Shared DialogFrame, Input and SearchSelect own behavior. */
+.marketing-plan-editor,
+.marketing-date-popover,
+.marketing-property-dropdown.marketing-property-dropdown {
+  --marketing-line: rgb(172 218 194 / 0.14);
+  --marketing-muted: #a8bfb2;
+  --marketing-accent: #99e39e;
+  --plan-core: #0c1c16;
+  --plan-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  box-shadow: inset 0 0 0 5px rgb(185 230 204 / 0.025), inset 0 1px 0 rgb(220 255 234 / 0.08);
+}
+.marketing-modal.marketing-plan-editor {
+  display: flex;
+  flex-direction: column;
+  width: min(860px, calc(100vw - 40px));
+  max-height: calc(100dvh - 40px);
+  overflow: hidden;
+  border-radius: 28px;
+  background: #10231c;
+  animation: plan-dialog-enter 260ms var(--plan-ease) both;
+}
+.marketing-plan-editor > form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  max-height: inherit;
+  overflow: hidden;
+}
+.marketing-plan-editor .marketing-plan-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.marketing-plan-editor .marketing-plan-heading {
+  flex-shrink: 0;
+  padding: 28px 80px 24px 28px;
+}
+.marketing-plan-editor .marketing-eyebrow {
+  display: inline-flex;
+  margin: 0;
+  padding: 4px 9px;
+  border-radius: 99px;
+  background: rgb(153 227 158 / 0.07);
+  color: #b1d7bd;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+.marketing-plan-editor .marketing-plan-heading h2 {
+  margin: 12px 0 6px;
+  font-size: 27px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.8px;
+  outline: none;
+}
+.marketing-plan-editor .marketing-plan-heading > .marketing-muted {
+  margin: 0;
+  font-size: 12px;
+}
+.marketing-plan-close {
+  position: absolute;
+  top: 22px;
+  right: 22px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(204 244 219 / 0.045);
+  box-shadow: inset 0 0 0 1px var(--marketing-line);
+  color: #c8dacd;
+}
+.marketing-plan-editor .marketing-plan-form {
+  display: grid;
+  grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr);
+  gap: 22px 28px;
+  min-height: 0;
+  margin: 0;
+  padding: 4px 28px 22px;
+}
+.marketing-plan-editor .marketing-plan-form > :is(.marketing-error, .marketing-footnote) {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.marketing-plan-editor .marketing-plan-form > .marketing-footnote {
+  padding-top: 2px;
+  max-width: 660px;
+  font-size: 11px;
+}
+.marketing-plan-editor .marketing-plan-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #e2eee6;
+}
+.marketing-plan-section-title > svg {
+  flex-shrink: 0;
+  color: #a3c5b0;
+}
+.marketing-plan-section-title > span {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--marketing-muted);
+}
+.marketing-plan-editor .marketing-plan-schedule {
+  min-width: 0;
+  background: transparent;
+  padding-right: 24px;
+  border-right: 1px solid var(--marketing-line);
+}
+.marketing-plan-editor .marketing-plan-datetime {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.marketing-plan-editor .marketing-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.marketing-plan-editor .marketing-field > label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0;
+  font-size: 11px;
+  color: var(--marketing-muted);
+  font-weight: 500;
+}
+.marketing-plan-editor .marketing-field > label small {
+  font-size: 10px;
+  font-weight: 400;
+}
+.marketing-plan-input-shell {
+  padding: 4px;
+  border-radius: 16px;
+  background: rgb(195 237 211 / 0.035);
+  box-shadow: inset 0 0 0 1px var(--marketing-line);
+}
+.marketing-plan-input-shell:has([aria-invalid="true"]) {
+  box-shadow: inset 0 0 0 1px #fda4af;
+}
+.marketing-plan-editor .marketing-date-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--plan-core);
+  box-shadow: inset 0 1px 0 rgb(226 255 237 / 0.035);
+  color: #f1faf5;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+.marketing-date-trigger > svg {
+  flex-shrink: 0;
+  color: var(--marketing-muted);
+}
+.marketing-plan-editor .marketing-date-trigger:hover:not(:disabled) {
+  background: #163326;
+}
+.marketing-date-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(2 12 7 / 0.24);
+}
+.marketing-date-popover {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--marketing-line);
+  border-radius: 24px;
+  background: #10231c;
+  color: #e5f4e9;
+  outline: none;
+  animation: marketing-date-enter 180ms var(--plan-ease) both;
+}
+.marketing-date-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+  padding: 12px 12px 12px 20px;
+}
+.marketing-date-heading strong,
+.marketing-date-heading small {
+  display: block;
+}
+.marketing-date-heading strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.marketing-date-heading small {
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--marketing-muted);
+}
+.marketing-date-popover button {
+  display: grid;
+  place-items: center;
+  min-width: 40px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #d3e7d9;
+  cursor: pointer;
+  transition: transform 180ms var(--plan-ease), opacity 180ms var(--plan-ease);
+}
+.marketing-date-popover button:hover:not(:disabled) {
+  background: rgb(153 227 158 / 0.09);
+}
+.marketing-date-popover button:active:not(:disabled) {
+  transform: scale(0.95);
+}
+.marketing-date-popover button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.marketing-date-popover :is(button, [role="option"]):focus-visible {
+  outline: 2px solid #cbd5e1;
+  outline-offset: -3px;
+}
+.marketing-date-calendar {
+  min-height: 0;
+  margin: 0 6px 6px;
+  padding: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: 18px;
+  background: var(--plan-core);
+  box-shadow: inset 0 1px 0 rgb(220 255 234 / 0.06);
+  outline: none;
+}
+.marketing-date-calendar .react-datepicker {
+  display: block;
+  position: relative;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.marketing-date-calendar .react-datepicker__month-container {
+  float: none;
+  width: 100%;
+}
+.marketing-date-calendar .react-datepicker__header {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.marketing-date-month {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.marketing-date-month h3 {
+  margin: 0 0 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+.marketing-date-month > div {
+  display: flex;
+  gap: 2px;
+}
+.marketing-date-calendar :is(.react-datepicker__day-names, .react-datepicker__week) {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  align-items: center;
+  margin: 0;
+}
+.marketing-date-calendar .react-datepicker__month {
+  margin: 4px 0 0;
+}
+.marketing-date-calendar .react-datepicker__day-name {
+  width: auto;
+  margin: 0;
+  padding-block: 8px;
+  color: var(--marketing-muted);
+  text-align: center;
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+.marketing-date-calendar .react-datepicker__day {
+  display: grid;
+  place-items: center;
+  width: auto;
+  min-height: 40px;
+  margin: 2px 1px;
+  border-radius: 12px;
+  background: transparent;
+  color: #d3e7d9;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: transform 160ms var(--plan-ease), opacity 160ms var(--plan-ease);
+}
+.marketing-date-calendar .react-datepicker__day:hover:not(.react-datepicker__day--disabled),
+.marketing-date-calendar .react-datepicker__day--keyboard-selected {
+  background: rgb(153 227 158 / 0.1);
+}
+.marketing-date-calendar .react-datepicker__day--outside-month {
+  color: #819c8c;
+}
+.marketing-date-calendar .react-datepicker__day--today {
+  text-decoration: underline;
+  text-underline-offset: 5px;
+}
+.marketing-date-calendar .react-datepicker__day--selected,
+.marketing-date-calendar .react-datepicker__day--selected:hover {
+  background: var(--marketing-accent);
+  color: #112819;
+  box-shadow: inset 0 1px 0 rgb(240 255 241 / 0.4);
+  font-weight: 600;
+}
+.marketing-date-calendar .react-datepicker__day--disabled {
+  color: #62796a;
+  cursor: not-allowed;
+}
+.marketing-date-calendar :is(.react-datepicker__aria-live, .react-datepicker__sr-only) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@keyframes marketing-date-enter {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .marketing-date-popover,
+  .marketing-date-popover * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+.marketing-plan-editor .marketing-plan-input-shell input {
+  height: 46px;
+  min-height: 46px;
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--plan-core);
+  box-shadow: inset 0 1px 0 rgb(226 255 237 / 0.035);
+  font-size: 16px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  backdrop-filter: none;
+  transition: none;
+}
+.marketing-plan-editor .marketing-plan-input-shell .group > div,
+.marketing-property-dropdown [data-search-select-search] .group > div {
+  display: none;
+}
+.marketing-plan-time-shell {
+  position: relative;
+}
+.marketing-plan-time-shell > svg {
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--marketing-muted);
+  pointer-events: none;
+}
+.marketing-plan-editor .marketing-plan-time-shell input {
+  padding-right: 42px;
+}
+.marketing-plan-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.marketing-plan-shortcuts button {
+  min-width: 60px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--marketing-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.marketing-plan-shortcuts button[aria-pressed="true"] {
+  background: rgb(153 227 158 / 0.09);
+  color: #c4edcc;
+  box-shadow: inset 0 0 0 1px rgb(153 227 158 / 0.12);
+}
+.marketing-plan-editor #marketing-plan-time-help {
+  min-height: 32px;
+  margin: 12px 0 16px;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.marketing-plan-schedule-preview {
+  display: flex;
+  gap: 10px;
+  padding: 15px;
+  border-radius: 18px;
+  background: var(--plan-core);
+  box-shadow: 0 0 0 4px rgb(195 237 211 / 0.025), inset 0 1px 0 rgb(226 255 237 / 0.06);
+}
+.marketing-plan-schedule-preview > svg {
+  margin-top: 2px;
+  flex-shrink: 0;
+  color: #9fbea9;
+}
+.marketing-plan-schedule-preview :is(span, strong, b) {
+  display: block;
+}
+.marketing-plan-schedule-preview span {
+  font-size: 10px;
+  color: var(--marketing-muted);
+}
+.marketing-plan-schedule-preview strong {
+  margin-top: 5px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.marketing-plan-schedule-preview b {
+  margin-top: 4px;
+  font-size: 28px;
+  line-height: 1.3;
+  font-weight: 500;
+  letter-spacing: -0.8px;
+  font-variant-numeric: tabular-nums;
+  color: #c0ecc8;
+}
+.marketing-plan-schedule-preview small {
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--marketing-muted);
+}
+.marketing-plan-targets {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  min-width: 0;
+}
+.marketing-plan-editor .marketing-plan-channel-options {
+  display: block;
+  min-width: 0;
+}
+.marketing-plan-editor :is(.marketing-plan-channel-options, .marketing-plan-property-mode) > legend {
+  width: 100%;
+  padding: 0;
+  margin: 0;
+}
+.marketing-plan-channel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.marketing-plan-channel-grid > label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 96px;
+  padding: 14px 10px;
+  border-radius: 18px;
+  background: var(--plan-core);
+  box-shadow: 0 0 0 4px rgb(195 237 211 / 0.025), inset 0 0 0 1px var(--marketing-line);
+  cursor: pointer;
+}
+.marketing-plan-channel-grid > label[data-selected="true"] {
+  background: #173d2c;
+  box-shadow: 0 0 0 4px rgb(153 227 158 / 0.035), inset 0 0 0 1px rgb(153 227 158 / 0.32), inset 0 1px 0 rgb(211 250 220 / 0.1);
+}
+.marketing-plan-editor .marketing-plan-channel-grid input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.marketing-plan-channel-grid > label:has(:focus-visible) {
+  outline: 2px solid #cbd5e1;
+  outline-offset: 4px;
+}
+.marketing-plan-channel-grid > label:has(:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.marketing-plan-channel-grid > label:has(:disabled) input {
+  cursor: not-allowed;
+}
+.marketing-plan-channel-icon {
+  flex-shrink: 0;
+  color: #c8e5d1;
+}
+.marketing-plan-channel-grid strong {
+  font-size: 12px;
+}
+.marketing-plan-channel-grid small {
+  font-size: 10px;
+  line-height: 1.4;
+}
+.marketing-plan-channel-check {
+  position: absolute;
+  right: 9px;
+  top: 9px;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgb(174 215 189 / 0.4);
+  color: transparent;
+}
+label[data-selected="true"] .marketing-plan-channel-check {
+  background: var(--marketing-accent);
+  color: #112819;
+  box-shadow: none;
+}
+.marketing-plan-editor .marketing-plan-mode-options {
+  gap: 3px;
+  padding: 4px;
+  margin-bottom: 16px;
+  border-radius: 14px;
+  background: var(--plan-core);
+  box-shadow: inset 0 0 0 1px var(--marketing-line);
+}
+.marketing-plan-editor .marketing-plan-mode-options label {
+  gap: 7px;
+  justify-content: center;
+  min-height: 44px;
+  padding: 8px 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  font-size: 11px;
+  color: var(--marketing-muted);
+}
+.marketing-plan-editor .marketing-plan-mode-options label:has(:checked) {
+  background: #244334;
+  color: #e4f4e8;
+  box-shadow: inset 0 1px 0 rgb(209 250 222 / 0.08);
+}
+.marketing-plan-editor .marketing-plan-mode-options input {
+  width: 13px;
+  height: 13px;
+}
+.marketing-plan-auto {
+  padding: 20px 16px;
+  border-radius: 18px;
+  background: rgb(9 24 17 / 0.4);
+  text-align: center;
+}
+.marketing-plan-auto > span {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 12px;
+  border-radius: 14px;
+  background: rgb(153 227 158 / 0.07);
+  box-shadow: 0 0 0 4px rgb(153 227 158 / 0.02), inset 0 1px 0 rgb(211 250 220 / 0.07);
+  color: #b9dfc2;
+}
+.marketing-plan-auto strong {
+  font-size: 12px;
+  font-weight: 500;
+}
+.marketing-plan-auto .marketing-muted {
+  margin: 6px auto 0;
+  max-width: 255px;
+  font-size: 11px;
+}
+.marketing-plan-properties .marketing-property-trigger {
+  padding: 16px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--plan-core, #0c1c16);
+  box-shadow: 0 0 0 4px rgb(195 237 211 / 0.025), inset 0 0 0 1px rgb(172 218 194 / 0.2);
+}
+.marketing-plan-properties[data-selected="true"] .marketing-property-trigger {
+  box-shadow: 0 0 0 4px rgb(153 227 158 / 0.025), inset 0 0 0 1px rgb(153 227 158 / 0.3);
+}
+.marketing-property-trigger [data-search-select-value] {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.marketing-property-trigger [data-search-select-value-label] {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.marketing-property-trigger [data-search-select-value-description] {
+  display: block;
+  margin-top: 4px;
+  font-weight: 400;
+}
+[data-search-select-value-description] > span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--marketing-muted);
+}
+[data-search-select-value-description] :is(b, small) {
+  display: block;
+  margin-top: 6px;
+}
+[data-search-select-value-description] b {
+  font-size: 13px;
+  font-weight: 600;
+  color: #d8f1df;
+  font-variant-numeric: tabular-nums;
+}
+[data-search-select-value-description] small {
+  font-size: 10px;
+  color: var(--marketing-muted);
+}
+.marketing-plan-properties .marketing-property-trigger .marketing-property-photo {
+  width: 56px;
+  height: 70px;
+  border-radius: 10px;
+}
+.marketing-plan-editor .marketing-plan-footer {
+  position: static;
+  flex-shrink: 0;
+  padding: 18px 28px;
+  background: #10231c;
+}
+.marketing-plan-editor .marketing-plan-footer .marketing-action {
+  min-height: 46px;
+  border-radius: 99px;
+  padding: 10px 20px;
+  font-size: 12px;
+}
+.marketing-plan-editor .marketing-plan-footer .marketing-action-primary {
+  min-width: 180px;
+  padding-right: 8px;
+}
+.marketing-plan-save-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-left: 8px;
+  border-radius: 50%;
+  background: rgb(12 44 20 / 0.09);
+  transition: transform 220ms var(--plan-ease);
+}
+.marketing-plan-editor .marketing-action-primary:hover .marketing-plan-save-icon {
+  transform: translateX(2px);
+}
+.marketing-plan-editor :is(button, .marketing-plan-channel-grid > label, .marketing-plan-mode-options > label),
+.marketing-property-dropdown.marketing-property-dropdown button {
+  transition: transform 180ms cubic-bezier(0.32, 0.72, 0, 1), opacity 180ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.marketing-plan-editor :is(button, .marketing-plan-channel-grid > label, .marketing-plan-mode-options > label):active:not(:disabled) {
+  transform: scale(0.98);
+}
+.marketing-plan-editor :is(.marketing-plan-close, .marketing-plan-shortcuts button):hover:not(:disabled) {
+  background: rgb(153 227 158 / 0.1);
+  color: #e2f4e7;
+}
+.marketing-plan-editor .marketing-plan-channel-grid > label:hover:not(:has(:disabled)),
+.marketing-plan-editor .marketing-property-trigger:hover:not(:disabled) {
+  background: #1b392a;
+}
+.marketing-plan-editor button:disabled {
+  opacity: 0.4;
+}
+.marketing-plan-editor .marketing-plan-discard {
+  padding: 40px 28px 28px;
+}
+.marketing-property-dropdown.marketing-property-dropdown {
+  width: min(860px, calc(100vw - 40px));
+  border-radius: 28px;
+  background: #10231c;
+  font-family: inherit;
+}
+.marketing-property-dropdown.marketing-property-dropdown header {
+  padding: 24px 76px 0 26px;
+}
+.marketing-property-dropdown.marketing-property-dropdown header h2 {
+  font-size: 23px;
+  font-weight: 600;
+  letter-spacing: -0.6px;
+}
+.marketing-property-dropdown.marketing-property-dropdown [data-search-select-search] {
+  padding: 16px 26px;
+}
+.marketing-property-dropdown.marketing-property-dropdown input {
+  border: 0;
+  border-radius: 14px;
+  background: var(--plan-core);
+  backdrop-filter: none;
+  transition: none;
+}
+.marketing-property-dropdown input::-webkit-search-cancel-button {
+  display: none;
+}
+.marketing-property-dropdown.marketing-property-dropdown [data-search-select-scroll] {
+  padding: 8px 14px 16px;
+}
+.marketing-property-dropdown.marketing-property-dropdown [role="option"] {
+  gap: 16px;
+  min-height: 100px;
+  padding: 16px 36px 16px 12px;
+  border: 0;
+  border-radius: 16px;
+  align-items: center;
+}
+.marketing-property-dropdown.marketing-property-dropdown [role="option"] + [role="option"] {
+  margin-top: 2px;
+}
+.marketing-property-dropdown.marketing-property-dropdown [role="option"]:hover:not(:disabled) {
+  background: rgb(153 227 158 / 0.07);
+}
+.marketing-property-dropdown.marketing-property-dropdown [role="option"][aria-selected="true"] {
+  background: rgb(153 227 158 / 0.11);
+  box-shadow: inset 0 0 0 1px rgb(153 227 158 / 0.2);
+}
+.marketing-property-dropdown [data-search-select-facts] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 20px;
+  row-gap: 3px;
+}
+.marketing-property-dropdown [data-search-select-label] {
+  grid-column: 1;
+  grid-row: 1;
+  font-size: 13px;
+}
+.marketing-property-dropdown.marketing-property-dropdown [data-search-select-description] {
+  display: contents;
+}
+.marketing-property-dropdown .marketing-property-address {
+  grid-column: 1;
+  grid-row: 2;
+  -webkit-line-clamp: 1;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--marketing-muted);
+}
+.marketing-property-dropdown .marketing-property-price {
+  grid-column: 2;
+  grid-row: 1 / 4;
+  align-self: center;
+  margin: 0;
+  font-size: 13px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.marketing-property-dropdown .marketing-property-meta {
+  grid-column: 1;
+  grid-row: 3;
+  font-size: 10px;
+  color: #91aa9c;
+  font-variant-numeric: tabular-nums;
+}
+.marketing-property-dropdown .marketing-property-reason {
+  grid-column: 1 / -1;
+  margin: 3px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.marketing-property-dropdown .marketing-property-photo {
+  width: 64px;
+  height: 64px;
+  padding: 3px;
+  border-radius: 15px;
+  background: rgb(195 237 211 / 0.055);
+  box-shadow: inset 0 0 0 1px var(--marketing-line);
+}
+.marketing-property-dropdown .marketing-property-photo img {
+  border-radius: 12px;
+}
+.marketing-property-dropdown.marketing-property-dropdown [data-search-select-footer] {
+  border: 0;
+}
+.marketing-property-dropdown.marketing-property-dropdown [data-search-select-footer] button {
+  border-radius: 99px;
+  background: rgb(153 227 158 / 0.055);
+}
+.marketing-property-dropdown.marketing-property-dropdown [data-search-select-status] {
+  color: var(--marketing-muted);
+}
+@keyframes plan-dialog-enter {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)) scale(0.99); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@media (max-width: 767px) {
+  .marketing-plan-editor .marketing-plan-form {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .marketing-plan-editor .marketing-plan-schedule {
+    padding-right: 0;
+    border: 0;
+  }
+  .marketing-plan-editor .marketing-plan-datetime {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    gap: 14px;
+  }
+  .marketing-plan-editor .marketing-plan-section-title {
+    margin-bottom: 14px;
+  }
+  .marketing-plan-editor #marketing-plan-time-help {
+    min-height: 0;
+    margin: 8px 0 0;
+  }
+  .marketing-plan-schedule-preview {
+    display: none;
+  }
+  .marketing-plan-targets {
+    gap: 24px;
+  }
+  .marketing-plan-channel-grid > label {
+    min-height: 80px;
+    padding: 14px;
+  }
+}
+@media (max-width: 639px) {
+  .marketing-modal.marketing-plan-editor {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    border-radius: 22px;
+  }
+  .marketing-plan-editor .marketing-plan-heading {
+    padding: 22px 66px 22px 20px;
+  }
+  .marketing-plan-editor .marketing-plan-heading h2 {
+    font-size: 23px;
+  }
+  .marketing-plan-editor .marketing-plan-heading > .marketing-muted {
+    font-size: 11px;
+  }
+  .marketing-plan-close {
+    top: 16px;
+    right: 14px;
+  }
+  .marketing-plan-editor .marketing-plan-form {
+    padding: 4px 20px 20px;
+  }
+  .marketing-plan-shortcuts button {
+    min-width: 0;
+    padding: 8px 7px;
+    font-size: 10px;
+  }
+  .marketing-plan-editor .marketing-plan-footer {
+    gap: 10px;
+    padding: 14px 20px max(14px, env(safe-area-inset-bottom));
+  }
+  .marketing-plan-editor .marketing-plan-footer .marketing-action {
+    flex: 0 1 auto;
+    padding-inline: 16px;
+  }
+  .marketing-plan-editor .marketing-plan-footer .marketing-action-primary {
+    flex: 1;
+    min-width: 0;
+    padding-right: 8px;
+  }
+  .marketing-property-dropdown.marketing-property-dropdown {
+    width: calc(100vw - 16px);
+    border-radius: 22px;
+  }
+  .marketing-property-dropdown.marketing-property-dropdown header {
+    padding: 18px 68px 0 18px;
+  }
+  .marketing-property-dropdown.marketing-property-dropdown header h2 {
+    font-size: 20px;
+  }
+  .marketing-property-dropdown.marketing-property-dropdown [data-search-select-search] {
+    padding: 12px 16px;
+  }
+  .marketing-property-dropdown.marketing-property-dropdown [data-search-select-scroll] {
+    padding: 6px 8px 12px;
+  }
+  .marketing-property-dropdown.marketing-property-dropdown [role="option"] {
+    min-height: 112px;
+    gap: 12px;
+    padding: 12px 26px 12px 8px;
+    align-items: flex-start;
+  }
+  .marketing-property-dropdown [data-search-select-facts] {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px;
+  }
+  .marketing-property-dropdown [data-search-select-label] {
+    font-size: 12px;
+  }
+  .marketing-property-dropdown .marketing-property-address {
+    -webkit-line-clamp: 2;
+    font-size: 11px;
+  }
+  .marketing-property-dropdown .marketing-property-price {
+    grid-column: 1;
+    grid-row: 3;
+    margin-top: 2px;
+    font-size: 12px;
+  }
+  .marketing-property-dropdown .marketing-property-meta {
+    grid-row: 4;
+  }
+  .marketing-property-dropdown .marketing-property-photo {
+    width: 52px;
+    height: 58px;
+    border-radius: 13px;
+  }
+  .marketing-property-dropdown .marketing-property-photo img {
+    border-radius: 10px;
+  }
+}
+@media (max-width: 359px) {
+  .marketing-plan-editor .marketing-plan-datetime {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .marketing-plan-channel-grid > label {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .marketing-modal.marketing-plan-editor,
+  .marketing-plan-editor *,
+  .marketing-property-dropdown * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

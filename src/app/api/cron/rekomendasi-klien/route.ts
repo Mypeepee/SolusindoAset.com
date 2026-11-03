@@ -59,6 +59,7 @@ import {
 } from "@/lib/klienMatch";
 import { ringkasGrup, kunciGrup, rapikanAlamat, saringAlasan } from "@/lib/klienRingkas";
 import { siapkanDekat, dekatUntuk, type PrefDekat } from "@/lib/klienDekat";
+import { siapkanDiskon, kunciDiskon } from "@/lib/klienMatch";
 import { muatPengecualian, gabung } from "@/lib/klienPengecualian";
 import { urlListing, rupiah } from "@/lib/klienPesan";
 import { buatTiket } from "@/lib/asistenToken";
@@ -571,6 +572,7 @@ async function muatPreferensi() {
  *  tiap pemindai; `keKriteria()` membacanya tanpa perlu menerima parameter
  *  tambahan di setiap pemanggil. */
 let petaDekatPutaran = new Map<string, import("@/lib/klienMatch").KriteriaDekat>();
+let petaDiskonPutaran = new Map<string, ReadonlySet<string>>();
 
 function keKriteria(p: BarisPref): KriteriaMatch {
   return {
@@ -589,6 +591,9 @@ function keKriteria(p: BarisPref): KriteriaMatch {
     legalitas: p.legalitas,
     dekat: dekatUntuk(p as PrefDekat, petaDekatPutaran),
     alamat_teks: p.alamat_teks,
+    diskon_jenis: p.diskon_jenis,
+    diskon_persen: p.diskon_persen,
+    diskon_ids: petaDiskonPutaran.get(kunciDiskon(p)),
   };
 }
 
@@ -673,6 +678,7 @@ async function pindaiAsetBaru(dryRun: boolean) {
 
   const prefs = await muatPreferensi();
   petaDekatPutaran = await siapkanDekat(prefs);
+  petaDiskonPutaran = await siapkanDiskon(prefs);
   if (prefs.length === 0) {
     /* Tidak ada preferensi sama sekali → tetap majukan tanda airnya. Kalau
        tidak, listing yang sama akan dipindai ulang tiap dua jam selamanya. */
@@ -779,6 +785,7 @@ async function pindaiPreferensiBaru(dryRun: boolean) {
   });
   if (prefs.length === 0) return kosong;
   petaDekatPutaran = await siapkanDekat(prefs);
+  petaDiskonPutaran = await siapkanDiskon(prefs);
 
   const petaDikecualikan = await muatDikecualikan([...new Set(prefs.map(p => p.id_klien))]);
   const perKlien = new Map<string, TemuanKlien>();

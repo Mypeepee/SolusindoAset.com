@@ -190,6 +190,10 @@ export interface MobileSearchDockProps {
   kotaKonteks?: string | null;
   theme?: Theme;
   className?: string;
+  maxLocationLevel?: "kota" | "kelurahan";
+  landOnly?: boolean;
+  showTransactionTabs?: boolean;
+  onComposingChange?: (composing: boolean) => void;
 }
 
 export default function MobileSearchDock({
@@ -207,6 +211,10 @@ export default function MobileSearchDock({
   kotaKonteks = null,
   theme = "dark",
   className = "",
+  maxLocationLevel = "kelurahan",
+  landOnly = false,
+  showTransactionTabs = true,
+  onComposingChange,
 }: MobileSearchDockProps) {
   const t = THEMES[theme];
   const rent = isRentTab(tab);
@@ -430,6 +438,7 @@ export default function MobileSearchDock({
   };
 
   const submitAndClose = () => {
+    if (Object.values(errors).some(Boolean)) return;
     closeSheet();
     onSubmit();
   };
@@ -676,12 +685,12 @@ export default function MobileSearchDock({
                   {/* Pill transaksi ikut masuk sheet: mengganti tab mengubah
                       kriteria yang tampil, jadi harus bisa diubah dari sini
                       tanpa menutup sheet lebih dulu. */}
-                  <TransactionTabs
+                  {showTransactionTabs && <TransactionTabs
                     active={tab}
                     onChange={onTabChange}
                     pillId="txTabPillSheet"
                     className="mb-4"
-                  />
+                  />}
                 </div>
 
                 {/* --- BODY --- */}
@@ -728,6 +737,9 @@ export default function MobileSearchDock({
                         ref={keywordRef}
                         type="text"
                         autoComplete="off"
+                        maxLength={onComposingChange ? 150 : undefined}
+                        onCompositionStart={() => onComposingChange?.(true)}
+                        onCompositionEnd={() => onComposingChange?.(false)}
                         value={state.keyword}
                         // Dikosongkan saat contoh mengetik mengambil alih —
                         // dua teks di posisi yang sama akan saling menimpa.
@@ -741,6 +753,7 @@ export default function MobileSearchDock({
                         // tap-nya jatuh ke ruang kosong.
                         onBlur={() => setTimeout(() => setFokusKeyword(false), 140)}
                         onKeyDown={(e) => {
+                          if (e.nativeEvent.isComposing) return;
                           if (e.key !== "Enter") return;
                           // Enter saat ADA YANG DIKETIK dan ada saran = ambil
                           // yang teratas; di layar sentuh itu yang paling
@@ -767,6 +780,7 @@ export default function MobileSearchDock({
                           className="pointer-events-none absolute inset-y-0 left-3 right-24 flex items-center overflow-hidden"
                         >
                           <ContohKetikan
+                            includeNearbyExamples={Boolean(onPilihTempat)}
                             onJenis={setJenisContoh}
                             className="ketikan-hantu truncate text-sm font-medium leading-none"
                             kelasAwal={
@@ -860,6 +874,7 @@ export default function MobileSearchDock({
                     "solar:map-point-bold-duotone",
                     <div className={`rounded-xl border px-3 py-2.5 ${t.input}`}>
                       <LocationPicker
+                        maxLevel={maxLocationLevel}
                         theme={theme}
                         label=""
                         value={state.locations}
@@ -974,7 +989,7 @@ export default function MobileSearchDock({
                         rangeInputs("minLt", "maxLt", "lt", "Min", "Max", "Luas tanah")
                       )}
 
-                      {section(
+                      {!landOnly && section(
                         "Luas Bangunan (m²)",
                         "solar:home-bold-duotone",
                         rangeInputs("minLb", "maxLb", "lb", "Min", "Max", "Luas bangunan"),
@@ -1054,6 +1069,7 @@ export default function MobileSearchDock({
               // "deket X" tidak disebut di sini, di mobile ia praktis tidak
               // pernah ditemukan.
               <ContohKetikan
+                includeNearbyExamples={Boolean(onPilihTempat)}
                 awalan={emptySummaryFor(tab)}
                 className="block truncate text-sm font-semibold leading-none"
                 kelasAwal={t.barPlaceholder}

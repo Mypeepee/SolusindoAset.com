@@ -2,6 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Application-owned scroll surfaces inherit one visible scrollbar baseline. */
+:root {
+  --app-scrollbar-thumb: #475569;
+  --app-scrollbar-track: #0b1018;
+  --app-scrollbar-hover: #64748b;
+  --app-scrollbar-active: #94a3b8;
+  scrollbar-color: var(--app-scrollbar-thumb) var(--app-scrollbar-track);
+  scrollbar-width: thin;
+}
+* { scrollbar-color: var(--app-scrollbar-thumb) var(--app-scrollbar-track); scrollbar-width: thin; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: var(--app-scrollbar-track); }
+*::-webkit-scrollbar-thumb { border: 2px solid var(--app-scrollbar-track); border-radius: 8px; background: var(--app-scrollbar-thumb); }
+*::-webkit-scrollbar-thumb:hover { background: var(--app-scrollbar-hover); }
+*::-webkit-scrollbar-thumb:active { background: var(--app-scrollbar-active); }
+@media (forced-colors: active) {
+  :root, * { scrollbar-color: auto; scrollbar-width: auto; }
+}
+
 /* ── DocButton loading spinner keyframes ── */
 @keyframes sp-rotate {
   to { transform: rotate(360deg); }

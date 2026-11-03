@@ -1,0 +1,28 @@
+{
+  "profile": "product-admin",
+  "sourceRoots": ["src/app/dashboard/pemasaran"],
+  "locale": "id-ID",
+  "canonicalMap": "docs/pemasaran-ux.md",
+  "requiredCapabilities": [
+    "Select/Listbox",
+    "Form",
+    "Scrollbar",
+    "Toast",
+    "CRUD"
+  ],
+  "ownership": {
+    "Select/Listbox": "authored",
+    "Date": "authored"
+  },
+  "requiredCommands": ["unit", "e2e"],
+  "commands": {
+    "unit": "npm run test:marketing",
+    "e2e": "node scripts/verify-marketing-browser.mjs"
+  },
+  "evidence": {
+    "crudFullFlow": "scripts/verify-marketing-browser.mjs",
+    "failurePaths": "scripts/test-marketing.cjs",
+    "campaignFullFlow": "scripts/verify-marketing-campaigns-browser.mjs",
+    "campaignTransactions": "scripts/verify-marketing-campaigns-db.cjs"
+  }
+}

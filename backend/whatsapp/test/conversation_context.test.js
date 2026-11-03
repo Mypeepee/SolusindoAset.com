@@ -14,7 +14,7 @@ import { isBuyerCriteria, planPropertyLookup, getPropertyKnowledge } from '../..
 
 const user = (content) => ({ role: 'user', content });
 const assistant = (content) => ({ role: 'assistant', content });
-const initialHistory = () => [user(OPENING), assistant(auctionCheckReply(ORIGINAL, { status: 'simulated' }))];
+const initialHistory = () => [user(OPENING), assistant(auctionCheckReply(ORIGINAL, { status: 'simulated' }, { offerBackup: true }))];
 const config = { transport: 'baileys', maxSessions: 10, maxPending: 20, maxPendingPerPhone: 10, maxDedup: 100, sessionTtlMs: 86400000 };
 
 for (const scenario of scenarios) test(`context simulation: ${scenario.name}`, () => simulateDialogue(scenario));

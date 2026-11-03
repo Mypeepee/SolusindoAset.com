@@ -49,6 +49,7 @@ async function waitAssets(): Promise<void> {
 export async function renderStoryPoster(
   html: string,
   prepare?: (page: any) => Promise<void>,
+  dimensions: { width: number; height: number; deviceScaleFactor?: number } = { width: 1080, height: 1920 },
 ): Promise<Buffer> {
   const puppeteer = await import("puppeteer");
   let browser: any;
@@ -56,9 +57,9 @@ export async function renderStoryPoster(
     browser = await puppeteer.default.launch({ headless: true, args: LAUNCH_ARGS });
     const page = await browser.newPage();
     await page.setViewport({
-      width: 1080,
-      height: 1920,
-      deviceScaleFactor: DEVICE_SCALE_FACTOR,
+      width: dimensions.width,
+      height: dimensions.height,
+      deviceScaleFactor: dimensions.deviceScaleFactor ?? DEVICE_SCALE_FACTOR,
     });
     await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 30_000 });
 
@@ -74,7 +75,7 @@ export async function renderStoryPoster(
       : ((await page.screenshot({
           type: "jpeg",
           quality: POSTER_JPEG_QUALITY,
-          clip: { x: 0, y: 0, width: 1080, height: 1920 },
+          clip: { x: 0, y: 0, width: dimensions.width, height: dimensions.height },
         })) as Buffer);
 
     return buffer;

@@ -9,7 +9,22 @@ export function createAdminRouter({ token, store, processor, whatsapp, checks, c
     if (!header?.startsWith('Bearer ') || !secretsEqual(header.slice(7), token)) return res.sendStatus(401);
     next();
   });
+  router.post('/marketing/statuses', json({ limit: '6mb' }), async (req, res) => {
+    if (!whatsapp?.sendMarketingStatus) throw new ServiceError('WA_DISCONNECTED', 503);
+    if (!req.is('application/json') || typeof req.body?.test !== 'boolean') throw new ServiceError('INVALID_REQUEST', 400);
+    res.json(await whatsapp.sendMarketingStatus(req.body));
+  });
   router.use(json({ limit: '16kb' }));
+  router.get('/marketing/status', (req, res) => {
+    if (!whatsapp?.marketingStatus) throw new ServiceError('WA_DISCONNECTED', 503);
+    res.json(whatsapp.marketingStatus());
+  });
+  router.get('/marketing/statuses/:id', (req, res) => {
+    if (!/^[a-f0-9-]{36}$/.test(req.params.id)) throw new ServiceError('INVALID_REQUEST', 400);
+    const status = whatsapp?.marketingMetrics?.(req.params.id);
+    if (!status) throw new ServiceError('NOT_FOUND', 404);
+    res.json(status);
+  });
   router.get('/recommendations', (req, res) => {
     res.json(notifications && agentId ? notifications.status(agentId) : { configured: false });
   });

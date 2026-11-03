@@ -29,6 +29,7 @@
 // ---------------------------------------------------------------------------
 
 import { turunkanMaksud } from "@/lib/klienMatch";
+import { masalahDiskon, type JenisDiskon } from "@/lib/preferensiDiskon";
 
 /** Rentang radius yang sama dengan CHECK di database. */
 const RADIUS_MIN = 1;
@@ -47,6 +48,8 @@ export type PreferensiTertulis = {
   budget_max: number | null;
   luas_min: number | null;
   luas_max: number | null;
+  diskon_jenis: JenisDiskon | null;
+  diskon_persen: number | null;
   legalitas: string | null;
   dekat_nilai: string | null;
   dekat_radius: number | null;
@@ -101,6 +104,9 @@ export function bacaPreferensi(body: any): HasilBaca {
   const budget_max = angka(body?.budget_max);
   const luas_min   = angka(body?.luas_min);
   const luas_max   = angka(body?.luas_max);
+  const diskon = { diskon_jenis: body?.diskon_jenis, diskon_persen: body?.diskon_persen };
+  const galatDiskon = masalahDiskon(diskon);
+  if (galatDiskon) return { ok: false, message: galatDiskon };
 
   /* Rentang terbalik DITOLAK, bukan ditukar diam-diam. "Rp 2 M sampai Rp 500
      jt" adalah salah ketik yang harus dilihat agent; menukarnya otomatis
@@ -172,6 +178,8 @@ export function bacaPreferensi(body: any): HasilBaca {
       budget_max,
       luas_min,
       luas_max,
+      diskon_jenis: diskon.diskon_jenis || null,
+      diskon_persen: diskon.diskon_jenis ? Number(diskon.diskon_persen) : null,
       /* Enum: nilai asing ditolak database, jadi tidak perlu daftar putih di
          sini. Yang perlu dijaga cuma "" menjadi null — string kosong bukan
          nilai enum yang sah dan akan melempar galat, sementara maksudnya
@@ -212,5 +220,7 @@ export function serialisasiPreferensi(p: any) {
     budget_max: p.budget_max == null ? null : Number(p.budget_max),
     luas_min:   p.luas_min   == null ? null : Number(p.luas_min),
     luas_max:   p.luas_max   == null ? null : Number(p.luas_max),
+    diskon_jenis: p.diskon_jenis ?? null,
+    diskon_persen: p.diskon_persen == null ? null : Number(p.diskon_persen),
   };
 }

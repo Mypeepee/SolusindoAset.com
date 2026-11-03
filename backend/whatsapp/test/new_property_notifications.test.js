@@ -13,6 +13,8 @@ import { CLOSING_STATE } from '../services/closing_state.js';
 import { loadConfig } from '../config.js';
 import { qualifiedClientFunnel } from '../services/client_capture.js';
 import { DEFAULT_BOT_CONTROL_PHONE as CONTROL } from '../services/bot_control.js';
+import { DatabaseSync } from 'node:sqlite';
+import { compareNewestListings } from '../services/recommendation_policy.js';
 
 const NOW = Date.parse('2026-10-20T10:00:00+07:00'), PHONE = '6280000000001', AGENT = 'AG108';
 const TEXT = 'Halo Rina, saya ada 2 tanah baru yang cocok.\n\n1. *Tanah Surabaya*\nRp 800 jt\nLT 100 m²\nhttps://solusindoaset.com/Lelang/tanah-surabaya-101/AG108\n\n2. *Tanah Surabaya*\nRp 900 jt\nLT 120 m²\nhttps://solusindoaset.com/Lelang/tanah-surabaya-102/AG108';
@@ -22,8 +24,8 @@ function fixture(t, { filename = ':memory:' } = {}) {
   const controls = new ConversationControl(':memory:', () => now); t.after(() => controls.close());
   const config = { transport: 'baileys', maxSessions: 100, maxPending: 100, maxPendingPerPhone: 20, maxDedup: 1000, sessionTtlMs: 86400000 };
   const store = new MemoryStore(config, () => now, controls.forTenant(AGENT)), sent = [], actions = [];
-  const whatsapp = { auth: {}, getStatus: () => ({ connected: online, phone: '6280000000099' }), getContactAliases: p => [p], async sendText(phone, text) {
-    if (failSend) throw new Error('simulated uncertain delivery'); sent.push({ phone, text }); return 'wa-id';
+  const whatsapp = { auth: {}, getStatus: () => ({ connected: online, phone: '6280000000099' }), getContactAliases: p => [p], async sendText(phone, text, _replyTo, options) {
+    if (failSend) throw new Error('simulated uncertain delivery'); sent.push({ phone, text, options }); return 'wa-id';
   } };
   const processor = new MessageProcessor({ config, store, whatsapp, now: () => now });
   const entry = { processor, whatsapp };
@@ -54,6 +56,49 @@ test('starts at current inventory, groups future matches, records CRM only after
   assert.equal(f.actions.filter(a => a.action === 'acknowledge').length, 0);
   await f.notifications.flush(); await f.notifications.flush();
   assert.equal(f.sent.length, 1); assert.equal(f.queue.status(AGENT).awaiting_ack, 0);
+  assert.equal(f.store.get(PHONE).outbound_recommendation.text, TEXT);
+});
+
+test('listing dates outrank ID, queue arrival time and hot-deal flags; ties use exact long IDs', () => {
+  const rows = [{ id_property: '999999999999999999', tanggal_dibuat: null },
+    { id_property: '999999999999999998', tanggal_dibuat: new Date(NOW - 86400000), is_hot_deal: true },
+    { id_property: '10', tanggal_dibuat: new Date(NOW) },
+    { id_property: '999999999999999997', tanggal_dibuat: new Date(NOW - 86400000) }];
+  assert.deepEqual(rows.sort(compareNewestListings).map(r => r.id_property), ['10', '999999999999999998', '999999999999999997', '999999999999999999']);
+});
+
+test('the pending queue retains actual creation dates and prioritizes new matches over older queued stock', t => {
+  const f = fixture(t); f.queue.initialize(AGENT, '0');
+  f.queue.page(AGENT, '0', '105', Array.from({ length: 5 }, (_, i) => ({ client_id: 'KL00001', property_id: String(101 + i), listed_at: new Date(NOW - (i + 1) * 86400000).toISOString() })));
+  f.advance(60000); f.queue.daily(AGENT, '2026-10-20');
+  f.queue.dailyPage(AGENT, '2026-10-20', '', { after_client: 'KL00001', more: false, checked: 1, matched: 1,
+    candidates: [{ client_id: 'KL00001', property_id: '90', listed_at: new Date(NOW).toISOString() }] });
+  assert.deepEqual(f.queue.pending(AGENT)[0].properties, ['90', '101', '102', '103']);
+});
+
+test('an existing queue is migrated without losing delivered evidence, and daily matching fills missing creation dates', t => {
+  const dir = mkdtempSync(join(tmpdir(), 'recommendation-order-migration-')); t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const filename = join(dir, 'queue.sqlite'), legacy = new DatabaseSync(filename);
+  legacy.exec("CREATE TABLE recommendation_candidates(agent TEXT NOT NULL, client TEXT NOT NULL, property TEXT NOT NULL, queued_at INTEGER NOT NULL, state TEXT NOT NULL DEFAULT 'pending', batch TEXT, PRIMARY KEY(agent,client,property))");
+  legacy.prepare('INSERT INTO recommendation_candidates VALUES (?,?,?,?,?,?)').run(AGENT, 'KL00001', '101', NOW, 'pending', null);
+  legacy.prepare('INSERT INTO recommendation_candidates VALUES (?,?,?,?,?,?)').run(AGENT, 'KL00001', '102', NOW, 'delivered', 'old-batch');
+  legacy.close();
+  const queue = new RecommendationOutbox(filename, () => NOW); t.after(() => queue.close());
+  queue.daily(AGENT, '2026-10-20'); queue.dailyPage(AGENT, '2026-10-20', '', { after_client: 'KL00001', more: false, checked: 1, matched: 1,
+    candidates: [{ client_id: 'KL00001', property_id: '101', listed_at: new Date(NOW).toISOString() },
+      { client_id: 'KL00001', property_id: '102', listed_at: new Date(NOW).toISOString() }] });
+  assert.deepEqual(queue.pending(AGENT)[0].properties, ['101']);
+  assert.equal(queue.db.prepare('SELECT listed_at FROM recommendation_candidates WHERE property=?').get('101').listed_at, NOW);
+  assert.equal(queue.db.prepare('SELECT state FROM recommendation_candidates WHERE property=?').get('102').state, 'delivered');
+});
+
+test('automatic offers request a picture link preview without adding a second WhatsApp message', async t => {
+  const f = fixture(t); await f.notifications.flush(); f.data(['101']);
+  const link_preview = { url: 'https://solusindoaset.com/Lelang/tanah-surabaya-101/AG108', title: 'Tanah Surabaya - Rp 800.000.000',
+    description: 'Harga limit lelang · LT 100 m²', image_url: 'https://solusindoaset.com/api/og/lelang/101' };
+  f.draft({ phone: PHONE, text: TEXT, receipt: 'r', property_ids: ['101'], link_preview });
+  await f.notifications.flush();
+  assert.equal(f.sent.length, 1); assert.deepEqual(f.sent[0].options, { linkPreview: link_preview });
   assert.equal(f.store.get(PHONE).outbound_recommendation.text, TEXT);
 });
 

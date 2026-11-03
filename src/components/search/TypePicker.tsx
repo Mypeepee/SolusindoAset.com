@@ -13,10 +13,11 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "@iconify/react";
 import { motion, AnimatePresence } from "framer-motion";
+import TypePickerDropdown from "./TypePickerDropdown";
 
 type Theme = "light" | "dark";
 
-interface TypePickerProps {
+export interface TypePickerProps {
   value: string[]; // nama tampilan, mis. ["Rumah", "Tanah"]
   onChange: (next: string[]) => void;
   options: string[]; // nama tampilan yang tersedia
@@ -30,6 +31,9 @@ interface TypePickerProps {
    *  judul sendiri (sheet filter mobile) — mengoper `label=""` untuk itu bikin
    *  header panelnya ikut kosong. */
   showLabel?: boolean;
+  variant?: "default" | "campaign";
+  disabled?: boolean;
+  id?: string;
 }
 
 interface ThemeTokens {
@@ -91,7 +95,13 @@ const THEMES: Record<Theme, ThemeTokens> = {
  * Kalau yang diukur elemen yang terlihat, item yang disembunyikan akan berlebar
  * nol pada pengukuran berikutnya dan hitungannya berosilasi.
  */
-function FittedSummary({ items, className }: { items: string[]; className?: string }) {
+function FittedSummary({
+  items,
+  className,
+}: {
+  items: string[];
+  className?: string;
+}) {
   const boxRef = useRef<HTMLSpanElement>(null);
   const rulerRef = useRef<HTMLSpanElement>(null);
   const [fit, setFit] = useState(items.length);
@@ -107,16 +117,25 @@ function FittedSummary({ items, className }: { items: string[]; className?: stri
       const avail = box.clientWidth;
       if (!avail) return;
 
-      const parts = Array.from(ruler.querySelectorAll<HTMLElement>("[data-part]"));
+      const parts = Array.from(
+        ruler.querySelectorAll<HTMLElement>("[data-part]"),
+      );
       const more = ruler.querySelector<HTMLElement>("[data-more]");
       if (!parts.length) return;
 
       const moreW = more?.offsetWidth ?? 26;
       const widthUpTo = (n: number) =>
-        n === 0 ? 0 : parts[n - 1].offsetLeft + parts[n - 1].offsetWidth - parts[0].offsetLeft;
+        n === 0
+          ? 0
+          : parts[n - 1].offsetLeft +
+            parts[n - 1].offsetWidth -
+            parts[0].offsetLeft;
 
       let next = items.length;
-      while (next > 1 && widthUpTo(next) + (next < items.length ? moreW : 0) > avail) {
+      while (
+        next > 1 &&
+        widthUpTo(next) + (next < items.length ? moreW : 0) > avail
+      ) {
         next -= 1;
       }
       // Satu item pun kalau tidak muat tetap ditampilkan — CSS truncate yang
@@ -134,7 +153,10 @@ function FittedSummary({ items, className }: { items: string[]; className?: stri
   const hidden = items.length - fit;
 
   return (
-    <span ref={boxRef} className={`relative block min-w-0 flex-1 overflow-hidden ${className ?? ""}`}>
+    <span
+      ref={boxRef}
+      className={`relative block min-w-0 flex-1 overflow-hidden ${className ?? ""}`}
+    >
       {/* penggaris: tak terlihat, tak memengaruhi layout, selalu lengkap */}
       <span
         ref={rulerRef}
@@ -158,7 +180,15 @@ function FittedSummary({ items, className }: { items: string[]; className?: stri
   );
 }
 
-export default function TypePicker({
+export default function TypePicker(props: TypePickerProps) {
+  return props.variant === "campaign" ? (
+    <TypePickerDropdown {...props} />
+  ) : (
+    <LegacyTypePicker {...props} />
+  );
+}
+
+function LegacyTypePicker({
   value,
   onChange,
   options,
@@ -179,7 +209,8 @@ export default function TypePicker({
   useEffect(() => {
     if (!open) return;
     const update = () => {
-      if (triggerRef.current) setRect(triggerRef.current.getBoundingClientRect());
+      if (triggerRef.current)
+        setRect(triggerRef.current.getBoundingClientRect());
     };
     update();
     window.addEventListener("scroll", update, true);
@@ -200,7 +231,9 @@ export default function TypePicker({
   }, [open, onOpenChange]);
 
   const toggle = (opt: string) =>
-    onChange(value.includes(opt) ? value.filter((v) => v !== opt) : [...value, opt]);
+    onChange(
+      value.includes(opt) ? value.filter((v) => v !== opt) : [...value, opt],
+    );
 
   // posisi panel (fixed, ter-clamp ke viewport)
   const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
@@ -208,12 +241,18 @@ export default function TypePicker({
   // Lebar panel = lebar trigger (min 260px, max 300px) — BUKAN berbasis viewport
   const PANEL_W = Math.min(300, Math.max(rect?.width ?? 260, 260));
   const rawLeft = rect ? rect.left : 8;
-  const left = Math.max(8, rawLeft + PANEL_W > vw - 8 ? vw - PANEL_W - 8 : rawLeft);
+  const left = Math.max(
+    8,
+    rawLeft + PANEL_W > vw - 8 ? vw - PANEL_W - 8 : rawLeft,
+  );
   // Buka ke atas jika ruang bawah < 280px dan ruang atas lebih banyak
   const spaceBelow = rect ? vh - rect.bottom - 16 : 400;
   const spaceAbove = rect ? rect.top - 16 : 400;
   const openUpward = spaceBelow < 280 && spaceAbove > spaceBelow;
-  const maxH = Math.max(240, Math.min(440, openUpward ? spaceAbove : spaceBelow));
+  const maxH = Math.max(
+    240,
+    Math.min(440, openUpward ? spaceAbove : spaceBelow),
+  );
   const top = openUpward
     ? (rect?.top ?? 0) - maxH - 8
     : (rect?.bottom ?? 0) + 8;
@@ -224,6 +263,8 @@ export default function TypePicker({
           {open && (
             <motion.div
               key="typepanel"
+              role="dialog"
+              aria-label={label}
               data-search-portal="true"
               initial={{ opacity: 0, y: openUpward ? -8 : 8 }}
               animate={{ opacity: 1, y: 0 }}
@@ -243,7 +284,9 @@ export default function TypePicker({
               <div
                 className={`px-4 py-3 border-b ${t.header} flex items-center justify-between shrink-0`}
               >
-                <h4 className={`font-bold ${t.title} text-sm flex items-center gap-2`}>
+                <h4
+                  className={`font-bold ${t.title} text-sm flex items-center gap-2`}
+                >
                   <Icon
                     icon="solar:buildings-bold-duotone"
                     className="text-primary text-lg"
@@ -252,7 +295,9 @@ export default function TypePicker({
                 </h4>
               </div>
 
-              <div className={`overflow-y-auto custom-scrollbar flex-1 p-2 ${t.bodyBg}`}>
+              <div
+                className={`overflow-y-auto custom-scrollbar flex-1 p-2 ${t.bodyBg}`}
+              >
                 <button
                   type="button"
                   onClick={() => onChange([])}
@@ -262,10 +307,16 @@ export default function TypePicker({
                       : `${t.nameIdle} ${t.rowHover}`
                   }`}
                 >
-                  <Icon icon="solar:widget-3-bold-duotone" className="text-lg opacity-70 shrink-0" />
+                  <Icon
+                    icon="solar:widget-3-bold-duotone"
+                    className="text-lg opacity-70 shrink-0"
+                  />
                   <span className="flex-1">Semua Tipe</span>
                   {value.length === 0 && (
-                    <Icon icon="solar:check-circle-bold" className="text-primary text-lg" />
+                    <Icon
+                      icon="solar:check-circle-bold"
+                      className="text-primary text-lg"
+                    />
                   )}
                 </button>
 
@@ -293,7 +344,10 @@ export default function TypePicker({
                         }`}
                       >
                         {checked && (
-                          <Icon icon="solar:check-read-linear" className="text-white text-sm" />
+                          <Icon
+                            icon="solar:check-read-linear"
+                            className="text-white text-sm"
+                          />
                         )}
                       </div>
                     </button>
@@ -323,7 +377,7 @@ export default function TypePicker({
             </motion.div>
           )}
         </AnimatePresence>,
-        document.body
+        document.body,
       )
     : null;
 
@@ -331,6 +385,17 @@ export default function TypePicker({
     <div className="relative w-full h-full">
       <div
         ref={triggerRef}
+        role="button"
+        tabIndex={0}
+        aria-label={label || "Tipe Aset"}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onOpenChange(!open);
+          }
+        }}
         className="cursor-pointer h-full flex flex-col justify-center group"
         onClick={() => onOpenChange(!open)}
       >
@@ -347,7 +412,9 @@ export default function TypePicker({
             className={`text-xl shrink-0 transition-colors ${t.triggerIcon}`}
           />
           {value.length === 0 ? (
-            <p className={`font-bold text-sm truncate flex-1 ${t.triggerValue}`}>
+            <p
+              className={`font-bold text-sm truncate flex-1 ${t.triggerValue}`}
+            >
               Semua Tipe
             </p>
           ) : (

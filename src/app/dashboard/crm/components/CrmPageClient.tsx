@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { labelPreferensiTempat, radiusPreferensiTempat } from "@/lib/preferensiTempatLabel";
+import { ringkasDiskon, type JenisDiskon, type MetrikDiskon } from "@/lib/preferensiDiskon";
+import FaktaDiskon from "./FaktaDiskon";
 import { Icon } from "@iconify/react";
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
@@ -1990,6 +1992,8 @@ type PrefGroup = {
   budget_max: number | null;
   luas_min: number | null;
   luas_max: number | null;
+  diskon_jenis: JenisDiskon | null;
+  diskon_persen: number | null;
   legalitas: string | null;
   dekat_nilai: string | null;
   dekat_radius: number | null;
@@ -2098,6 +2102,8 @@ function KlienDetailDrawer({ klien, onClose, onEdit, onDelete, onMove, onKlienUp
       budget_max: g.budget_max ? fmtRup(String(g.budget_max)) : "",
       luas_min:   g.luas_min   ? fmtRup(String(g.luas_min))   : "",
       luas_max:   g.luas_max   ? fmtRup(String(g.luas_max))   : "",
+      diskon_jenis: g.diskon_jenis || "",
+      diskon_persen: g.diskon_persen == null ? "" : String(g.diskon_persen),
       legalitas:  (g.legalitas as Sertifikat | null) || "",
       alamat_teks: g.alamat_teks || "",
       dekat: g.dekat_nilai
@@ -2361,6 +2367,8 @@ function KlienDetailDrawer({ klien, onClose, onEdit, onDelete, onMove, onKlienUp
                   budget_max: p.budget_max ? Number(p.budget_max) : null,
                   luas_min:   p.luas_min   ? Number(p.luas_min)   : null,
                   luas_max:   p.luas_max   ? Number(p.luas_max)   : null,
+                  diskon_jenis: p.diskon_jenis ?? null,
+                  diskon_persen: p.diskon_persen ?? null,
                   tujuan_beli: p.tujuan_beli ?? null,
                   catatan:     p.catatan ?? null,
                 };
@@ -2476,6 +2484,7 @@ function KlienDetailDrawer({ klien, onClose, onEdit, onDelete, onMove, onKlienUp
                               <InfoRow label={labelLuas(g.types)} value={[g.luas_min, g.luas_max].filter(Boolean).join(" – ") + " m²"} />
                             )}
                             {g.dekat_nilai && <InfoRow label="Dekat" value={`${labelPreferensiTempat(g.dekat_nilai)}${g.dekat_radius ? ` · ${(g.dekat_radius/1000).toFixed(1).replace(".", ",")} km` : ""}`} />}
+                            {g.diskon_jenis && <InfoRow label="Diskon" value={ringkasDiskon(g) || "—"} />}
                             {g.legalitas && <InfoRow label="Sertifikat" value={SERTIFIKAT_LABEL[g.legalitas as Sertifikat] ?? g.legalitas} />}
                             {g.tujuan_beli && <InfoRow label="Tujuan" value={{ ditempati: "Ditempati", investasi: "Investasi", disewakan: "Disewakan" }[g.tujuan_beli] ?? g.tujuan_beli} />}
                             {g.catatan && <InfoRow label="Catatan" value={g.catatan} />}
@@ -2747,6 +2756,7 @@ type MatchedListing = {
   agent_office: string;
   skor: number;
   alasan: string[];
+  diskon?: MetrikDiskon | null;
 };
 
 type Diagnosa = {
@@ -2759,6 +2769,12 @@ type Diagnosa = {
   adaBudget: boolean;
   adaLuas: boolean;
   adaBentuk: boolean;
+  lelangTersaringTanggal?: number;
+  lelangTanpaJadwal?: number;
+  jadwalLelangTerakhir?: string | null;
+  batasTanggalLelang?: string;
+  jikaDiskonDiabaikan?: number;
+  adaDiskon?: boolean;
   /** Preferensi mana yang didiagnosa. Klien bisa punya beberapa, dan saran
    *  "naikkan plafon 10%" tanpa menyebut plafon yang mana tidak bisa
    *  ditindaklanjuti. */
@@ -2979,6 +2995,7 @@ function kriteriaSama(a: PreferensiKlien[], b: PreferensiKlien[]): boolean {
     p.tipe_properti ?? "", p.jenis_transaksi ?? "",
     p.loc_provinsi ?? "", p.loc_kota ?? "", p.loc_kecamatan ?? "", p.loc_kelurahan ?? "",
     n(p.budget_min), n(p.budget_max), n(p.luas_min), n(p.luas_max),
+    p.diskon_jenis ?? "", n(p.diskon_persen),
     p.legalitas ?? "", p.dekat_nilai ?? "", n(p.dekat_radius), p.alamat_teks ?? "",
   ]);
   const kiri  = a.map(sidik).sort();
@@ -3017,6 +3034,8 @@ function MatchListingModal({ klienId, klienNama, punyaWa, klienEmail, prefIds, p
   const [items, setItems] = useState<MatchedListing[]>([]);
   const [diagnosa, setDiagnosa] = useState<Diagnosa | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const nomorPencarian = useRef(0);
+  useEffect(() => () => { nomorPencarian.current++; }, []);
 
   const [terkirim, setTerkirim] = useState<ItemTerkirim[]>([]);
   const [loadingKirim, setLoadingKirim] = useState(true);
@@ -3131,6 +3150,7 @@ function MatchListingModal({ klienId, klienNama, punyaWa, klienEmail, prefIds, p
    *   terbaca hanya membuat layar terasa lebih lambat daripada sebenarnya.
    */
   const muatCocok = useCallback((diam = false) => {
+    const nomor = ++nomorPencarian.current;
     if (!diam) setLoading(true);
     setError(null);
     /* Dicatat SEBELUM berangkat. Kalau agent menyunting kriteria selagi
@@ -3138,14 +3158,21 @@ function MatchListingModal({ klienId, klienNama, punyaWa, klienEmail, prefIds, p
        dan menampilkannya (apalagi menyimpannya) berarti menyajikan hasil
        kriteria lama sebagai hasil kriteria baru. */
     const versi = versiKlien(klienId);
+    const masihAktif = () => nomorPencarian.current === nomor && versiKlien(klienId) === versi;
     const url = kunciPref
       ? `/api/dashboard/klien/${klienId}/rekomendasi/siap?pref=${encodeURIComponent(kunciPref)}`
       : `/api/dashboard/klien/${klienId}/rekomendasi/siap`;
     return fetch(url)
-      .then(r => r.json())
+      .then(async r => {
+        if (r.status === 401) throw new Error("Sesi Anda berakhir. Masuk kembali untuk mencari aset.");
+        if (r.status === 403) throw new Error("Anda tidak memiliki akses ke klien ini.");
+        const j = await r.json();
+        if (!r.ok || j.ok !== true) throw new Error(j.message || "Pencarian gagal. Coba lagi.");
+        if (!Array.isArray(j.items) || !Array.isArray(j.preferensi)) throw new Error("Hasil pencarian belum lengkap. Coba lagi.");
+        return j;
+      })
       .then(j => {
-        if (!j.ok) { if (!diam) setError(j.message || "Gagal memuat"); return; }
-        if (versiKlien(klienId) !== versi) return;
+        if (!masihAktif()) return;
         const isi: IsiSimpanan = {
           items: j.items || [],
           idAgent: j.idAgent ?? null,
@@ -3165,8 +3192,13 @@ function MatchListingModal({ klienId, klienNama, punyaWa, klienEmail, prefIds, p
            tiba berubah sendiri adalah kehilangan kendali yang paling menjengkelkan. */
         pasang(isi, !diam);
       })
-      .catch(() => { if (!diam) setError("Gagal memuat"); })
-      .finally(() => { if (!diam) setLoading(false); });
+      .catch(e => {
+        if (!masihAktif()) return;
+        setError(e instanceof TypeError || e instanceof SyntaxError
+          ? "Pencarian gagal dimuat. Periksa koneksi lalu coba lagi."
+          : e instanceof Error ? e.message : "Pencarian gagal. Coba lagi.");
+      })
+      .finally(() => { if (masihAktif()) setLoading(false); });
   }, [klienId, klienNama, kunciPref, kunciSimpanan, pasang]);
 
   const muatTerkirim = useCallback(() => {
@@ -3550,14 +3582,23 @@ function MatchListingModal({ klienId, klienNama, punyaWa, klienEmail, prefIds, p
 
         {/* ── Isi ── */}
         <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-4">
+          {tab === "cocok" && error && items.length > 0 && (
+            <div role="alert" className="rounded-xl border border-rose-400/20 bg-rose-500/[0.06] p-3 text-[12px] text-rose-200">
+              <p>{error} Daftar sebelumnya masih ditampilkan.</p>
+              <button type="button" onClick={() => muatCocok(true)} className="mt-1 min-h-11 cursor-pointer underline underline-offset-4 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-slate-300">Coba lagi</button>
+            </div>
+          )}
           {tab === "cocok" ? (
             loading ? (
               <div className="flex flex-col items-center justify-center gap-3 py-20 text-slate-400">
                 <Icon icon="svg-spinners:ring-resize" className="text-3xl text-emerald-400" />
                 <p className="text-[13px]">Mencari aset…</p>
               </div>
-            ) : error ? (
-              <div className="py-20 text-center text-[13px] text-rose-300">{error}</div>
+            ) : error && items.length === 0 ? (
+              <div role="alert" className="py-20 text-center text-[13px] text-rose-300">
+                <p>{error}</p>
+                <button type="button" onClick={() => muatCocok()} className="mt-3 min-h-11 cursor-pointer rounded-xl border border-white/15 px-4 text-slate-200 hover:bg-white/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-slate-300">Coba lagi</button>
+              </div>
             ) : items.length === 0 ? (
               /* Habis karena DITINJAU, bukan karena tidak ada persediaan.
                  Dua keadaan yang terlihat identik di layar tapi menuntut
@@ -3583,7 +3624,7 @@ function MatchListingModal({ klienId, klienNama, punyaWa, klienEmail, prefIds, p
                   </button>
                 </div>
               ) : (
-                <PanelKosong diagnosa={diagnosa} tanpaPref={tanpaPref} preferensi={daftarPref} />
+                <PanelKosong diagnosa={diagnosa} tanpaPref={tanpaPref} preferensi={daftarPref} onCariUlang={() => muatCocok()} />
               )
             ) : tampil.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -3827,10 +3868,11 @@ function MatchListingModal({ klienId, klienNama, punyaWa, klienEmail, prefIds, p
    penjelasan membuat agent menyimpulkan fiturnya rusak; layar kosong yang
    menyebut gerbang mana yang menghalangi membuatnya membuka preferensi dan
    memperbaiki satu angka. */
-function PanelKosong({ diagnosa, tanpaPref, preferensi }: {
+function PanelKosong({ diagnosa, tanpaPref, preferensi, onCariUlang }: {
   diagnosa: Diagnosa | null;
   tanpaPref?: boolean;
   preferensi: PrefRingkasan[];
+  onCariUlang?: () => void;
 }) {
   if (tanpaPref) {
     return (
@@ -3847,6 +3889,10 @@ function PanelKosong({ diagnosa, tanpaPref, preferensi }: {
   }
 
   const saran: { ikon: string; teks: string; n: number }[] = [];
+  const lelangLama = diagnosa?.lelangTersaringTanggal ?? 0;
+  const tanggal = (value: string) => new Date(value).toLocaleDateString("id-ID", {
+    day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Jakarta",
+  });
   if (diagnosa) {
     if (diagnosa.adaBudget && diagnosa.jikaBudgetNaik10 > 0)
       saran.push({ ikon: "solar:wallet-money-bold-duotone", teks: "kalau plafon budget dinaikkan 10%", n: diagnosa.jikaBudgetNaik10 });
@@ -3854,6 +3900,8 @@ function PanelKosong({ diagnosa, tanpaPref, preferensi }: {
       saran.push({ ikon: "solar:map-point-bold-duotone", teks: "kalau lokasi diperluas satu tingkat", n: diagnosa.jikaLokasiDiperluas });
     if (diagnosa.adaLuas && diagnosa.jikaLuasDiabaikan > 0)
       saran.push({ ikon: "solar:ruler-angular-bold-duotone", teks: "kalau batas luas dilepas", n: diagnosa.jikaLuasDiabaikan });
+    if (diagnosa.adaDiskon && (diagnosa.jikaDiskonDiabaikan ?? 0) > 0)
+      saran.push({ ikon: "solar:tag-price-bold-duotone", teks: "kalau syarat diskon dilepas; bukti diskon belum memenuhi ambang pilihan", n: diagnosa.jikaDiskonDiabaikan! });
     /* Gerbang paling tidak terduga dari sisi agent: ia mengisi "Tanah" dan
        tidak pernah membayangkan bahwa lot "tanah berikut bangunan" ikut
        tersaring keluar. Tanpa baris ini, layar kosongnya tidak punya
@@ -3867,7 +3915,9 @@ function PanelKosong({ diagnosa, tanpaPref, preferensi }: {
       <div className="grid h-16 w-16 place-items-center rounded-3xl border border-white/[0.06] bg-white/[0.02]">
         <Icon icon="solar:home-smile-angle-bold-duotone" className="text-3xl text-slate-500" />
       </div>
-      <p className="mt-3 text-[14px] font-bold text-white">Belum ada aset yang cocok persis</p>
+      <p className="mt-3 text-[14px] font-bold text-white">
+        {lelangLama > 0 ? "Ada aset sesuai, jadwal lelang perlu diperbarui" : "Belum ada aset yang cocok persis"}
+      </p>
       {/* Diagnosa hanya mengambil beberapa baris; cakupan pencarian tetap
           seluruh tipe dan lokasi dari preferensi yang dipilih. */}
       {preferensi.length > 0 && (
@@ -3876,6 +3926,17 @@ function PanelKosong({ diagnosa, tanpaPref, preferensi }: {
           {preferensi.map(p => (
             <p key={p.id_grup} className="mt-1 text-slate-300">{p.label_lengkap ?? p.label}</p>
           ))}
+        </div>
+      )}
+
+      {lelangLama > 0 && (
+        <div role="status" className="mt-4 w-full max-w-sm rounded-xl border border-amber-300/20 bg-amber-300/[0.05] p-3 text-left text-[12px] leading-relaxed text-slate-300">
+          <p className="font-bold text-amber-200">Setidaknya {lelangLama.toLocaleString("id-ID")} aset memenuhi kriteria, tetapi tersaring karena jadwal lelang.</p>
+          {diagnosa?.label && preferensi.length > 1 && <p className="mt-1">Kriteria: {diagnosa.label}.</p>}
+          {diagnosa?.batasTanggalLelang && <p className="mt-2">Asisten hanya menampilkan lelang dengan jadwal sejak {tanggal(diagnosa.batasTanggalLelang)} (batas satu bulan).</p>}
+          {diagnosa?.jadwalLelangTerakhir && <p>Jadwal terakhir dari aset yang sesuai: {tanggal(diagnosa.jadwalLelangTerakhir)}.</p>}
+          {!!diagnosa?.lelangTanpaJadwal && <p>{diagnosa.lelangTanpaJadwal.toLocaleString("id-ID")} aset belum memiliki tanggal lelang.</p>}
+          <p className="mt-2">Perbarui jadwal dari sumber lelang, lalu cari ulang. Status “tersedia” saja belum memastikan lelangnya masih bisa diikuti.</p>
         </div>
       )}
 
@@ -3905,11 +3966,14 @@ function PanelKosong({ diagnosa, tanpaPref, preferensi }: {
             Ubah preferensinya di kartu klien kalau salah satu pelonggaran itu memang masuk akal.
           </p>
         </>
-      ) : (
+      ) : lelangLama === 0 ? (
         <p className="mt-1 max-w-sm text-[12px] text-slate-500">
           Belum ditemukan aset baru yang memenuhi seluruh kriteria. Aset yang sudah dikirim atau disingkirkan
           tidak ditampilkan di tab ini.
         </p>
+      ) : null}
+      {onCariUlang && (
+        <button type="button" onClick={onCariUlang} className="mt-4 min-h-11 cursor-pointer rounded-xl border border-white/15 px-4 text-[12px] font-bold text-slate-200 transition-colors hover:bg-white/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-slate-300 motion-reduce:transition-none">Cari ulang</button>
       )}
     </div>
   );
@@ -4027,6 +4091,8 @@ function KartuCocok({ it, idAgent, dipilih, onToggle, onSingkirkan }: {
           </div>
         </div>
       </div>
+
+      <FaktaDiskon metrik={it.diskon} />
 
       {/* Kaki kartu: alasan di kiri, jalan keluar di kanan.
           SELALU dirender — dulu hanya muncul kalau ada alasan, dan itu membuat

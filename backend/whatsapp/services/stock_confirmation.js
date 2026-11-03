@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { ServiceError, logFailure } from '../lib/http.js';
 import { needsAuctionCheck } from './auction_check.js';
 
-export const STOCK_CONFIRMATION_VERSION = '2026-10-17-durable-stoker-v1';
+export const STOCK_CONFIRMATION_VERSION = '2026-10-22-auction-timeline-v2';
 
 const line = (value) => typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f*]/g, ' ').replace(/\s+/g, ' ').trim() : '';
 
@@ -12,6 +12,7 @@ export function stockConfirmationMessage(asset) {
   let url = `https://solusindoaset.com/Lelang/properti-${asset.id}`;
   try {
     const detail = new URL(asset.detail_url);
+    detail.pathname = detail.pathname.replace(/\/AG\d{1,18}$/i, '');
     if (detail.protocol === 'https:' && ['solusindoaset.com', 'www.solusindoaset.com'].includes(detail.hostname) &&
       !detail.username && !detail.password && !detail.search && !detail.hash &&
       /^\/Lelang\/[a-z0-9-]+$/i.test(detail.pathname) && detail.pathname.endsWith(`-${asset.id}`) && detail.href.length <= 1000) url = detail.href;

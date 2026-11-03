@@ -352,11 +352,12 @@ tanpa panggilan AI atau pengiriman WhatsApp nyata.
 SearchHero dan pemilih wilayah tidak diubah. Lihat [referensi dan pembaruan
 wilayah](docs/region-directory.md). Backend lalu merender rekomendasi dari database
 melalui `services/search_reply.js`. Langkah pencarian ini tidak menunggu LLM.
-Aset pilihan mengunci percakapan. Pengecualian: untuk aset Tersedia dengan
-jadwal lelang terlewat, bot menjelaskan perlunya konfirmasi lalu menanyakan area
-pencarian. Jawaban klien membuka kualifikasi opsi cadangan (area, jenis, budget, luas),
-bukan langsung menampilkan daftar. Pertanyaan detail/penolakan alternatif tetap
-membahas aset awal. Status dan tanggal aset divalidasi ulang sebelum pencarian.
+Aset pilihan mengunci percakapan. Untuk aset Tersedia dengan jadwal lelang
+terlewat, bot menjelaskan perlunya konfirmasi dan menawarkan rincian biaya.
+Jika klien meminta alternatif, bot membuka kualifikasi area, jenis, budget dan
+luas sebelum menampilkan daftar. Pertanyaan detail/biaya tetap membahas aset
+awal. Riwayat pertanyaan opsi cadangan dari SOP lama tetap dikenali. Status dan
+tanggal aset divalidasi ulang sebelum pencarian.
 
 Pilihan juga dapat berupa alamat yang disalin dari kartu rekomendasi, termasuk
 “boleh minta detail terhadap aset yang ini pak? [alamat]”. Alamat persis
@@ -646,9 +647,14 @@ tanggal dalam zona Asia/Jakarta, pertanyaan TERSEDIA/TERJUAL, dan tautan detail
 Solusindo Aset dari database. Emoji dikirim sebagai Unicode UTF-8 asli.
 Balasan awal kepada prospek menampilkan detail aset publik terbaru terlebih
 dahulu, lalu menerangkan jadwal yang sudah lewat dan status permintaan
-konfirmasi stok, kemudian menanyakan area opsi cadangan. Spesifikasi yang kosong
+konfirmasi stok, kemudian menawarkan rincian estimasi biaya pembelian. Spesifikasi yang kosong
 tetap ditandai belum tercatat; angka dari template chat tidak menggantikan data
 listing. Detail dan konfirmasi memakai satu pertanyaan akhir, tanpa CTA ganda.
+Untuk jadwal mendatang, backend menampilkan sisa hari kalender WIB menuju
+jadwal lelang, mengajak persiapan viewing dari luar/dokumen/dana, lalu menawarkan
+rincian biaya yang sama. Jadwal 27 Oktober pada 22 Oktober berarti lima hari
+lagi. Batas pendaftaran/jaminan/penawaran mengikuti pengumuman resmi dan tidak
+disamakan dengan tanggal lelang. Jadwal mendatang tidak memicu kiriman stoker.
 Nomor tujuan berasal dari konfigurasi server; klien maupun model AI tidak bisa
 menggantinya. Pesan dikirim melalui WhatsApp agent yang menerima pertanyaan.
 

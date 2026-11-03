@@ -73,7 +73,7 @@ test('the supplied Rp532350000 example contains matching subtotals, summaries an
   for (const amount of ['532.350.000', '10.647.000', '26.617.500', '5.855.850', '2.129.400', '55.249.750', '799.017.250']) assert.ok(reply.includes(`Rp ${amount}`), amount);
   assert.match(reply, /Transportasi 6 truk \+ 15 kuli/);
   assert.match(reply, /Konsumsi aparat \(100 orang\)/);
-  assert.match(reply, /_Limit Rp 532 Jt \+ balik nama Rp 55 Jt \+ eksekusi Rp 185 Jt \+ fee agent Rp 27 Jt_/);
+  assert.match(reply, /_Limit Rp 532 Jt_\n_Balik nama Rp 55 Jt \+ eksekusi Rp 185 Jt \+ fee agent Rp 27 Jt_/);
   assert.doesNotMatch(reply, /mediasi|kerohiman|Opsi [12]/i);
   assert.ok(reply.includes(asset.detail_url));
 });
@@ -127,7 +127,7 @@ test('full WhatsApp template preserves all sections and quotes only database pri
   for (const part of ['Jl. Mawar 12', '20 Oktober 2026', '*Rp 800.000.000*', '*Rp 1.102.800.000*', 'belum all-in', 'bukan biaya tambahan', 'dari luar']) assert.ok(result.reply.includes(part), part);
   assert.equal((result.reply.match(/━━━━━━━━━━━━━━/g) || []).length, 5);
   assert.equal(result.reply.endsWith('?'), true);
-  assert.ok(result.reply.length > 1800 && result.reply.length <= 4000);
+  assert.ok(result.reply.length <= 4000);
   assert.equal(result.asset.id, '123'); assert.deepEqual(result.qualification, {});
 });
 

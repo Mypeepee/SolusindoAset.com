@@ -5,9 +5,11 @@ export const uncertainLocation = (text) => /\b(?:waduh|gatau|gaktau|gak tau|ga t
 // permission to raise the budget or discard a landmark.
 export function searchRecovery(text, preceding, profile) {
   const previous = preceding || '';
-  const offered = /Belum ketemu|Mau coba|pilih dulu|radius.*berapa|budget.*nyaman/i.test(previous);
+  const websiteMatch = /Mau cek detail aset dari situs, perluas area, atau sesuaikan budget\?/i.test(previous);
+  const offered = websiteMatch || /Belum ketemu|Mau coba|pilih dulu|radius.*berapa|budget.*nyaman/i.test(previous);
   const plain = text.trim().replace(/[.!?…]+$/g, '');
   if (offered && /^(?:(?:ya|iya|boleh|oke|ok|sip|silakan|lanjut|coba)(?:\s+(?:ya|pak|bu|dong|aja|saja))*)$/i.test(plain)) {
+    if (websiteMatch) return { reply: 'Boleh. Untuk cek detail listing di situs, kirim kode atau tautan asetnya. Kalau ingin mengubah pencarian, sebutkan area atau budget baru yang diinginkan. Kriteria sebelumnya tetap saya simpan.' };
     return { reply: `Boleh. Kita pilih dulu yang paling nyaman: ${profile.nearby ? 'perlebar radius dari tempat tadi, ' : ''}perluas area${profile.city ? ` di ${profile.city}` : ''}, atau ubah budget? Budget dan kriteria lainnya tetap saya pegang sampai Anda menentukan perubahan.` };
   }
   if (/\b(?:sesuaikan|ubah|ganti|naikkan|naikin|tambah)\s+(?:batas\s+)?(?:budget|bujet|anggaran)(?:nya)?\b|\b(?:budget|bujet|anggaran)(?:nya)?\s+(?:di)?(?:sesuaikan|ubah|ganti|naikkan|naikin|tambah)\b/i.test(plain) && !/\d/.test(plain)) {

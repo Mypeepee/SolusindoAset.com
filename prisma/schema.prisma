@@ -69,6 +69,7 @@ model Agent {
   upline                  Agent?                      @relation("AgentUpline", fields: [id_upline], references: [id_agent])
   downlines               Agent[]                     @relation("AgentUpline")
   berita                  Berita[]
+  companyProfileStories   CompanyProfileStory[]
   detailTransaksi         DetailTransaksi[]
   listings                Listing[]
   penukaranPoin           PenukaranPoin[]
@@ -1159,6 +1160,25 @@ model Berita {
   @@map("berita")
 }
 
+/// Public editorial documentation; independent of project sales/accounting.
+model CompanyProfileStory {
+  id          String   @id @db.Uuid
+  images      String[]
+  type        String   @db.VarChar(60)
+  title       String   @db.VarChar(120)
+  location    String   @db.VarChar(120)
+  description String
+  marketPrice Decimal  @map("market_price") @db.Decimal(20, 0)
+  dealPrice   Decimal  @map("deal_price") @db.Decimal(20, 0)
+  tiktokUrl   String?  @map("tiktok_url") @db.VarChar(500)
+  createdBy   String   @map("created_by") @db.VarChar(20)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  author      Agent    @relation(fields: [createdBy], references: [id_agent])
+
+  @@index([createdAt(sort: Desc)], map: "idx_company_profile_story_created")
+  @@map("company_profile_story")
+}
+
 model RewardPoin {
   id_reward        BigInt          @id @default(autoincrement())
   nama_reward      String          @db.VarChar(200)
@@ -1575,6 +1595,9 @@ model PreferensiKlien {
   budget_max        Decimal?                @db.Decimal(20, 2)
   luas_min          Decimal?                @db.Decimal(12, 2)
   luas_max          Decimal?                @db.Decimal(12, 2)
+  /// One strict threshold (1–99%) for KELURAHAN, TURUN_LELANG, or both (AND).
+  diskon_jenis      String?                 @db.VarChar(20)
+  diskon_persen     Int?
   tujuan_beli       tujuan_beli_enum?
   /// Sertifikat yang diminta klien. NULL = tidak mempermasalahkan — keadaan
   /// bawaan dan yang paling sering benar. Satu-satunya kriteria tambahan yang
@@ -2462,4 +2485,343 @@ model SuratDebiturCare {
   @@index([nama], map: "idx_sdc_nama")
   @@index([nik], map: "idx_sdc_nik")
   @@map("surat_debitur_care")
+}
+
+/// Investor current-asset read model. Installed/backfilled atomically by
+/// scripts/install-investor-cma.cjs. Source `listing` keeps auction event history.
+/// Ratios, CMA and MAX scores are owned by SQL ingestion triggers, not clients.
+model InvestorListing {
+  id                        String   @id
+  asset_code                String   @unique
+  source_listing_id         BigInt   @unique
+  city_id                   String
+  city_name                 String
+  province_name             String
+  district_id               String
+  district_name             String
+  kelurahan_id              String
+  kelurahan_name            String
+  property_type             InvestorPropertyType
+  harga_lelang_pertama       Decimal  @db.Decimal(20, 2)
+  harga_lelang_terakhir      Decimal  @db.Decimal(20, 2)
+  luas_tanah_m2              Decimal? @db.Decimal(12, 2)
+  harga_per_meter            Decimal? @db.Decimal
+  current_price_per_meter    Decimal? @db.Decimal
+  is_latest                 Boolean  @default(false)
+  identity_verified         Boolean  @default(false)
+  initial_source_id         BigInt
+  initial_auction_date      DateTime? @db.Timestamptz(6)
+  auction_round             Int
+  metric_auction_drop_pct    Decimal? @db.Decimal
+  metric_market_spread_pct   Decimal? @db.Decimal
+  primary_deal_score         Decimal? @db.Decimal
+  primary_deal_type          String?
+  benchmark_avg             Decimal? @db.Decimal
+  benchmark_count           Int      @default(0)
+  kelurahan_sample_count     Int      @default(0)
+  benchmark_scope           String   @default("NONE")
+  benchmark_version         DateTime @default(now()) @db.Timestamptz(6)
+  created_at                DateTime @default(now()) @db.Timestamptz(6)
+  updated_at                DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([city_id, city_name], map: "investor_city_idx")
+  @@index([kelurahan_id, kelurahan_name], map: "investor_kelurahan_idx")
+  @@map("listings")
+}
+
+model InvestorListingSource {
+  source_id           BigInt @id
+  asset_code          String
+  identity_verified   Boolean
+  city_id             String
+  city_name           String
+  province_name       String
+  district_id         String
+  district_name       String
+  kelurahan_id        String
+  kelurahan_name      String
+  property_type       String
+  event_price         Decimal @db.Decimal(20, 2)
+  is_property         Boolean
+  event_date          DateTime? @db.Timestamptz(6)
+  source_created_at   DateTime @db.Timestamptz(6)
+  status              String
+  land_area           Decimal? @db.Decimal(12, 2)
+  updated_at          DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([asset_code, event_date, source_id], map: "investor_sources_asset")
+  @@map("investor_listing_sources")
+}
+
+model InvestorCityAlias {
+  raw_province  String
+  raw_city      String
+  city_id       String
+  city_name     String
+  province_name String
+  @@id([raw_province, raw_city])
+  @@map("investor_city_aliases")
+}
+
+model InvestorCmaGroup {
+  scope         String
+  region_id     String
+  property_type InvestorPropertyType
+  price_sum     Decimal @db.Decimal
+  sample_count  Int
+  @@id([scope, region_id, property_type])
+  @@map("investor_cma_groups")
+}
+
+model InvestorPipelineState {
+  id              Boolean @id @default(true)
+  version         Int
+  updated_at      DateTime @db.Timestamptz(6)
+  @@map("investor_pipeline_state")
+}
+
+
+enum InvestorPropertyType {
+  RUMAH
+  TANAH
+  RUKO
+  APARTEMEN
+  @@map("investor_property_type_enum")
+}
+
+/// v2: transaction-isolated, land-only valuation read model. SQL triggers own
+/// metrics; install with migration_investor_intent_v2.sql, never db push.
+model InvestorValuation {
+  id String @id
+  asset_code String
+  source_listing_id BigInt @unique
+  identity_verified Boolean
+  transaction_type String
+  listing_category String?
+  rental_period String?
+  city_id String
+  city_name String
+  province_name String
+  district_id String
+  district_name String
+  kelurahan_id String?
+  kelurahan_name String?
+  property_type String
+  harga_lelang_pertama Decimal? @db.Decimal(20,2)
+  harga_lelang_terakhir Decimal @db.Decimal(20,2)
+  luas_tanah_m2 Decimal? @db.Decimal(12,2)
+  harga_per_meter Decimal? @db.Decimal
+  current_price_per_meter Decimal? @db.Decimal
+  market_basis_per_meter Decimal? @db.Decimal
+  market_eligible Boolean
+  initial_source_id BigInt?
+  initial_auction_date DateTime? @db.Timestamptz(6)
+  auction_round Int
+  metric_auction_drop_pct Decimal? @db.Decimal
+  metric_market_spread_pct Decimal? @db.Decimal
+  primary_deal_score Decimal? @db.Decimal
+  primary_deal_type String?
+  benchmark_avg Decimal? @db.Decimal
+  benchmark_count Int
+  kelurahan_sample_count Int
+  benchmark_scope String
+  benchmark_version DateTime @db.Timestamptz(6)
+  history Json @default("[]")
+  source_revision String
+  is_latest Boolean @default(true)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+  @@unique([asset_code,transaction_type])
+  @@map("investor_listing_valuations")
+}
+model InvestorAsset {
+  asset_code String @id
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  @@map("investor_assets")
+}
+model InvestorSourceScope {
+  source_id BigInt @id
+  city_id String
+  district_key String
+  @@index([city_id,district_key],map:"investor_source_scope_idx")
+  @@map("investor_source_scopes")
+}
+model InvestorPipelineV2State {
+  id Boolean @id @default(true)
+  version Int
+  needs_alias_refresh Boolean @default(false)
+  updated_at DateTime @db.Timestamptz(6)
+  @@map("investor_pipeline_v2_state")
+}
+
+model MarketingSettings {
+  id          String    @id @default("company")
+  enabled     Boolean   @default(false)
+  config      Json      @default("{}")
+  revision    Int       @default(1)
+  leaseToken  String?
+  leasedUntil DateTime? @db.Timestamptz(6)
+  lastTickAt  DateTime? @db.Timestamptz(6)
+  lastError   String?
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+  @@map("marketing_settings")
+}
+
+model MarketingConnection {
+  id          String    @id
+  accountId   String
+  username    String?
+  tokenCipher String?
+  expiresAt   DateTime? @db.Timestamptz(6)
+  testedAt    DateTime? @db.Timestamptz(6)
+  lastError   String?
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+  @@map("marketing_connections")
+}
+
+model MarketingJob {
+  id               String                 @id @default(uuid())
+  scheduledFor     DateTime               @unique @db.Timestamptz(6)
+  status           String                 @default("queued")
+  reason           String?
+  listingId        String?
+  assetKey         String?
+  snapshot         Json                   @default("{}")
+  caption          String                 @default("")
+  media            Json                   @default("[]")
+  plan             Json                   @default("{}")
+  settingsRevision Int
+  campaignId       String?
+  campaign         MarketingCampaign? @relation(fields: [campaignId], references: [id])
+  campaignProposalId String?
+  campaignProposal MarketingCampaignProposal? @relation(fields: [campaignProposalId], references: [id])
+  createdAt        DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime               @updatedAt @db.Timestamptz(6)
+  publications     MarketingPublication[]
+  @@index([status, scheduledFor])
+  @@index([assetKey, scheduledFor])
+  @@index([campaignId, scheduledFor])
+  @@map("marketing_jobs")
+}
+
+model MarketingCampaign {
+  id String @id @default(uuid())
+  revision Int @default(1)
+  state String @default("draft")
+  brief Json
+  activeBrief Json @default("{}")
+  evaluation Json @default("{}")
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  proposals MarketingCampaignProposal[]
+  jobs MarketingJob[]
+  reminders MarketingCampaignReminder[]
+  @@map("marketing_campaigns")
+}
+
+model MarketingCampaignReminder {
+  id String @id @default(uuid())
+  campaignId String
+  campaign MarketingCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  endDate String
+  recipient String
+  state String @default("pending")
+  attempts Int @default(0)
+  nextAttemptAt DateTime? @db.Timestamptz(6)
+  messageId String?
+  errorCode String?
+  sentAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  @@unique([campaignId, endDate, recipient])
+  @@map("marketing_campaign_reminders")
+}
+
+model MarketingCampaignProposal {
+  id String @id @default(uuid())
+  campaignId String
+  campaign MarketingCampaign @relation(fields: [campaignId], references: [id])
+  version Int
+  data Json
+  approvedAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  jobs MarketingJob[]
+  @@unique([campaignId, version])
+  @@map("marketing_campaign_proposals")
+}
+
+model MarketingPublication {
+  id             String          @id @default(uuid())
+  jobId          String
+  job            MarketingJob    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  channel        String
+  state          String          @default("pending")
+  containerId    String?
+  externalId     String?
+  permalink      String?
+  errorCode      String?
+  attemptCount   Int             @default(0)
+  nextAttemptAt  DateTime?        @db.Timestamptz(6)
+  publishedAt    DateTime?        @db.Timestamptz(6)
+  lastSyncedAt   DateTime?        @db.Timestamptz(6)
+  createdAt      DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime        @updatedAt @db.Timestamptz(6)
+  metrics        MarketingMetric[]
+  @@unique([jobId, channel])
+  @@index([state, publishedAt])
+  @@map("marketing_publications")
+}
+
+model MarketingMetric {
+  id            String               @id @default(uuid())
+  publicationId String
+  publication   MarketingPublication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+  values        Json                 @default("{}")
+  reason        String?
+  fetchedAt     DateTime             @default(now()) @db.Timestamptz(6)
+  @@index([publicationId, fetchedAt(sort: Desc)])
+  @@map("marketing_metrics")
+}
+
+model MarketingInstagramAction {
+  id          String   @id
+  accountId   String
+  ownerId     String
+  action      String
+  targetId    String
+  requestHash String
+  state       String
+  result      Json     @default("{}")
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @db.Timestamptz(6)
+  @@index([createdAt(sort: Desc)])
+  @@map("marketing_instagram_actions")
+}
+
+model MarketingInstagramWebhookState {
+  appId            String    @id
+  lastChallengeAt  DateTime? @db.Timestamptz(6)
+  lastDeliveryAt   DateTime? @db.Timestamptz(6)
+  receivedBatches  Int       @default(0)
+  ignoredEntries   Int       @default(0)
+  updatedAt        DateTime  @default(now()) @db.Timestamptz(6)
+  @@map("marketing_instagram_webhook_state")
+}
+
+model MarketingInstagramWebhookEvent {
+  id              String   @id
+  appId           String
+  accountId       String
+  field           String
+  payloadCipher   String
+  providerTime    DateTime? @db.Timestamptz(6)
+  deliveries      Int      @default(1)
+  receivedAt      DateTime @default(now()) @db.Timestamptz(6)
+  lastReceivedAt  DateTime @default(now()) @db.Timestamptz(6)
+  expiresAt       DateTime @db.Timestamptz(6)
+  @@index([appId, receivedAt(sort: Desc)], map: "marketing_instagram_webhook_events_app_received_idx")
+  @@index([expiresAt], map: "marketing_instagram_webhook_events_expiry_idx")
+  @@map("marketing_instagram_webhook_events")
 }

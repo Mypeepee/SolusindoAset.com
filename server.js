@@ -242,6 +242,29 @@ function startBeritaScheduler(port) {
   trigger()
 }
 
+function startMarketingScheduler(port) {
+  const secret = process.env.CRON_SECRET
+  if (!secret) { console.warn('[pemasaran] Isi CRON_SECRET untuk mengaktifkan scheduler.'); return }
+  const cron = require('node-cron')
+  let running = false
+  const trigger = () => {
+    if (running) return
+    running = true
+    const request = require('http').request({ hostname: 'localhost', port, path: '/api/cron/pemasaran', method: 'POST',
+      headers: { Authorization: 'Bearer ' + secret }, timeout: 540000 }, (response) => {
+      response.resume()
+      response.on('end', () => { running = false })
+      response.on('error', () => { running = false })
+      if (![200, 409].includes(response.statusCode)) console.error('[pemasaran] Scheduler HTTP', response.statusCode)
+    })
+    request.on('error', (error) => { running = false; console.error('[pemasaran] Scheduler:', error.code || 'REQUEST_FAILED') })
+    request.on('timeout', () => request.destroy())
+    request.end()
+  }
+  cron.schedule('* * * * *', trigger, { timezone: 'Asia/Jakarta' })
+  trigger()
+}
+
 app.prepare().then(() => {
   createServer(async (req, res) => {
     try {
@@ -269,5 +292,6 @@ app.prepare().then(() => {
     startAsistenKlienScheduler(port)
     startPindaiSekitarScheduler(port)
     startBeritaScheduler(port)
+    startMarketingScheduler(port)
   })
 })

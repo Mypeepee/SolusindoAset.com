@@ -3,7 +3,7 @@ import { ServiceError } from '../lib/http.js';
 import { createStructuredRequester } from './llm_transport.js';
 import { createBuyerInterpreter } from './buyer_interpreter.js';
 import { parsePropertyInquiry } from './property_inquiry.js';
-import { auctionCheckReply, auctionCheckExplained, needsAuctionCheck, unsupportedAuctionCheckClaim } from './auction_check.js';
+import { auctionCheckReply, auctionCheckExplained, needsAuctionCheck, unsupportedAuctionCheckClaim, upcomingAuctionReply, contradictsUpcomingAuction } from './auction_check.js';
 import { hasDetailLink, renderRecommendations } from './recommendations.js';
 import { HANDOVER_MESSAGE, CONTEXT_REQUIRED_MESSAGE } from './interaction_policy.js';
 import { purchaseCostReply } from './property_costs.js';
@@ -169,10 +169,16 @@ simulated hanya pengujian, unavailable belum tercatat, completed bukan bukti
 status aset. KHUSUS respons awal aset Tersedia yang jadwalnya terlewat: sajikan
 detail aset publik terbaru terlebih dahulu (alamat, harga limit, jaminan, luas,
 dan spesifikasi yang tercatat), lalu jelaskan jadwal lewat dan status permintaan
-konfirmasi stok. Akhiri dengan satu pertanyaan area pencarian untuk menyiapkan
-opsi cadangan sambil menunggu konfirmasi. Respons detail ini dirender backend
+konfirmasi stok. Akhiri dengan tawaran menghitung rincian estimasi biaya pembelian.
+Jangan langsung mengajak mencari area atau aset pengganti. Respons detail ini dirender backend
 dan dikecualikan dari batas empat paragraf/1800 karakter. Jangan mengarang
-spesifikasi dari template chat atau langsung menyodorkan daftar aset. Setelah pelanggan
+spesifikasi dari template chat atau langsung menyodorkan daftar aset. Untuk jadwal
+mendatang, gunakan auction_timeline dari backend, sebut sisa hari dan ajak
+menyiapkan viewing dari luar, dokumen serta kebutuhan dana sebelum tenggat resmi.
+Jangan menyebut jadwal mendatang sudah lewat, mengarang antrean peminat/stok
+terbatas, menjanjikan kemenangan, atau menyamakan jadwal lelang dengan batas akhir
+pendaftaran/jaminan/penawaran. Akhiri dengan tawaran rincian biaya pembelian.
+Jika pelanggan secara eksplisit meminta alternatif, setelah pelanggan
 menjawab area, pastikan kota lalu gali hanya jenis properti, budget dan luas tanah yang belum diketahui, lalu sajikan opsi
 sesuai data backend. Jangan mengulang pertanyaan area yang sudah dijawab; jika
 pelanggan hanya ingin membahas aset awal atau menolak alternatif, hormati itu.
@@ -429,8 +435,11 @@ export function createAiController(config, dependencies = {}) {
         name: 'presales_response', signal });
       const result = parseModelOutput(text, userText, { maxQuestions: qualifying ? 2 : 1, requireQuestion: false });
       if (['handoff', 'out_of_scope'].includes(result.action)) return { ...result, generation };
+      if (contradictsUpcomingAuction(result.reply, facts, now)) {
+        return { reply: upcomingAuctionReply(facts, now), qualification: result.qualification, generation: { mode: 'rules' } };
+      }
       if (facts?.auction_check_required && unsupportedAuctionCheckClaim(result.reply, knowledge?.auction_check)) {
-        return { reply: auctionCheckReply(facts, knowledge?.auction_check, { offerBackup: !auctionCheckExplained(history, facts.id) }), qualification: result.qualification, generation };
+        return { reply: auctionCheckReply(facts, knowledge?.auction_check, { offerCosts: !auctionCheckExplained(history, facts.id) }), qualification: result.qualification, generation };
       }
       const codes = [...result.reply.matchAll(/\bkode\s*[:#-]?\s*\*?([A-Z0-9]+(?:-[A-Z0-9]+)*)\b/gi)].map((m) => m[1]);
       if (qualifying && codes.length) throw new ServiceError('PREMATURE_RECOMMENDATION', 502);

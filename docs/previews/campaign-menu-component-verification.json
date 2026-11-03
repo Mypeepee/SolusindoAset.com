@@ -1,0 +1,16 @@
+{
+  "mode": "actual navigation components; routing and OWNER session stubbed",
+  "widths": [
+    1024,
+    390
+  ],
+  "network": "all requests blocked",
+  "solarIcon": "rendered",
+  "order": [
+    "Dashboard",
+    "Pemasaran",
+    "Tugas"
+  ],
+  "mobileEscape": "passed",
+  "errors": []
+}

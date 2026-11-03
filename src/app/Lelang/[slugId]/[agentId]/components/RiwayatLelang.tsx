@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@iconify/react";
 import Link from "next/link";
 import Image from "next/image";
@@ -10,6 +10,7 @@ import type {
   AuctionHistoryItem,
   AuctionHistoryResult,
 } from "@/lib/auctionHistory";
+import { orderAuctionHistoryItems } from "@/lib/auctionHistoryOrder";
 
 /**
  * Blok "Riwayat Lelang Aset" di halaman detail.
@@ -49,6 +50,7 @@ const formatTanggal = (val: string | null) => {
   const d = new Date(val);
   if (isNaN(d.getTime())) return null;
   return d.toLocaleDateString("id-ID", {
+    timeZone: "Asia/Jakarta",
     day: "2-digit",
     month: "long",
     year: "numeric",
@@ -372,7 +374,10 @@ export default function RiwayatLelang({
     return () => abortRef.current?.abort();
   }, [initialData, muat]);
 
-  const items = data?.items ?? [];
+  const items = useMemo(
+    () => orderAuctionHistoryItems(data?.items ?? []),
+    [data?.items],
+  );
   const total = data?.total ?? items.length;
 
   /* ── Sedang memuat (hanya terjadi kalau data tidak dari server) ────── */

@@ -1,0 +1,35 @@
+.card {
+  container-type: inline-size;
+}
+
+.actionLabel {
+  display: none;
+}
+
+.copyLabel {
+  width: 56px;
+}
+
+@container (min-width: 360px) {
+  .action {
+    width: auto;
+    padding-inline: 12px;
+  }
+
+  .actionLabel {
+    display: inline-block;
+    white-space: nowrap;
+  }
+
+  .prefix {
+    padding-inline: 12px;
+  }
+
+  .number {
+    padding-inline: 10px;
+  }
+
+  .copyCode {
+    width: 44px;
+  }
+}

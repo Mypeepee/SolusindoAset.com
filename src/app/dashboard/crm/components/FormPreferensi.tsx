@@ -33,6 +33,9 @@ import { motion } from "framer-motion";
 import TypePicker from "@/components/search/TypePicker";
 import LocationPicker from "@/components/search/LocationPicker";
 import KeywordField from "@/components/search/KeywordField";
+import SearchSelect from "@/components/search/SearchSelect";
+import { SewingPinIcon, DoubleArrowDownIcon, LayersIcon, Cross2Icon } from "@radix-ui/react-icons";
+import { JENIS_DISKON, LABEL_DISKON, inputPersenDiskon, masalahDiskon, type JenisDiskon } from "@/lib/preferensiDiskon";
 import { PremiumSelect, type PremiumOption } from "./CrmFormControls";
 import { regionKey, type RegionLevel, type SelectedRegion } from "@/lib/regionSearch";
 import { labelLuas } from "@/lib/klienRingkas";
@@ -79,6 +82,12 @@ const SERTIFIKAT_OPTIONS: PremiumOption[] = [
 const KELAS_INPUT =
   "w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-[12.5px] text-white placeholder-slate-600 outline-none transition-all focus:border-emerald-400/50 focus:bg-white/[0.05]";
 
+const DISKON_ICONS = { KELURAHAN: SewingPinIcon, TURUN_LELANG: DoubleArrowDownIcon, KEDUANYA: LayersIcon };
+const DISKON_OPTIONS = JENIS_DISKON.map(value => {
+  const Glyph = DISKON_ICONS[value];
+  return { value, label: LABEL_DISKON[value], icon: <Glyph width={18} height={18} /> };
+});
+
 /** Rp dengan pemisah ribuan, tanpa mengganggu kursor: input tetap teks. */
 export function formatRupiah(raw: string) {
   const num = String(raw).replace(/\D/g, "");
@@ -103,10 +112,10 @@ export function masalahPreferensi(p: PreferensiForm): string | null {
   const lmin = Number(unformatRupiah(p.luas_min)) || 0;
   const lmax = Number(unformatRupiah(p.luas_max)) || 0;
   if (lmin && lmax && lmin > lmax) return "Luas minimum lebih besar dari maksimum";
-  return null;
+  return masalahDiskon(p);
 }
 
-export type PickerPref = "type" | "transaksi" | "location" | "tujuan" | "legalitas" | null;
+export type PickerPref = "type" | "transaksi" | "location" | "tujuan" | "legalitas" | "diskon" | null;
 
 /* ════════════════════════════════════════════════════════════
    PEMETAAN FORM ⇄ BARIS TERSIMPAN
@@ -165,6 +174,8 @@ export function buildPrefPayloads(p: PreferensiForm) {
     budget_max:      p.budget_max ? Number(unformatRupiah(p.budget_max)) : null,
     luas_min:        p.luas_min ? Number(unformatRupiah(p.luas_min)) : null,
     luas_max:        p.luas_max ? Number(unformatRupiah(p.luas_max)) : null,
+    diskon_jenis:    p.diskon_jenis || null,
+    diskon_persen:   p.diskon_jenis && p.diskon_persen ? Number(p.diskon_persen) : null,
     legalitas:       p.legalitas || null,
     dekat_nilai:     p.dekat?.nilai ?? null,
     dekat_radius:    p.dekat && p.dekat_asli?.nilai === p.dekat.nilai && p.dekat_asli.radiusTampil === p.dekat.radius ? p.dekat_asli.radius : p.dekat?.radius ?? null,
@@ -198,6 +209,7 @@ export function sidikKriteria(p: {
   luas_min?: unknown; luas_max?: unknown; legalitas?: string | null;
   dekat_nilai?: string | null; dekat_radius?: number | null; alamat_teks?: string | null;
   tujuan_beli?: string | null; catatan?: string | null;
+  diskon_jenis?: string | null; diskon_persen?: unknown;
 }): string {
   const n = (v: unknown) => (v === null || v === undefined || v === "" ? "" : String(Number(v)));
   return JSON.stringify([
@@ -206,6 +218,7 @@ export function sidikKriteria(p: {
     p.legalitas || "",
     p.dekat_nilai || "", n(p.dekat_radius), p.alamat_teks || "",
     p.tujuan_beli || "", p.catatan || "",
+    p.diskon_jenis || "", n(p.diskon_persen),
   ]);
 }
 
@@ -224,6 +237,8 @@ export function groupPreferensi(rows: PreferensiKlien[]): PreferensiForm[] {
         budget_max:      p.budget_max ? formatRupiah(String(p.budget_max)) : "",
         luas_min:        p.luas_min ? formatRupiah(String(p.luas_min)) : "",
         luas_max:        p.luas_max ? formatRupiah(String(p.luas_max)) : "",
+        diskon_jenis:    p.diskon_jenis || "",
+        diskon_persen:   p.diskon_persen == null ? "" : String(p.diskon_persen),
         legalitas:       p.legalitas || "",
         alamat_teks:     p.alamat_teks || "",
         /* Chip tempat dirakit ulang dari kolom yang tersimpan. Label & ikonnya
@@ -451,6 +466,50 @@ export function IsiPreferensi({
             value={form.luas_max}
             onChange={e => onUbah("luas_max", formatRupiah(e.target.value))}
             className={KELAS_INPUT} />
+        </div>
+      </div>
+
+      <div className="rounded-2xl bg-white/[0.025] p-1 ring-1 ring-inset ring-white/[0.07]">
+        <div className="space-y-2.5 rounded-[12px] bg-[#0b1514] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Preferensi diskon</span>
+            {form.diskon_jenis && (
+              <button type="button" aria-label="Hapus preferensi diskon" onClick={() => { onUbah("diskon_jenis", ""); onUbah("diskon_persen", ""); }}
+                className="-my-2 flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-[11px] text-slate-400 outline-none transition-colors duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] hover:text-white focus-visible:ring-2 focus-visible:ring-emerald-300 motion-reduce:transition-none">
+                <Cross2Icon aria-hidden="true" /> Hapus
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_120px]">
+            <div className="min-w-0">
+              <label htmlFor={`${idUnik}-diskon-jenis`} className="mb-1 block text-[10px] font-bold text-slate-400">Jenis diskon</label>
+              <SearchSelect compact id={`${idUnik}-diskon-jenis`} label="Jenis diskon" value={form.diskon_jenis || ""}
+                onChange={v => onUbah("diskon_jenis", v as JenisDiskon)} options={DISKON_OPTIONS}
+                placeholder="Pilih jenis diskon" icon={<SewingPinIcon width={18} height={18} />}
+                open={pickerTerbuka === "diskon"} onOpenChange={v => setPicker(v ? "diskon" : null)}
+                triggerClassName="!min-h-11 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-emerald-300 active:scale-[0.99] motion-reduce:transform-none motion-reduce:transition-none"
+                contentClassName="!w-[var(--radix-select-trigger-width)] !rounded-xl !border-white/[0.08] !bg-[#101c1a]" />
+            </div>
+            <div>
+              <label htmlFor={`${idUnik}-diskon-persen`} className="mb-1 block text-[10px] font-bold text-slate-400">Di atas (%)</label>
+              <div className="relative">
+                <input id={`${idUnik}-diskon-persen`} type="text" inputMode="numeric" autoComplete="off" placeholder="50"
+                  disabled={!form.diskon_jenis} value={form.diskon_persen || ""}
+                  onChange={e => onUbah("diskon_persen", inputPersenDiskon(e.target.value, form.diskon_persen || ""))}
+                  aria-describedby={`${idUnik}-diskon-bantuan`}
+                  aria-invalid={!!form.diskon_persen && !!masalahDiskon(form)}
+                  className={`${KELAS_INPUT} min-h-11 pr-8 tabular-nums disabled:cursor-not-allowed disabled:opacity-40`} />
+                <span aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">%</span>
+              </div>
+            </div>
+          </div>
+          <p id={`${idUnik}-diskon-bantuan`} className="text-[11px] leading-relaxed text-slate-400" aria-live="polite">
+            {form.diskon_jenis === "KEDUANYA"
+              ? `Diskon kelurahan dan turun lelang masing-masing harus di atas ${form.diskon_persen || "…"}%.`
+              : form.diskon_jenis
+                ? `${LABEL_DISKON[form.diskon_jenis]} harus di atas ${form.diskon_persen || "…"}%.`
+                : "Opsional. Pilih jenis diskon, lalu isi satu persentase 1–99%."}
+          </p>
         </div>
       </div>
 

@@ -61,6 +61,10 @@
 
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
+import {
+  compareAuctionHistoryDates,
+  orderAuctionHistoryItems,
+} from "@/lib/auctionHistoryOrder";
 
 /* ───────────────────────────── Normalisasi ───────────────────────────── */
 
@@ -130,7 +134,7 @@ function editDistanceAtMost(a: string, b: string, max: number): number {
       cur[j] = Math.min(
         prev[j] + 1,
         cur[j - 1] + 1,
-        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
       );
       if (cur[j] < best) best = cur[j];
     }
@@ -275,7 +279,7 @@ const SKOR_MINIMUM = 2;
  */
 export function scoreAssetMatch(
   acuan: AssetFingerprint,
-  kandidat: AssetFingerprint
+  kandidat: AssetFingerprint,
 ): MatchVerdict {
   const nomorA = certNumbers(acuan.nomor_legalitas);
   const nomorB = certNumbers(kandidat.nomor_legalitas);
@@ -299,10 +303,10 @@ export function scoreAssetMatch(
     irisan.length === nomorA.length && irisan.length === nomorB.length
       ? "SAMA"
       : irisan.length === nomorB.length
-      ? "SEBAGIAN"
-      : irisan.length === nomorA.length
-      ? "LEBIH_LUAS"
-      : "BERIRISAN";
+        ? "SEBAGIAN"
+        : irisan.length === nomorA.length
+          ? "LEBIH_LUAS"
+          : "BERIRISAN";
 
   const tolak = (sebab: string): MatchVerdict => ({
     cocok: false,
@@ -331,11 +335,11 @@ export function scoreAssetMatch(
   // ±0,0005° ≈ 55 m — cukup ketat untuk membedakan bidang bertetangga.
   const koordinatIdentik = Boolean(
     latA &&
-      lngA &&
-      latB &&
-      lngB &&
-      Math.abs(latA - latB) <= 0.0005 &&
-      Math.abs(lngA - lngB) <= 0.0005
+    lngA &&
+    latB &&
+    lngB &&
+    Math.abs(latA - latB) <= 0.0005 &&
+    Math.abs(lngA - lngB) <= 0.0005,
   );
 
   const kelA = normWilayah(acuan.kelurahan);
@@ -343,7 +347,8 @@ export function scoreAssetMatch(
   const kelurahanIdentik = Boolean(kelA && kelB && kelA === kelB);
   const kelurahanMirip =
     !kelurahanIdentik && Boolean(kelA && kelB && nearlySameWilayah(kelA, kelB));
-  const kelurahanBerbeda = Boolean(kelA && kelB) && !kelurahanIdentik && !kelurahanMirip;
+  const kelurahanBerbeda =
+    Boolean(kelA && kelB) && !kelurahanIdentik && !kelurahanMirip;
 
   const legA = normText(acuan.legalitas);
   const legB = normText(kandidat.legalitas);
@@ -387,10 +392,7 @@ export function scoreAssetMatch(
     // koordinat tidak boleh dipakai untuk menganulirnya.
     if (selisihLuas !== null && selisihLuas > 0.1)
       return tolak("luas tanah jauh berbeda (bidang lain)");
-  } else if (
-    adaLuas &&
-    (cakupan === "SEBAGIAN" || cakupan === "LEBIH_LUAS")
-  ) {
+  } else if (adaLuas && (cakupan === "SEBAGIAN" || cakupan === "LEBIH_LUAS")) {
     // Salah satu sisi memuat seluruh bidang sisi lain plus tambahan, jadi
     // luasnya WAJIB boleh beda — yang tidak masuk akal justru kalau sisi
     // dengan bidang lebih banyak malah jauh lebih sempit. Toleransi 10% untuk
@@ -480,7 +482,8 @@ export function scoreAssetMatch(
 
   if (cakupan === "SEBAGIAN") alasan.push("sebagian bidang dari listing ini");
   else if (cakupan === "LEBIH_LUAS") alasan.push("paket yang memuat aset ini");
-  else if (cakupan === "BERIRISAN") alasan.push("paket dengan bidang beririsan");
+  else if (cakupan === "BERIRISAN")
+    alasan.push("paket dengan bidang beririsan");
 
   // Kelurahan yang jelas berbeda masih bisa lolos kalau bukti lain menumpuk
   // (alamat + luas + kecamatan sama persis = kemungkinan besar kelurahan salah
@@ -499,7 +502,7 @@ export function scoreAssetMatch(
 
 /* ────────────────────────── Pengambilan riwayat ───────────────────────── */
 
-type ListingRow = {
+export type AuctionHistorySourceRow = {
   id_property: bigint;
   judul: string;
   slug: string;
@@ -599,7 +602,7 @@ export function filterKotaSql(cores: Array<string | null>): Prisma.Sql {
  * kalau batas ini benar-benar tersentuh, hasilnya tetap sama tiap kali dimuat
  * (bukan riwayat yang "kadang muncul kadang tidak").
  */
-const MAKS_KANDIDAT = 1000;
+export const AUCTION_HISTORY_CANDIDATE_LIMIT = 1000;
 
 const splitGambar = (g: string | null): string[] =>
   (g ?? "")
@@ -619,72 +622,42 @@ const dec = (v: Prisma.Decimal | null): number | null => {
  * supaya dua LOT BERBEDA pada satu tanggal dengan limit kebetulan sama (lazim
  * pada paket yang dipecah rata) tidak ikut dilebur jadi satu baris.
  */
-function eventKey(r: ListingRow): string {
+export type AuctionHistoryEvent = AssetFingerprint & {
+  id_property: bigint;
+  harga: unknown;
+  nilai_limit_lelang: unknown;
+  tanggal_lelang: Date | null;
+  tanggal_dibuat: Date | null;
+};
+
+function eventKey(r: AuctionHistoryEvent): string {
   const tgl = r.tanggal_lelang
     ? new Date(r.tanggal_lelang).toISOString().slice(0, 10)
     : "";
-  const limit = r.nilai_limit_lelang ? String(dec(r.nilai_limit_lelang)) : "";
+  const limit = r.nilai_limit_lelang ? String(toNum(r.nilai_limit_lelang)) : "";
   // Tanpa tanggal maupun limit tidak ada dasar menyatakan kembar → unik per baris.
   if (!tgl && !limit) return `id:${r.id_property.toString()}`;
   return `${tgl}|${limit}|${certNumbers(r.nomor_legalitas).join("-")}`;
 }
 
-function waktuUrut(r: ListingRow): number {
-  const t = r.tanggal_lelang ?? r.tanggal_dibuat;
-  return t ? new Date(t).getTime() : Number.MAX_SAFE_INTEGER;
-}
-
-/**
- * Riwayat lelang lengkap untuk satu listing — SELALU menyertakan listing itu
- * sendiri, meskipun tidak ada aset lain yang cocok atau data sertifikatnya
- * kosong. Hasil sudah urut kronologis dan bebas duplikat.
- */
-export async function getAuctionHistory(
-  idProperty: bigint | string | number
-): Promise<AuctionHistoryResult | null> {
-  let id: bigint;
-  try {
-    id = BigInt(idProperty as any);
-  } catch {
-    return null;
-  }
-
-  const acuanRows = await prisma.$queryRaw<ListingRow[]>`
-    SELECT ${KOLOM} FROM listing WHERE id_property = ${id} LIMIT 1
-  `;
-  const acuan = acuanRows[0];
-  if (!acuan) return null;
-
+/** Shared collector for the detail timeline and batched Investor percentages. */
+export function assembleAuctionHistory<T extends AuctionHistoryEvent>(
+  acuan: T,
+  kandidat: T[],
+) {
+  const id = BigInt(acuan.id_property);
   const nomorSet = certNumbers(acuan.nomor_legalitas);
-  const bisaCocok = nomorSet.length > 0;
-
-  let kandidat: ListingRow[] = [];
-  if (bisaCocok) {
-    // Kandidat = irisan himpunan nomor sertifikat (`&&`), bukan kesamaan nomor
-    // pertama. Jenis sertifikat sengaja TIDAK disaring di SQL — paket campuran
-    // bisa tercatat dengan jenis berbeda antar event; keputusannya diserahkan
-    // ke scoreAssetMatch() yang punya konteks jumlah nomor yang beririsan.
-    kandidat = await prisma.$queryRaw<ListingRow[]>`
-      SELECT ${KOLOM}
-      FROM listing
-      WHERE jenis_transaksi = 'LELANG'
-        AND status_tayang <> 'TARIK_LISTING'
-        AND ${CERT_KEYS_EXPR} && ARRAY[${Prisma.join(nomorSet)}]::text[]
-        AND ${filterKotaSql([parseKota(acuan.kota).core])}
-        AND id_property <> ${id}
-      ORDER BY id_property
-      LIMIT ${MAKS_KANDIDAT}
-    `;
-  }
-
   // Terima kandidat yang lolos penilaian; simpan alasannya untuk transparansi.
-  const diterima: Array<{ row: ListingRow; verdict: MatchVerdict }> = [];
+  const diterima: Array<{
+    row: T;
+    verdict: MatchVerdict;
+  }> = [];
   for (const k of kandidat) {
     const verdict = scoreAssetMatch(acuan, k);
     if (verdict.cocok) diterima.push({ row: k, verdict });
   }
 
-  const semua: Array<{ row: ListingRow; verdict: MatchVerdict }> = [
+  const semua: Array<{ row: T; verdict: MatchVerdict }> = [
     {
       row: acuan,
       verdict: {
@@ -702,7 +675,7 @@ export async function getAuctionHistory(
   // Gabungkan baris kembar (satu event lelang ter-scrape berkali-kali).
   const perEvent = new Map<
     string,
-    { row: ListingRow; verdict: MatchVerdict; duplikat: string[] }
+    { row: T; verdict: MatchVerdict; duplikat: string[] }
   >();
   for (const entri of semua) {
     const key = eventKey(entri.row);
@@ -713,8 +686,9 @@ export async function getAuctionHistory(
     }
     // Listing yang sedang dibuka selalu jadi wakil event-nya.
     const wakilBaru =
-      entri.row.id_property === id ||
-      (ada.row.id_property !== id && entri.row.id_property < ada.row.id_property);
+      String(entri.row.id_property) === String(id) ||
+      (String(ada.row.id_property) !== String(id) &&
+        BigInt(entri.row.id_property) < BigInt(ada.row.id_property));
     if (wakilBaru) {
       perEvent.set(key, {
         row: entri.row,
@@ -726,81 +700,114 @@ export async function getAuctionHistory(
     }
   }
 
-  const urut = Array.from(perEvent.values()).sort((a, b) => {
-    const da = waktuUrut(a.row);
-    const db = waktuUrut(b.row);
-    if (da !== db) return da - db;
-    return Number(a.row.id_property - b.row.id_property);
-  });
+  const urut = Array.from(perEvent.values()).sort((a, b) =>
+    compareAuctionHistoryDates(a.row, b.row),
+  );
 
-  const hargaEfektif = (r: ListingRow): number | null => {
-    const limit = dec(r.nilai_limit_lelang);
-    if (limit && limit > 0) return limit;
-    const harga = dec(r.harga) ?? 0;
-    return harga > 0 ? harga : null;
-  };
+  return urut;
+}
 
-  // Rantai perbandingan harga hanya menyusuri entri dengan bidang yang sama
-  // persis; entri paket/pecahan dilewati supaya tidak melahirkan "diskon" palsu.
-  let efektifSebelumnya: number | null = null;
+export function auctionEffectivePrice(
+  r: Pick<AuctionHistoryEvent, "nilai_limit_lelang" | "harga">,
+): number | null {
+  const limit = toNum(r.nilai_limit_lelang);
+  if (limit && limit > 0) return limit;
+  const harga = toNum(r.harga) ?? 0;
+  return harga > 0 ? harga : null;
+}
 
-  const items: AuctionHistoryItem[] = urut.map((entri, idx) => {
-    const r = entri.row;
-    const limit = dec(r.nilai_limit_lelang);
-    const harga = dec(r.harga) ?? 0;
-    const efektif = hargaEfektif(r);
-    const sebidang = entri.verdict.cakupan === "SAMA";
+/**
+ * Riwayat lelang lengkap untuk satu listing — SELALU menyertakan listing itu
+ * sendiri, meskipun tidak ada aset lain yang cocok atau data sertifikatnya
+ * kosong. Hasil sudah urut kronologis dan bebas duplikat.
+ */
+export async function getAuctionHistory(
+  idProperty: bigint | string | number,
+): Promise<AuctionHistoryResult | null> {
+  let id: bigint;
+  try {
+    id = BigInt(idProperty as any);
+  } catch {
+    return null;
+  }
 
-    let delta: number | null = null;
-    if (sebidang) {
-      if (efektif && efektifSebelumnya) {
-        delta = ((efektif - efektifSebelumnya) / efektifSebelumnya) * 100;
-      }
-      if (efektif) efektifSebelumnya = efektif;
-    }
+  const acuanRows = await prisma.$queryRaw<AuctionHistorySourceRow[]>`
+    SELECT ${KOLOM} FROM listing WHERE id_property = ${id} LIMIT 1
+  `;
+  const acuan = acuanRows[0];
+  if (!acuan) return null;
 
-    const gambarList = splitGambar(r.gambar);
+  const nomorSet = certNumbers(acuan.nomor_legalitas);
+  const bisaCocok = nomorSet.length > 0;
 
-    return {
-      id_property: r.id_property.toString(),
-      urutan: idx + 1,
-      is_current: r.id_property === id,
-      judul: r.judul,
-      slug: r.slug,
-      harga,
-      nilai_limit_lelang: limit,
-      harga_efektif: efektif,
-      uang_jaminan: dec(r.uang_jaminan),
-      tanggal_lelang: r.tanggal_lelang
-        ? new Date(r.tanggal_lelang).toISOString()
-        : null,
-      tanggal_dibuat: r.tanggal_dibuat
-        ? new Date(r.tanggal_dibuat).toISOString()
-        : null,
-      gambar_utama: gambarList[0] ?? null,
-      gambar_list: gambarList,
-      status_tayang: r.status_tayang,
-      jenis_transaksi: r.jenis_transaksi,
-      kelurahan: r.kelurahan,
-      kecamatan: r.kecamatan,
-      kota: r.kota,
-      provinsi: r.provinsi,
-      legalitas: r.legalitas,
-      nomor_legalitas: r.nomor_legalitas,
-      nomor_legalitas_list: certNumbers(r.nomor_legalitas),
-      nomor_cocok: entri.verdict.nomor_cocok,
-      cakupan: entri.verdict.cakupan,
-      alamat_lengkap: r.alamat_lengkap,
-      luas_tanah: dec(r.luas_tanah),
-      luas_bangunan: dec(r.luas_bangunan),
-      link: r.link,
-      id_agent: r.id_agent,
-      confidence: entri.verdict.confidence,
-      alasan_cocok: entri.verdict.alasan,
-      duplikat_ids: entri.duplikat,
-      delta_persen: delta,
-    };
-  });
+  let kandidat: AuctionHistorySourceRow[] = [];
+  if (bisaCocok) {
+    // Kandidat = irisan himpunan nomor sertifikat (`&&`), bukan kesamaan nomor
+    // pertama. Jenis sertifikat sengaja TIDAK disaring di SQL — paket campuran
+    // bisa tercatat dengan jenis berbeda antar event; keputusannya diserahkan
+    // ke scoreAssetMatch() yang punya konteks jumlah nomor yang beririsan.
+    kandidat = await prisma.$queryRaw<AuctionHistorySourceRow[]>`
+      SELECT ${KOLOM}
+      FROM listing
+      WHERE jenis_transaksi = 'LELANG'
+        AND status_tayang <> 'TARIK_LISTING'
+        AND ${CERT_KEYS_EXPR} && ARRAY[${Prisma.join(nomorSet)}]::text[]
+        AND ${filterKotaSql([parseKota(acuan.kota).core])}
+        AND id_property <> ${id}
+      ORDER BY id_property
+      LIMIT ${AUCTION_HISTORY_CANDIDATE_LIMIT}
+    `;
+  }
+
+  const urut = assembleAuctionHistory(acuan, kandidat);
+
+  const items: AuctionHistoryItem[] = orderAuctionHistoryItems(
+    urut.map((entri) => {
+      const r = entri.row;
+      const limit = dec(r.nilai_limit_lelang);
+      const harga = dec(r.harga) ?? 0;
+      const efektif = auctionEffectivePrice(r);
+      const gambarList = splitGambar(r.gambar);
+
+      return {
+        id_property: r.id_property.toString(),
+        is_current: r.id_property === id,
+        judul: r.judul,
+        slug: r.slug,
+        harga,
+        nilai_limit_lelang: limit,
+        harga_efektif: efektif,
+        uang_jaminan: dec(r.uang_jaminan),
+        tanggal_lelang: r.tanggal_lelang
+          ? new Date(r.tanggal_lelang).toISOString()
+          : null,
+        tanggal_dibuat: r.tanggal_dibuat
+          ? new Date(r.tanggal_dibuat).toISOString()
+          : null,
+        gambar_utama: gambarList[0] ?? null,
+        gambar_list: gambarList,
+        status_tayang: r.status_tayang,
+        jenis_transaksi: r.jenis_transaksi,
+        kelurahan: r.kelurahan,
+        kecamatan: r.kecamatan,
+        kota: r.kota,
+        provinsi: r.provinsi,
+        legalitas: r.legalitas,
+        nomor_legalitas: r.nomor_legalitas,
+        nomor_legalitas_list: certNumbers(r.nomor_legalitas),
+        nomor_cocok: entri.verdict.nomor_cocok,
+        cakupan: entri.verdict.cakupan,
+        alamat_lengkap: r.alamat_lengkap,
+        luas_tanah: dec(r.luas_tanah),
+        luas_bangunan: dec(r.luas_bangunan),
+        link: r.link,
+        id_agent: r.id_agent,
+        confidence: entri.verdict.confidence,
+        alasan_cocok: entri.verdict.alasan,
+        duplikat_ids: entri.duplikat,
+      };
+    }),
+  );
 
   const totalSebidang = items.filter((i) => i.cakupan === "SAMA").length;
 
@@ -822,15 +829,15 @@ export async function getAuctionHistory(
           wilayah_level: normWilayah(acuan.kelurahan)
             ? "kelurahan"
             : normWilayah(acuan.kecamatan)
-            ? "kecamatan"
-            : "kota",
+              ? "kecamatan"
+              : "kota",
         }
       : null,
     alasan_tanpa_riwayat:
       items.length > 1
         ? null
         : bisaCocok
-        ? "TIDAK_ADA_KECOCOKAN"
-        : "TANPA_SERTIFIKAT",
+          ? "TIDAK_ADA_KECOCOKAN"
+          : "TANPA_SERTIFIKAT",
   };
 }

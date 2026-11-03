@@ -2,8 +2,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, chmodSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { RECOMMENDATION_BATCH_SIZE } from '../services/recommendation_policy.js';
+import { RECOMMENDATION_BATCH_SIZE, RECOMMENDATION_ORDER_VERSION, listingCreatedAt } from '../services/recommendation_policy.js';
 import { AUCTION_FRESHNESS_VERSION } from '../services/auction_freshness.js';
+const DAILY_POLICY = `${AUCTION_FRESHNESS_VERSION}:${RECOMMENDATION_ORDER_VERSION}`;
 
 // One durable queue per WhatsApp deployment, partitioned by sending agent.
 // A send intent is committed before touching WhatsApp. Ambiguous attempts
@@ -37,6 +38,8 @@ export class RecommendationOutbox {
     for (const [name, type] of Object.entries({ daily_day: 'TEXT', daily_policy: 'TEXT', daily_after_client: "TEXT NOT NULL DEFAULT ''", daily_completed_at: 'INTEGER', daily_checked: 'INTEGER NOT NULL DEFAULT 0', daily_matched: 'INTEGER NOT NULL DEFAULT 0' })) {
       if (!columns.has(name)) this.db.exec(`ALTER TABLE recommendation_agents ADD COLUMN ${name} ${type}`);
     }
+    const candidateColumns = this.db.prepare('PRAGMA table_info(recommendation_candidates)').all();
+    if (!candidateColumns.some(column => column.name === 'listed_at')) this.db.exec('ALTER TABLE recommendation_candidates ADD COLUMN listed_at INTEGER');
   }
   agent(agent) {
     this.db.prepare('INSERT OR IGNORE INTO recommendation_agents(agent) VALUES (?)').run(agent);
@@ -55,8 +58,8 @@ export class RecommendationOutbox {
     this.db.exec('BEGIN IMMEDIATE');
     try {
       if (this.agent(agent).cursor === previous) {
-        const insert = this.db.prepare('INSERT OR IGNORE INTO recommendation_candidates(agent,client,property,queued_at) VALUES (?,?,?,?)');
-        for (const c of candidates) insert.run(agent, c.client_id, c.property_id, this.now());
+        const insert = this.db.prepare('INSERT OR IGNORE INTO recommendation_candidates(agent,client,property,queued_at,listed_at) VALUES (?,?,?,?,?)');
+        for (const c of candidates) insert.run(agent, c.client_id, c.property_id, this.now(), listingCreatedAt(c.listed_at));
         this.db.prepare('UPDATE recommendation_agents SET cursor=?,last_scan_at=?,last_error=NULL WHERE agent=?').run(cursor, this.now(), agent);
       }
       this.db.exec('COMMIT');
@@ -65,9 +68,10 @@ export class RecommendationOutbox {
   pending(agent) {
     this.db.prepare("UPDATE recommendation_candidates SET state='expired' WHERE agent=? AND state='pending' AND queued_at<?").run(agent, this.now() - 7 * 86400000);
     const rows = this.db.prepare(`SELECT client,property FROM (
-      SELECT client,property,queued_at,ROW_NUMBER() OVER(PARTITION BY client ORDER BY queued_at,CAST(property AS INTEGER)) AS rank
+      SELECT client,property,queued_at,MIN(queued_at) OVER(PARTITION BY client) AS client_queued_at,
+        ROW_NUMBER() OVER(PARTITION BY client ORDER BY listed_at DESC,CAST(property AS INTEGER) DESC) AS rank
       FROM recommendation_candidates WHERE agent=? AND state='pending'
-    ) WHERE rank<=${RECOMMENDATION_BATCH_SIZE} ORDER BY queued_at,client,rank LIMIT 300`).all(agent);
+    ) WHERE rank<=${RECOMMENDATION_BATCH_SIZE} ORDER BY client_queued_at,client,rank LIMIT 300`).all(agent);
     const groups = new Map();
     for (const r of rows) {
       if (!groups.has(r.client)) groups.set(r.client, []);
@@ -77,7 +81,7 @@ export class RecommendationOutbox {
   }
   daily(agent, day) {
     this.agent(agent);
-    this.db.prepare("UPDATE recommendation_agents SET daily_day=?,daily_policy=?,daily_after_client='',daily_completed_at=NULL,daily_checked=0,daily_matched=0 WHERE agent=? AND (daily_day IS NULL OR daily_day<>? OR daily_policy IS NULL OR daily_policy<>?)").run(day, AUCTION_FRESHNESS_VERSION, agent, day, AUCTION_FRESHNESS_VERSION);
+    this.db.prepare("UPDATE recommendation_agents SET daily_day=?,daily_policy=?,daily_after_client='',daily_completed_at=NULL,daily_checked=0,daily_matched=0 WHERE agent=? AND (daily_day IS NULL OR daily_day<>? OR daily_policy IS NULL OR daily_policy<>?)").run(day, DAILY_POLICY, agent, day, DAILY_POLICY);
     return this.agent(agent);
   }
   dailyPage(agent, day, previous, page) {
@@ -86,9 +90,12 @@ export class RecommendationOutbox {
       const current = this.agent(agent);
       if (current.daily_day === day && current.daily_after_client === previous && !current.daily_completed_at) {
         this.db.prepare("UPDATE recommendation_candidates SET state='expired' WHERE agent=? AND state='pending' AND queued_at<?").run(agent, this.now() - 7 * 86400000);
-        const insert = this.db.prepare(`INSERT INTO recommendation_candidates(agent,client,property,queued_at) VALUES (?,?,?,?)
-          ON CONFLICT(agent,client,property) DO UPDATE SET state='pending',batch=NULL,queued_at=excluded.queued_at WHERE recommendation_candidates.state IN ('skipped','expired')`);
-        for (const c of page.candidates) insert.run(agent, c.client_id, c.property_id, this.now());
+        const insert = this.db.prepare(`INSERT INTO recommendation_candidates(agent,client,property,queued_at,listed_at) VALUES (?,?,?,?,?)
+          ON CONFLICT(agent,client,property) DO UPDATE SET state='pending',batch=NULL,
+            queued_at=CASE WHEN recommendation_candidates.state='pending' THEN recommendation_candidates.queued_at ELSE excluded.queued_at END,
+            listed_at=COALESCE(excluded.listed_at,recommendation_candidates.listed_at)
+          WHERE recommendation_candidates.state IN ('pending','skipped','expired')`);
+        for (const c of page.candidates) insert.run(agent, c.client_id, c.property_id, this.now(), listingCreatedAt(c.listed_at));
         this.db.prepare('UPDATE recommendation_agents SET daily_after_client=?,daily_completed_at=?,daily_checked=daily_checked+?,daily_matched=daily_matched+?,last_error=NULL WHERE agent=?')
           .run(page.after_client, page.more ? null : this.now(), page.checked, page.matched, agent);
       }

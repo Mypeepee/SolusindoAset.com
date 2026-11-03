@@ -32,7 +32,11 @@ export async function assetConsultationTurn({ asset, text = '', consultation, su
   const offer = nextQuestion(state, propertyTransactionType(asset), visit);
   // A short acknowledgement follows the question actually delivered. A later
   // MOU, address, or refund answer must not revive an older condition CTA.
-  const follow = agrees(text) && (!lastAnswer || offer.last_offer === state.last_offer && lastAnswer.trim().endsWith(offer.text)) ? state.last_offer : null;
+  const lastQuestion = lastAnswer?.match(/[^?？.!。\n]*[?？]\s*$/)?.[0] || '';
+  const offeredCosts = isPurchaseCostQuestion(lastQuestion) && /\b(?:mau|ingin|boleh|bisa|shall|would)\b/i.test(lastQuestion) &&
+    !/\b(?:atau|kondisi|survei|survey|viewing|dokumen|mou)\b/i.test(lastQuestion);
+  const follow = agrees(text) ? offeredCosts ? 'costs'
+    : (!lastAnswer || offer.last_offer === state.last_offer && lastAnswer.trim().endsWith(offer.text)) ? state.last_offer : null : null;
   const costs = isPurchaseCostQuestion(text) || follow === 'costs';
   const condition = isConditionQuestion(text) || follow === 'condition';
   const wantsVisit = isVisitRequest(text) || follow === 'survey';

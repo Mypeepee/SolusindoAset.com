@@ -1,0 +1,13 @@
+{
+  "scope": "Instagram carousel cover, source-based sales caption, single WhatsApp Story poster",
+  "marketingTests": { "command": "npm run test:marketing", "passed": 191 },
+  "whatsappTests": { "command": "node --test backend/whatsapp/test/marketing_status.test.js", "passed": 7 },
+  "productionBuild": { "command": "NEXT_BUILD_DIR=.next-social-poster-build npm run build", "exitCode": 0 },
+  "artwork": { "command": "node scripts/verify-marketing-artwork.cjs", "passed": true, "dimensions": [[1080, 1350], [1080, 1920]], "photoCounts": [1, 2, 3], "longTitlesAndPrices": true, "externalRequests": 0 },
+  "browser": { "command": "node scripts/verify-marketing-poster-browser.mjs", "passed": true, "widths": [1440, 390, 320], "checks": ["cover-first slide ordering", "keyboard and thumbnails", "caption copy success and failure", "download destinations", "image failure recovery", "responsive overflow", "reduced motion", "Escape and focus restoration"], "writes": 0 },
+  "existingWorkflowBrowser": { "command": "MARKETING_QA_ORIGIN=http://127.0.0.1:3041 node scripts/verify-marketing-browser.mjs", "passed": true, "widths": [1440, 1024, 768, 320], "publishedNothing": true },
+  "staticUiAudit": { "exitCode": 0, "findings": 0 },
+  "designLint": { "exitCode": 0, "errors": 0, "existingOrphanTokenWarnings": 3 },
+  "formatting": { "tool": "Prettier", "passed": true },
+  "limitations": ["Repository-wide TypeScript checking reports 132 errors outside the changed implementation files.", "npm run lint requests initial ESLint configuration; no ESLint configuration was added.", "Approved campaign captions are preserved; regenerate a campaign plan to adopt the new caption."]
+}

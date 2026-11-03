@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { normalizeText } from '../lib/security.js';
 import { needsAuctionCheck } from './auction_check.js';
 import { auctionCostEstimate } from './property_costs.js';
+import { auctionTimeline } from './auction_timeline.js';
 
 const moneyFields = ['limit_price', 'market_estimate', 'deposit', 'additional_cost_estimate'];
 const dateFields = ['registration_closes_at', 'deposit_due_at', 'auction_at', 'verified_at',
@@ -117,6 +118,7 @@ export function assetFacts(asset, now = Date.now()) {
   return {
     ...Object.fromEntries(contextFields.filter((key) => asset[key] !== undefined).map((key) => [key, asset[key]])),
     auction_check_required: needsAuctionCheck(asset, now),
+    auction_timeline: auctionTimeline(asset, now),
     purchase_cost_estimate: auctionCostEstimate(asset),
     availability: {
       status: verifiedAvailability ? asset.availability_status || 'unknown' : 'unknown',

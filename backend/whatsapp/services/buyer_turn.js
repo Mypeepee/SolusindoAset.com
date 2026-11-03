@@ -2,7 +2,7 @@ import { normalizeBuyerQuantities, unrestrictedPreferenceAnswer, assistantQuesti
 import { PROPERTY_CATEGORY_LABELS } from './property_category.js';
 import { transactionExplanation, transactionAnswerText, isTransactionQuestion, TRANSACTION_QUESTION } from './property_transaction.js';
 
-export const UNDERSTANDING_VERSION = '2026-10-20-smart-multi-location-search-v28';
+export const UNDERSTANDING_VERSION = '2026-10-22-auction-timeline-v31';
 export const CONFIRM_PREFIX = 'Apakah maksud Bapak/Ibu: ';
 const affirmative = /^(?:(?:iya|ya|betul|benar|oke|ok|setuju|sip|lanjut)(?:\s+(?:betul|benar|itu|sudah|sesuai|pak|bu|bapak|ibu|kak|ya|saja|aja))*)[.!\s]*$/i;
 

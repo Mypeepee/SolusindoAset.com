@@ -3,7 +3,7 @@
 import { extractLandArea, isLandAreaQuestion } from './land_area.js';
 import { resolveRegion, resolveCityChoice, resolvePendingRegionChoice, requestedAreaMention, isKnownRegionPhrase, knownCityNames as cityNames } from './region_directory.js';
 import { categoryPreference, anyPropertyCategory, isCategoryQuestion } from './property_category.js';
-import { normalizeBuyerLanguage, normalizeBuyerQuantities, correctedQuantityText, assistantQuestions, isBudgetQuestion, acceptsAnyLocation, positiveGeographyText, geographicScopeText, maskLandPreferences, unrestrictedPreferenceAnswer, priceOrderPreference } from './buyer_language.js';
+import { normalizeBuyerLanguage, normalizeBuyerQuantities, correctedQuantityText, assistantQuestions, isBudgetQuestion, isSearchBudgetAnswer, acceptsAnyLocation, positiveGeographyText, geographicScopeText, maskLandPreferences, unrestrictedPreferenceAnswer, priceOrderPreference } from './buyer_language.js';
 import { buyerTurn } from './buyer_turn.js';
 import { hasLocationReference, isLocationReferenceAnswer, requestsAlternatives, geographyWithoutReferences } from './conversation_references.js';
 import { transactionPreference, transactionValues, transactionGeographyText, isTransactionQuestion, isRentalPeriodQuestion, rentalPeriod, rentalPeriodAnswer } from './property_transaction.js';
@@ -12,6 +12,7 @@ import { searchScopeTurn, regionGroupLabel } from './search_scope.js';
 import { searchRecovery, uncertainLocation } from './search_recovery.js';
 import { parseBudgetAmounts, budgetUnitAnswer } from './budget_amounts.js';
 import { localDiscovery, discoveryOnlyText, applyDiscovery } from './smart_search_parser.js';
+import { isPurchaseCostQuestion } from './property_costs.js';
 
 // Local national directory; no network dependency during a conversation.
 const cityPrefix = /^(?:kota(?:\s+(?:administrasi|adm\.?))?|kabupaten(?:\s+administrasi)?|kab\.?(?:\s+adm\.?)?)\s+/i;
@@ -30,7 +31,7 @@ export const hasSearchIntent = (text) => /\b(cari(?:kan)?|mencari|butuh|alternat
 export function explicitAsset(text, preceding) {
   const plain = normalizeBuyerLanguage(text).replace(/\*/g, '');
   return /(?:\b(?:kode|id|aset|properti)\s*[:#-]?\s*|#)(?=[A-Z0-9-]*\d)[A-Z0-9-]+\b/i.test(plain) ||
-    (/^\s*[1-9]\d{0,17}\s*$/.test(plain) && !isLandAreaQuestion(preceding?.content) && !isBudgetQuestion(preceding?.content)) ||
+    (/^\s*[1-9]\d{0,17}\s*$/.test(plain) && !isLandAreaQuestion(preceding?.content) && !isSearchBudgetAnswer(plain, preceding?.content)) ||
     /\/(?:Lelang|Jual|Sewa|Secondary|Primary|properti)\//i.test(plain);
 }
 export const BACKUP_AREA_QUESTION = 'Sembari menunggu konfirmasi status aset ini, di daerah mana Bapak/Ibu ingin mencari properti agar saya bisa menyiapkan opsi cadangan yang sesuai?';
@@ -65,7 +66,8 @@ export function extractBudget(text, { allowImplicit = false, implicitUnit = null
   if (financialLabel) clean = clean.slice(financialLabel.index);
   if (!financialLabel && !/\b(?:juta|jt|miliar|milyar|ribu|rb|rp)\b/i.test(clean) && /\b(?:kamar|lantai|jarak|meter|hektar|ha)\b/i.test(clean)) return null;
   const implicit = allowImplicit && !/[?？]|\b(?:luas|lt|lb|meter|jarak|kamar|lantai)\b|m[²2]/i.test(clean);
-  if (!implicit && !budgetIntent.test(clean) && !(hasSearchIntent(clean) && /\b(?:rp|juta|jt|miliar|milyar)\b/i.test(clean)) &&
+  const explicitMoney = /\brp\.?\s*\d|\d[\d.,]*\s*rupiah\b/i.test(clean);
+  if (!implicit && !explicitMoney && !budgetIntent.test(clean) && !(hasSearchIntent(clean) && /\b(?:rp|juta|jt|miliar|milyar)\b/i.test(clean)) &&
       !(/^\s*(?:rp\.?\s*)?\d/.test(clean) && new RegExp(`${NUMBER}\\s*${UNIT}\\b`, 'i').test(clean))) return null;
   return parseBudgetAmounts(clean, { implicitUnit, defaultUnit });
 }
@@ -199,6 +201,8 @@ export function buyerContext(history, text, previousId, { seed = {}, forceSearch
     : userTurns.slice(continuation ? -1 : -12);
   for (const { content: rawContent, index } of messages) {
     const preceding = conversation[index - 1];
+    // Consulting on a selected unit must not change its saved search filters.
+    if (previousId && isPurchaseCostQuestion(rawContent) && !hasSearchIntent(rawContent)) continue;
     const discovery = localDiscovery(rawContent, { city: profile.city });
     const discoveryGeography = !!(discovery.locations?.length || discovery.cities?.length || discovery.route_landmarks?.length);
     const recovery = searchStarted ? searchRecovery(rawContent, preceding?.content, profile) : null;
@@ -250,7 +254,7 @@ export function buyerContext(history, text, previousId, { seed = {}, forceSearch
     const selectedTransactions = transaction?.values || transactionValues(profile);
     const purchaseBudget = selectedTransactions.length > 0 && selectedTransactions.every((type) => type !== 'SEWA');
     let budget = landArea && !/\b(?:budget|bujet|anggaran|harga|rp|juta|jt|miliar|milyar)\b|\bdi\s*bawah\s*\d/i.test(content) ? null : extractBudget(content, {
-      allowImplicit: searchStarted && (profile.max_price == null || isBudgetQuestion(preceding?.content)),
+      allowImplicit: searchStarted && (profile.max_price == null || isSearchBudgetAnswer(content, preceding?.content)),
       implicitUnit: purchaseBudget ? 'juta' : null,
     });
     const confirmedUnit = budgetError === 'ambiguous' && budgetClarification && isBudgetQuestion(preceding?.content) ? budgetUnitAnswer(content) : null;

@@ -26,6 +26,7 @@ import { SliderDots } from "@/components/SliderDots";
 import { AksesMarquee, Marquee } from "@/components/AksesMarquee";
 import { KosChipRow } from "@/components/kos/KosChipRow";
 import { KosPillBadge } from "@/components/kos/KosPillBadge";
+import { PropertyCardFrame, PROPERTY_CARD_PHOTO_CLASS } from "./PropertyCardFrame";
 import {
   buildFasilitasChips,
   pilihAksesUtama,
@@ -511,10 +512,10 @@ export const PropertyCard = ({ item }: { item: PropertyDB }) => {
     : labelChips;
 
   return (
-    <div className={`bg-[#111111] rounded-3xl overflow-hidden group transition-all duration-300 flex flex-col h-full ${item.is_hot_deal ? HOT_DEAL_CARD_CLASS : "border border-white/5 hover:border-emerald-400/70 hover:shadow-[0_24px_70px_-30px_rgba(16,185,129,0.7)]"}`}>
+    <PropertyCardFrame className={item.is_hot_deal ? HOT_DEAL_CARD_CLASS : "border border-white/5 hover:border-emerald-400/70 hover:shadow-[0_24px_70px_-30px_rgba(16,185,129,0.7)]"}>
       {/* IMAGE */}
       <div
-        className="relative w-full h-60 md:h-64 overflow-hidden"
+        className={PROPERTY_CARD_PHOTO_CLASS}
         {...(images.length > 1 ? swipe : {})}
       >
         <Image
@@ -966,7 +967,7 @@ export const PropertyCard = ({ item }: { item: PropertyDB }) => {
           </span>
         </div>
       </div>
-    </div>
+    </PropertyCardFrame>
   );
 };
 

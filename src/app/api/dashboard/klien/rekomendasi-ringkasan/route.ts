@@ -21,6 +21,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
 import { prisma } from "@/lib/prisma";
 import { cariCocok, type KriteriaMatch } from "@/lib/klienMatch";
 import { siapkanDekat, dekatUntuk } from "@/lib/klienDekat";
+import { siapkanDiskon, kunciDiskon } from "@/lib/klienMatch";
 import { muatPengecualian, gabung } from "@/lib/klienPengecualian";
 
 export const runtime = "nodejs";
@@ -95,6 +96,7 @@ export async function GET(_req: NextRequest) {
   const GELOMBANG = 4;
 
   const petaDekat = await siapkanDekat(kandidat.flatMap(k => k.preferensi));
+  const petaDiskon = await siapkanDiskon(kandidat.flatMap(k => k.preferensi));
 
   const periksaSatu = async (k: (typeof kandidat)[number]) => {
     const kecuali = gabung(petaKecuali, k.id_klien, k.id_properti_asal);
@@ -116,6 +118,9 @@ export async function GET(_req: NextRequest) {
         legalitas: p.legalitas,
         dekat: dekatUntuk(p, petaDekat),
         alamat_teks: p.alamat_teks,
+        diskon_jenis: p.diskon_jenis,
+        diskon_persen: p.diskon_persen,
+        diskon_ids: petaDiskon.get(kunciDiskon(p)),
       };
       const hasil = await cariCocok<any>(prisma, kriteria, {
         kecuali, select: SELECT_TIPIS, maks: KOLAM_RINGKAS,

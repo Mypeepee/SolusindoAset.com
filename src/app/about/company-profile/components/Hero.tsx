@@ -8,7 +8,6 @@ import { AmbientBackdrop } from "./_shared";
 
 type Stats = {
   activeListings: number;
-  transactionVolume: number;
   professionalAgents: number;
   clientSatisfaction: number;
 };
@@ -20,11 +19,6 @@ const formatCompactID = (n: number): string => {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}Jt`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}rb`;
   return n.toLocaleString("id-ID");
-};
-
-const formatIDR = (n: number): string => {
-  if (!Number.isFinite(n) || n <= 0) return "Rp 0";
-  return `Rp ${formatCompactID(n)}`;
 };
 
 const Hero: React.FC = () => {
@@ -53,12 +47,6 @@ const Hero: React.FC = () => {
       label: "Listing Aktif",
       value: stats ? formatCompactID(stats.activeListings) : null,
       suffix: stats && stats.activeListings > 0 ? "+" : "",
-    },
-    {
-      icon: "solar:wallet-money-bold-duotone",
-      label: "Total Omzet",
-      value: stats ? formatIDR(stats.transactionVolume) : null,
-      suffix: "",
     },
     {
       icon: "solar:users-group-rounded-bold-duotone",
@@ -214,25 +202,25 @@ const Hero: React.FC = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.6, duration: 0.8 }}
-            className="mt-8 sm:mt-10 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 w-full sm:w-auto max-w-sm sm:max-w-none"
+            className="mt-8 sm:mt-10 flex flex-row items-stretch sm:items-center gap-2 sm:gap-4 w-full sm:w-auto max-w-sm sm:max-w-none"
           >
             <a
               href="#executive-summary"
-              className="group inline-flex items-center justify-center gap-2 px-6 sm:px-7 py-3.5 rounded-full bg-gradient-to-r from-emerald-400 to-teal-500 text-[#05070D] font-bold text-sm tracking-wide shadow-[0_8px_30px_rgba(52,211,153,0.25)] hover:shadow-[0_12px_40px_rgba(52,211,153,0.45)] active:scale-[0.98] transition-all"
+              className="group inline-flex min-w-0 flex-1 sm:flex-none items-center justify-center gap-1 sm:gap-2 px-2 sm:px-7 py-3.5 rounded-full bg-gradient-to-r from-emerald-400 to-teal-500 text-[#05070D] font-bold text-xs sm:text-sm whitespace-nowrap sm:tracking-wide shadow-[0_8px_30px_rgba(52,211,153,0.25)] hover:shadow-[0_12px_40px_rgba(52,211,153,0.45)] active:scale-[0.98] transition-all"
             >
               Telusuri Profil
               <Icon
                 icon="solar:arrow-right-bold"
-                className="text-lg group-hover:translate-x-1 transition-transform"
+                className="shrink-0 text-base sm:text-lg group-hover:translate-x-1 transition-transform"
               />
             </a>
             <a
               href="#contact"
-              className="inline-flex items-center justify-center gap-2 px-6 sm:px-7 py-3.5 rounded-full border border-emerald-400/25 bg-white/[0.04] backdrop-blur-md text-white text-sm font-semibold hover:bg-white/[0.08] hover:border-emerald-400/40 active:scale-[0.98] transition-all"
+              className="inline-flex min-w-0 flex-1 sm:flex-none items-center justify-center gap-1 sm:gap-2 px-2 sm:px-7 py-3.5 rounded-full border border-emerald-400/25 bg-white/[0.04] backdrop-blur-md text-white text-xs sm:text-sm whitespace-nowrap font-semibold hover:bg-white/[0.08] hover:border-emerald-400/40 active:scale-[0.98] transition-all"
             >
               <Icon
                 icon="solar:phone-calling-bold-duotone"
-                className="text-lg text-emerald-300"
+                className="shrink-0 text-base sm:text-lg text-emerald-300"
               />
               Hubungi Tim Kami
             </a>
@@ -243,7 +231,7 @@ const Hero: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.85, duration: 1 }}
-            className="mt-12 sm:mt-14 grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full max-w-3xl"
+            className="mt-12 sm:mt-14 grid grid-cols-3 gap-2 sm:gap-4 w-full max-w-3xl"
           >
             {trustStats.map((s, i) => (
               <motion.div
@@ -251,7 +239,7 @@ const Hero: React.FC = () => {
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.95 + i * 0.08, duration: 0.5 }}
-                className="relative rounded-2xl border border-emerald-400/[0.12] bg-gradient-to-b from-emerald-400/[0.04] to-white/[0.015] backdrop-blur-md p-4 sm:p-5 text-left overflow-hidden group hover:border-emerald-400/30 transition-colors"
+                className="relative min-w-0 rounded-2xl border border-emerald-400/[0.12] bg-gradient-to-b from-emerald-400/[0.04] to-white/[0.015] backdrop-blur-md p-2.5 sm:p-5 text-left overflow-hidden group hover:border-emerald-400/30 transition-colors"
               >
                 <div className="absolute top-0 right-0 h-20 w-20 rounded-full bg-emerald-400/[0.06] blur-2xl group-hover:bg-emerald-400/15 transition-all duration-700" />
                 <div className="relative">
@@ -259,17 +247,17 @@ const Hero: React.FC = () => {
                     icon={s.icon}
                     className="text-lg sm:text-xl text-emerald-300"
                   />
-                  <div className="mt-2 text-lg sm:text-2xl font-extrabold text-white tracking-tight tabular-nums">
+                  <div className="mt-2 text-base sm:text-2xl font-extrabold text-white tracking-tight tabular-nums whitespace-nowrap">
                     {s.value !== null ? (
                       <>
                         {s.value}
                         {s.suffix}
                       </>
                     ) : (
-                      <span className="inline-block h-6 sm:h-7 w-16 sm:w-20 rounded-md bg-white/5 animate-pulse" />
+                      <span className="inline-block h-6 sm:h-7 w-full max-w-16 sm:max-w-20 rounded-md bg-white/5 animate-pulse" />
                     )}
                   </div>
-                  <div className="text-[9px] sm:text-[10px] tracking-[0.18em] uppercase text-white/55 mt-1 font-semibold">
+                  <div className="text-[9px] sm:text-[10px] tracking-[0.08em] sm:tracking-[0.18em] uppercase text-white/55 mt-1 font-semibold">
                     {s.label}
                   </div>
                 </div>

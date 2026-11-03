@@ -1,6 +1,6 @@
 import { recommendationIds } from './recommendations.js';
-import { explicitAsset, hasSearchIntent } from './buyer_profile.js';
-import { normalizeBuyerLanguage } from './buyer_language.js';
+import { explicitAsset, hasSearchIntent, extractBudget } from './buyer_profile.js';
+import { normalizeBuyerLanguage, isSearchBudgetAnswer } from './buyer_language.js';
 
 export const AMBIGUOUS_SELECTION_REPLY = 'Ada beberapa pilihan yang cocok dengan pesan tadi. Mau saya buka nomor berapa? Boleh juga kirim link detail atau kode asetnya.';
 export const INVALID_SELECTION_REPLY = 'Pilihan itu belum cocok dengan daftar rekomendasi terakhir. Boleh sebutkan nomor dari daftar, atau kirim link detail/kode asetnya?';
@@ -122,6 +122,11 @@ export function selectedRecommendation(text, history) {
   // A code/link is already an explicit pointer; an address or ordinal must not
   // override it. Bare 1–5 after cards remains an ordinal, not an asset code.
   if (explicitAsset(text) && !/^\s*\d{1,2}\s*[.!?]?\s*$/.test(text)) return null;
+  // "Coba 300" answers an empty-search budget prompt, not a request for
+  // recommendation number 300. An explicit numbered choice still wins.
+  const preceding = history.findLast(item => item.role === 'assistant')?.content;
+  if (isSearchBudgetAnswer(text, preceding) && !/\b(?:nomor|nomer|nmr|no|yang|yg|opsi|pilihan|ke)\b/i.test(text) &&
+      extractBudget(text, { allowImplicit: true })) return null;
   const last = previousRecommendations(history);
   if (!last) return ordinals.length && /\b(?:nomor|nomer|nmr|no|yang|yg|opsi|pilihan|pilih|lihat|coba|buka|detail)\b/i.test(text) ? { id: null, kind: 'missing' } : null;
   const detail = /\b(?:detail(?:nya)?|rincian|spesifikasi|jelaskan|info(?:rmasi)? lengkap|pilih|bahas|maksud)\b/i.test(text) ||

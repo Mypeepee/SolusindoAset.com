@@ -45,6 +45,9 @@ export class DatabaseCatalog {
     const excluded = new Set(criteria?.exclude_ids || []);
     const candidates = result.candidates.filter((property) => !excluded.has(String(property.id)));
     const status = result.status === 'recommendations' && !candidates.length ? 'not_found' : result.status;
-    return { asset: result.asset || null, catalog: candidates, status, source: result.source, selection };
+    const diagnostics = status === 'not_found' && !candidates.length && result.diagnostics?.reason === 'auction_schedule_unverified'
+      ? { reason: 'auction_schedule_unverified' } : undefined;
+    return { asset: result.asset || null, catalog: candidates, status, source: result.source, selection,
+      ...(diagnostics ? { diagnostics } : {}) };
   }
 }

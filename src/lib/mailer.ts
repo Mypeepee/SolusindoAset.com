@@ -23,6 +23,11 @@
 // ---------------------------------------------------------------------------
 
 import nodemailer from "nodemailer";
+import {
+  campaignReminderEmail,
+  type CampaignReminderEmail,
+  type CampaignReminderRecipient,
+} from "@/lib/marketing/campaign-reminder-email";
 
 const GMAIL_USER = process.env.GMAIL_USER || "";
 const GMAIL_APP_PASSWORD = (process.env.GMAIL_APP_PASSWORD || "").replace(/\s+/g, "");
@@ -80,12 +85,56 @@ function getTransport() {
     host: "smtp.gmail.com",
     port: 465,
     secure: true,
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 30000,
     auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
   });
   return cachedTransport;
 }
 
 /* ---------------- Helpers ---------------- */
+
+export type CampaignReminderDelivery = {
+  state: "sent" | "retry" | "uncertain" | "unconfigured";
+  messageId?: string;
+  errorCode?: string;
+};
+
+/** Preserve ambiguous SMTP outcomes so the scheduler cannot duplicate mail. */
+export async function sendCampaignReminderEmail(
+  to: CampaignReminderRecipient,
+  input: CampaignReminderEmail,
+  deliveryId: string,
+): Promise<CampaignReminderDelivery> {
+  if (!isMailConfigured())
+    return { state: "unconfigured", errorCode: "SMTP_NOT_CONFIGURED" };
+  const email = campaignReminderEmail(input);
+  const messageId = `<campaign-reminder-${deliveryId}@solusindoaset.com>`;
+  try {
+    const result = await getTransport().sendMail({
+      from: `"${BRAND}" <${GMAIL_USER}>`,
+      to,
+      messageId,
+      subject: email.subject,
+      text: email.text,
+      html: email.html,
+    });
+    return result.accepted?.includes(to)
+      ? { state: "sent", messageId: result.messageId || messageId }
+      : { state: "retry", errorCode: "SMTP_REJECTED" };
+  } catch (error) {
+    const e = error as { responseCode?: number; command?: string; code?: string };
+    // A negative SMTP response or failure before DATA means Gmail did not accept it.
+    const rejected =
+      (e.responseCode && e.responseCode >= 400) ||
+      ["EAUTH", "EENVELOPE", "EDNS", "ECONNECTION"].includes(e.code || "") ||
+      /^(CONN|EHLO|HELO|AUTH|MAIL FROM|RCPT TO)$/i.test(e.command || "");
+    return rejected
+      ? { state: "retry", errorCode: "SMTP_REJECTED" }
+      : { state: "uncertain", messageId, errorCode: "DELIVERY_UNCERTAIN" };
+  }
+}
 
 // Escape karakter HTML supaya data dari pengguna aman ditempel ke markup email.
 function esc(input: unknown): string {

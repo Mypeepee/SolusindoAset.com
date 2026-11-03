@@ -6,7 +6,7 @@ import { normalizeBuyerLanguage } from "../../../backend/whatsapp/services/buyer
 import { SURABAYA_REGIONS, nearbyQueryParts } from "../../../backend/whatsapp/services/search_scope.js";
 import { normalNama, kelasDariKata, tebakKelasDariNama, KELAS_TEMPAT, RADIUS_JANGKAUAN } from "../tempat/normalisasi.ts";
 import { nearbyNameWhere } from "../nearbyNameWhere.ts";
-import { freshAuctionWhere, isFreshAuction } from "../../../backend/whatsapp/services/auction_freshness.js";
+import { auctionFreshnessCutoff, freshAuctionWhere, isFreshAuction } from "../../../backend/whatsapp/services/auction_freshness.js";
 
 // This is the entire database surface available to the chatbot. Never use
 // include: true, SELECT *, an LLM-generated query, or a user-selected column.
@@ -127,11 +127,11 @@ export function isBuyerCriteria(value: unknown): value is BuyerCriteria {
     (c.min_land_area_m2 == null || c.max_land_area_m2 == null || Number(c.min_land_area_m2) <= Number(c.max_land_area_m2));
 }
 
-export function planPropertyLookup(text: string, previousId?: string | null) {
+export function planPropertyLookup(text: string, previousId?: string | null, { allowStandaloneId = true } = {}) {
   text = normalizeBuyerLanguage(text).replace(/\*/g, "");
   const explicit = [...text.matchAll(/(?:\b(?:kode|id|aset|properti|property)\s*[:#-]?\s*\*?|#)([1-9]\d{0,17})\b/gi)].map((m) => m[1]);
   const standalone = /^\s*\*?([1-9]\d{0,17})\*?\s*$/.exec(text)?.[1];
-  if (standalone) explicit.push(standalone);
+  if (standalone && allowStandaloneId) explicit.push(standalone);
   // Public property links are parsed as text; no URL supplied by a user is fetched.
   for (const match of text.matchAll(/\/(?:Lelang|Jual|Secondary|Primary|Sewa|properti)\/(?:[^\s/?#]*?-)?([1-9]\d{0,17})(?:\/|[?#\s)*.,]|$)/gi)) explicit.push(match[1]);
   const ids = [...new Set(explicit)];
@@ -214,9 +214,12 @@ export function mapPublicProperty(row: PublicRow, readAt: number) {
 }
 
 export async function getPropertyKnowledge(db: Database, input: { text: string; previousId?: string | null; criteria?: BuyerCriteria }, now = Date.now()) {
-  const plan = planPropertyLookup(input.text, input.previousId);
   const criteria = input.criteria;
   if (criteria && !isBuyerCriteria(criteria)) throw new TypeError("INVALID_BUYER_CRITERIA");
+  // The conversation has already resolved a bare number into search criteria
+  // (budget/land size). Do not reinterpret that answer as an asset ID here.
+  // Labelled codes and detail links still select an asset explicitly.
+  const plan = planPropertyLookup(input.text, input.previousId, { allowStandaloneId: !criteria });
   if (criteria && !plan.explicit) {
     plan.ids = [];
     plan.terms = criteria.region_group || criteria.locations?.length || criteria.cities?.length || criteria.route_landmarks?.length ? [] : criteria.location.toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, " ").split(/\s+/).filter((t) => t.length > 1 && !STOP_WORDS.has(t)).slice(0, 4);
@@ -307,6 +310,7 @@ export async function getPropertyKnowledge(db: Database, input: { text: string; 
     };
   }
   const recommended = !!criteria && !plan.explicit && !!criteria.max_price;
+  const publicMatches = { ...where };
   if (!plan.ids.length) where.AND = [...(Array.isArray(where.AND) ? where.AND : []), freshAuctionWhere(now)];
   const rankAuctions = recommended && (criteria.transaction_types ? criteria.transaction_types.includes("LELANG") : !criteria.transaction_type || criteria.transaction_type === "LELANG");
   const cheapestFirst = criteria?.sort_by === "price_asc";
@@ -335,6 +339,20 @@ export async function getPropertyKnowledge(db: Database, input: { text: string; 
   }
   if (cheapestFirst) selection.sort_by = "price_asc";
   const properties = rows.filter(row => plan.ids.length || isFreshAuction(row, now)).map((row) => mapPublicProperty(row, now));
+  // An empty eligible set does not prove the public website has no matching
+  // listings. Diagnose old/missing auction schedules with the SAME criteria;
+  // keep those lots out of automatic recommendations and do not relax price.
+  let diagnostics: { reason: "auction_schedule_unverified" } | undefined;
+  if (recommended && !properties.length && !criteria.upcoming_auction_only &&
+      (!criteria.transaction_type || criteria.transaction_type === "LELANG") &&
+      (!criteria.transaction_types || criteria.transaction_types.includes("LELANG"))) {
+    const cutoff = auctionFreshnessCutoff(now);
+    const older = await db.listing.findMany({ where: { ...publicMatches, AND: [
+      ...(Array.isArray(publicMatches.AND) ? publicMatches.AND : []), { jenis_transaksi: "LELANG" },
+      { OR: [{ tanggal_lelang: null }, { tanggal_lelang: { lt: cutoff } }] },
+    ] }, select: { id_property: true }, take: 1 });
+    if (older.length) diagnostics = { reason: "auction_schedule_unverified" };
+  }
   // A residential brand can occur in multiple cities. Do not silently prefer
   // the cheapest city when the client has not specified which one they mean.
   if (criteria && !plan.explicit && !criteria.city && !criteria.cities?.length && new Set(properties.map((p) => p.address.city?.toLowerCase().replace(/^(?:kota|kab(?:upaten)?\.?)\s*/i, ''))).size > 1) {
@@ -353,7 +371,7 @@ export async function getPropertyKnowledge(db: Database, input: { text: string; 
       }
       return enriched;
     })) : properties,
-    source: "database_listing_publik", selection };
+    source: "database_listing_publik", selection, ...(diagnostics ? { diagnostics } : {}) };
 }
 
 async function enrichPublicProperty(db: Database, asset: ReturnType<typeof mapPublicProperty>) {

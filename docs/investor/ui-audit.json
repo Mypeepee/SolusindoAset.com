@@ -1,0 +1,23 @@
+{
+  "profile": "product-admin",
+  "sourceRoots": [
+    "src/app/dashboard/investor",
+    "src/app/api/dashboard/investor",
+    "src/app/api/regions/wilayah",
+    "src/components/dashboard"
+  ],
+  "locale": "id-ID",
+  "canonicalMap": "UX-CONTRACT.md",
+  "ownership": {
+    "Select/Listbox": "native"
+  },
+  "requiredCapabilities": ["Form", "Scrollbar", "Toast"],
+  "nativeSelectScope": "LocationCorrectionDialog only; explicit native form variant in UX-CONTRACT.md",
+  "authoredSearchOwners": [
+    "KeywordField",
+    "LocationPicker",
+    "TypePicker",
+    "TabFilterFields",
+    "SearchSelect"
+  ]
+}

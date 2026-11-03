@@ -16,6 +16,7 @@
 
 import { Icon } from "@iconify/react";
 import { motion } from "framer-motion";
+import { useId } from "react";
 import {
   DURASI_OPTIONS,
   durasiLabelFor,
@@ -89,7 +90,12 @@ const SWAP_MOTION = {
   transition: { duration: 0.24, ease: EASE_OUT_EXPO },
 };
 
-const rangeLabel = (min: string, max: string, fallback: string, suffix = "") => {
+const rangeLabel = (
+  min: string,
+  max: string,
+  fallback: string,
+  suffix = "",
+) => {
   if (min && max) return `${min} - ${max}${suffix}`;
   if (min) return `Mulai ${min}${suffix}`;
   if (max) return `Hingga ${max}${suffix}`;
@@ -101,13 +107,17 @@ const rangeLabel = (min: string, max: string, fallback: string, suffix = "") => 
  * cuma mengisi luas bangunan tetap tampil sebagai "Luas Tanah/Bangunan" —
  * terlihat seperti filternya tidak tersimpan.
  */
-const dimensionSummary = (s: SearchFormState) => {
+const dimensionSummary = (s: SearchFormState, landOnly = false) => {
   const lt = rangeLabel(s.minLt, s.maxLt, "");
   const lb = rangeLabel(s.minLb, s.maxLb, "");
   const parts: string[] = [];
   if (lt) parts.push(`LT ${lt}`);
-  if (lb) parts.push(`LB ${lb}`);
-  return parts.length ? `${parts.join(" · ")} m²` : "Luas Tanah/Bangunan";
+  if (lb && !landOnly) parts.push(`LB ${lb}`);
+  return parts.length
+    ? `${parts.join(" · ")} m²`
+    : landOnly
+      ? "Luas Tanah"
+      : "Luas Tanah/Bangunan";
 };
 
 function Slot({
@@ -118,7 +128,9 @@ function Slot({
   children: React.ReactNode;
 }) {
   return (
-    <div className={`w-full ${width} px-3 lg:px-4 py-4 lg:py-2.5 relative group min-w-0`}>
+    <div
+      className={`w-full ${width} px-3 lg:px-4 py-4 lg:py-2.5 relative group min-w-0`}
+    >
       {children}
     </div>
   );
@@ -155,8 +167,14 @@ function Trigger({
         {label}
       </span>
       <span className="flex items-center gap-2">
-        <Icon icon={icon} className={`text-xl shrink-0 transition-colors ${t.icon}`} />
-        <span title={value} className={`font-bold text-sm truncate flex-1 ${t.value}`}>
+        <Icon
+          icon={icon}
+          className={`text-xl shrink-0 transition-colors ${t.icon}`}
+        />
+        <span
+          title={value}
+          className={`font-bold text-sm truncate flex-1 ${t.value}`}
+        >
           {value}
         </span>
         <Icon
@@ -226,10 +244,12 @@ function MinMaxInputs({
   ariaMin: string;
   ariaMax: string;
 }) {
-  const cls = `w-1/2 border rounded-xl px-3 py-2.5 text-sm outline-none font-medium transition-colors ${
+  const errorId = useId();
+  const cls = `min-w-0 flex-1 w-1/2 border rounded-xl px-3 py-2.5 text-sm outline-none font-medium transition-colors ${
     t.input
   } ${error ? t.inputError : ""}`;
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.nativeEvent.isComposing) return;
     if (e.key === "Enter" && onSubmit) {
       e.preventDefault();
       onSubmit();
@@ -245,6 +265,7 @@ function MinMaxInputs({
           autoComplete="off"
           aria-label={ariaMin}
           aria-invalid={Boolean(error)}
+          aria-describedby={error ? errorId : undefined}
           placeholder="Min"
           value={minValue}
           onChange={(e) => onMin(e.target.value)}
@@ -258,6 +279,7 @@ function MinMaxInputs({
           autoComplete="off"
           aria-label={ariaMax}
           aria-invalid={Boolean(error)}
+          aria-describedby={error ? errorId : undefined}
           placeholder="Max"
           value={maxValue}
           onChange={(e) => onMax(e.target.value)}
@@ -266,8 +288,14 @@ function MinMaxInputs({
         />
       </div>
       {error && (
-        <p className={`text-[11px] mt-1.5 flex items-center gap-1 ${t.error}`}>
-          <Icon icon="solar:danger-triangle-bold-duotone" className="shrink-0 text-sm" />
+        <p
+          id={errorId}
+          className={`text-[11px] mt-1.5 flex items-center gap-1 ${t.error}`}
+        >
+          <Icon
+            icon="solar:danger-triangle-bold-duotone"
+            className="shrink-0 text-sm"
+          />
           {error}
         </p>
       )}
@@ -275,7 +303,17 @@ function MinMaxInputs({
   );
 }
 
+/** Shared Home range fields in an always-visible form layout, without nested popups. */
+export function SearchRangeInputs({
+  theme = "dark",
+  ...props
+}: Omit<React.ComponentProps<typeof MinMaxInputs>, "t"> & { theme?: Theme }) {
+  return <MinMaxInputs {...props} t={THEMES[theme]} />;
+}
+
 export interface TabFilterFieldsProps {
+  /** Investor intentionally exposes only land area; Home keeps both dimensions. */
+  landOnly?: boolean;
   tab: TxTab;
   theme?: Theme;
   state: SearchFormState;
@@ -298,10 +336,12 @@ export default function TabFilterFields({
   onRangeChange,
   onDurasiChange,
   onSubmit,
+  landOnly = false,
 }: TabFilterFieldsProps) {
   const t = THEMES[theme];
   const rent = isRentTab(tab);
-  const toggle = (key: string) => setOpenDropdown(openDropdown === key ? null : key);
+  const toggle = (key: string) =>
+    setOpenDropdown(openDropdown === key ? null : key);
   const close = () => setOpenDropdown(null);
 
   const unit = durasiUnitFor(state.durasi);
@@ -326,7 +366,9 @@ export default function TabFilterFields({
 
             {openDropdown === "durasi" && (
               <Panel t={t} id="search-panel-durasi" onClose={close}>
-                <h4 className={`font-bold mb-1 text-sm ${t.panelTitle}`}>Durasi Sewa</h4>
+                <h4 className={`font-bold mb-1 text-sm ${t.panelTitle}`}>
+                  Durasi Sewa
+                </h4>
                 <p className={`text-[11px] mb-3 ${t.hint}`}>
                   Menampilkan unit yang menawarkan durasi tersebut.
                 </p>
@@ -338,13 +380,21 @@ export default function TabFilterFields({
                       close();
                     }}
                     className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium flex items-center gap-3 transition-colors ${
-                      state.durasi === "" ? "bg-primary/10 text-primary" : t.optionIdle
+                      state.durasi === ""
+                        ? "bg-primary/10 text-primary"
+                        : t.optionIdle
                     }`}
                   >
-                    <Icon icon="solar:widget-3-bold-duotone" className="text-lg opacity-70 shrink-0" />
+                    <Icon
+                      icon="solar:widget-3-bold-duotone"
+                      className="text-lg opacity-70 shrink-0"
+                    />
                     <span className="flex-1">Semua Durasi</span>
                     {state.durasi === "" && (
-                      <Icon icon="solar:check-circle-bold" className="text-primary text-lg" />
+                      <Icon
+                        icon="solar:check-circle-bold"
+                        className="text-primary text-lg"
+                      />
                     )}
                   </button>
                   {DURASI_OPTIONS.map((d) => {
@@ -361,13 +411,19 @@ export default function TabFilterFields({
                           active ? "bg-primary/10 text-primary" : t.optionIdle
                         }`}
                       >
-                        <Icon icon={d.icon} className="text-lg opacity-70 shrink-0" />
+                        <Icon
+                          icon={d.icon}
+                          className="text-lg opacity-70 shrink-0"
+                        />
                         <span className="flex-1">{d.label}</span>
                         <span className="text-[10px] font-bold uppercase tracking-wider opacity-60">
                           {durasiUnitFor(d.value).replace("per ", "/")}
                         </span>
                         {active && (
-                          <Icon icon="solar:check-circle-bold" className="text-primary text-lg" />
+                          <Icon
+                            icon="solar:check-circle-bold"
+                            className="text-primary text-lg"
+                          />
                         )}
                       </button>
                     );
@@ -383,7 +439,11 @@ export default function TabFilterFields({
                 t={t}
                 label="Harga"
                 icon="solar:wallet-money-bold-duotone"
-                value={rangeLabel(state.minPrice, state.maxPrice, "Range Harga")}
+                value={rangeLabel(
+                  state.minPrice,
+                  state.maxPrice,
+                  "Range Harga",
+                )}
                 open={openDropdown === "price"}
                 onToggle={() => toggle("price")}
                 panelId="search-panel-price"
@@ -392,7 +452,9 @@ export default function TabFilterFields({
 
             {openDropdown === "price" && (
               <Panel t={t} id="search-panel-price" onClose={close}>
-                <h4 className={`font-bold mb-3 text-sm ${t.panelTitle}`}>Range Budget (Rp)</h4>
+                <h4 className={`font-bold mb-3 text-sm ${t.panelTitle}`}>
+                  Range Budget (Rp)
+                </h4>
                 <MinMaxInputs
                   t={t}
                   minValue={state.minPrice}
@@ -423,7 +485,7 @@ export default function TabFilterFields({
                   state.minRent,
                   state.maxRent,
                   "Range Harga",
-                  unit ? ` ${unit}` : ""
+                  unit ? ` ${unit}` : "",
                 )}
                 open={openDropdown === "rent"}
                 onToggle={() => toggle("rent")}
@@ -433,7 +495,9 @@ export default function TabFilterFields({
 
             {openDropdown === "rent" && (
               <Panel t={t} id="search-panel-rent" alignRight onClose={close}>
-                <h4 className={`font-bold mb-1 text-sm ${t.panelTitle}`}>Range Harga Sewa (Rp)</h4>
+                <h4 className={`font-bold mb-1 text-sm ${t.panelTitle}`}>
+                  Range Harga Sewa (Rp)
+                </h4>
                 <p className={`text-[11px] mb-3 ${t.hint}`}>
                   {state.durasi
                     ? `Dihitung ${unit} sesuai durasi yang dipilih.`
@@ -460,7 +524,7 @@ export default function TabFilterFields({
                 t={t}
                 label="Dimensi"
                 icon="solar:ruler-angular-bold-duotone"
-                value={dimensionSummary(state)}
+                value={dimensionSummary(state, landOnly)}
                 open={openDropdown === "dimensions"}
                 onToggle={() => toggle("dimensions")}
                 panelId="search-panel-dimensions"
@@ -468,12 +532,18 @@ export default function TabFilterFields({
             </motion.div>
 
             {openDropdown === "dimensions" && (
-              <Panel t={t} id="search-panel-dimensions" alignRight onClose={close}>
+              <Panel
+                t={t}
+                id="search-panel-dimensions"
+                alignRight
+                onClose={close}
+              >
                 <div className="mb-4">
                   <h4
                     className={`font-bold mb-2 text-sm flex items-center gap-2 ${t.panelTitle}`}
                   >
-                    <Icon icon="solar:map-bold" className={t.sep} /> Luas Tanah (m²)
+                    <Icon icon="solar:map-bold" className={t.sep} /> Luas Tanah
+                    (m²)
                   </h4>
                   <MinMaxInputs
                     t={t}
@@ -488,30 +558,36 @@ export default function TabFilterFields({
                     ariaMax="Luas tanah maksimum"
                   />
                 </div>
-                <div>
-                  <h4
-                    className={`font-bold mb-2 text-sm flex items-center gap-2 ${t.panelTitle}`}
-                  >
-                    <Icon icon="solar:home-bold" className={t.sep} /> Luas Bangunan (m²)
-                  </h4>
-                  <MinMaxInputs
-                    t={t}
-                    minValue={state.minLb}
-                    maxValue={state.maxLb}
-                    onMin={(v) => onRangeChange("minLb", v)}
-                    onMax={(v) => onRangeChange("maxLb", v)}
-                    error={errors.lb}
-                    onSubmit={onSubmit}
-                    separator="-"
-                    ariaMin="Luas bangunan minimum"
-                    ariaMax="Luas bangunan maksimum"
-                  />
-                </div>
+                {!landOnly && (
+                  <div>
+                    <h4
+                      className={`font-bold mb-2 text-sm flex items-center gap-2 ${t.panelTitle}`}
+                    >
+                      <Icon icon="solar:home-bold" className={t.sep} /> Luas
+                      Bangunan (m²)
+                    </h4>
+                    <MinMaxInputs
+                      t={t}
+                      minValue={state.minLb}
+                      maxValue={state.maxLb}
+                      onMin={(v) => onRangeChange("minLb", v)}
+                      onMax={(v) => onRangeChange("maxLb", v)}
+                      error={errors.lb}
+                      onSubmit={onSubmit}
+                      separator="-"
+                      ariaMin="Luas bangunan minimum"
+                      ariaMax="Luas bangunan maksimum"
+                    />
+                  </div>
+                )}
                 {tab === "lelang" && (
                   <p
                     className={`text-[10px] p-2 rounded-lg mt-3 font-medium border ${t.note}`}
                   >
-                    <Icon icon="solar:info-circle-bold" className="inline mr-1 text-sm" />
+                    <Icon
+                      icon="solar:info-circle-bold"
+                      className="inline mr-1 text-sm"
+                    />
                     Aset lelang umumnya dinilai dari luas tanah (land value).
                   </p>
                 )}

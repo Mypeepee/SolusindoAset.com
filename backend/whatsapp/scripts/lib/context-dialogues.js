@@ -18,7 +18,7 @@ export const scenarios = [
   { name: 'Percakapan yang dilaporkan', messages: [OPENING, REPORTED, 'bebas'], expected: BASE_CRITERIA },
   ...references.map((phrase) => ({ name: `Rujukan: ${phrase}`, messages: [OPENING, `Ada yang lain ${phrase} pak, budget maksimal 500 juta?`, 'bebas'], expected: BASE_CRITERIA })),
   { name: 'Budget tertulis', messages: [OPENING, 'Ada pilihan lainnya di situ, anggaran lima ratus juta?', 'tidak ada'], expected: BASE_CRITERIA },
-  { name: 'Jawaban lokasi singkat', messages: [OPENING, 'di sana pak', 'budget 500 juta, luas tanah bebas'], expected: BASE_CRITERIA },
+  { name: 'Permintaan lokasi singkat setelah tawaran biaya', messages: [OPENING, 'Cari yang lain di sana pak', 'budget 500 juta, luas tanah bebas'], expected: BASE_CRITERIA },
   { name: 'Kriteria sekaligus', messages: [OPENING, 'Cari lelang rumah lain di area tersebut, budget 500 juta, luas tanah minimal 100 m2'], expected: { ...BASE_CRITERIA, min_land_area_m2: 100 } },
   { name: 'Budget dikoreksi setelah hasil', messages: [OPENING, REPORTED, 'bebas', 'budget saya naik jadi 600 juta'], expected: { ...BASE_CRITERIA, max_price: 600000000 } },
   { name: 'Jenis dikoreksi setelah hasil', messages: [OPENING, REPORTED, 'bebas', 'bukan rumah, saya maunya ruko'], expected: { ...BASE_CRITERIA, category: 'RUKO' } },

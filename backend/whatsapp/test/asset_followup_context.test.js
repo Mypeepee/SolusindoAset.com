@@ -19,7 +19,7 @@ const intro = 'saya fikri dari batujajar';
 const schedule = 'unit tersebut kapan ada lelang lagi ya pak?';
 const noAi = { generate() { assert.fail('An introduction or listing schedule must not need an AI response'); } };
 const user = (content) => ({ role: 'user', content }), assistant = (content) => ({ role: 'assistant', content });
-const history = [user(inquiry), assistant(auctionCheckReply(asset, { status: 'simulated' }))];
+const history = [user(inquiry), assistant(auctionCheckReply(asset, { status: 'simulated' }, { offerBackup: true }))];
 const config = { transport: 'baileys', replyDelayMs: 0, maxSessions: 10, maxPending: 30,
   maxPendingPerPhone: 10, maxDedup: 100, sessionTtlMs: 86400000 };
 function catalog(item = asset) {

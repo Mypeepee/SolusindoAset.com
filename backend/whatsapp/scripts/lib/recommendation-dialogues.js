@@ -137,6 +137,6 @@ export async function simulateRecommendations(scenario) {
     assert.ok([50e9, scenario.maxPrice].includes(criteria.max_price));
   }
   assert.equal(f.criteria.at(-1).max_price, scenario.maxPrice || 50e9);
-  assert.ok(f.queries.every((query) => query.take === 5));
+  assert.ok(f.queries.every((query) => query.take > 0 && query.take <= 5), 'Recommendation and schedule-existence reads stay bounded');
   return { name: scenario.name, passed: true, transcript };
 }

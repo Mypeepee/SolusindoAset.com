@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Icon } from "@iconify/react";
 import Link from "next/link";
 import { buildLelangPosterPayload, downloadLelangPoster } from "@/lib/lelangPoster";
+import type { AuctionHistoryResult } from "@/lib/auctionHistory";
 import { SITE_URL } from "@/lib/site";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
 import RincianBiayaSheet from "./RincianBiayaSheet";
@@ -27,6 +28,7 @@ interface KeperluanAgentProps {
   canEdit?: boolean;
   /** Profil agent yang sedang login — dipakai sebagai kontak di poster. */
   selfAgent?: SelfAgentLite | null;
+  riwayatLelang?: AuctionHistoryResult | null;
   /** Dipanggil saat tombol Bagikan ditekan — modal dirender di level atas (DetailClient). */
   onShareOpen?: () => void;
 }
@@ -43,7 +45,7 @@ const formatTanggalLelang = (val?: string | null): string => {
   });
 };
 
-export default function KeperluanAgent({ data, currentAgentId, currentJabatan, stokerPhone, selfAgent, onShareOpen }: KeperluanAgentProps) {
+export default function KeperluanAgent({ data, currentAgentId, currentJabatan, stokerPhone, selfAgent, riwayatLelang, onShareOpen }: KeperluanAgentProps) {
   const rawLimit =
     data?.nilai_limit_lelang || data?.harga || data?.priceRates?.monthly || 0;
 
@@ -95,7 +97,7 @@ export default function KeperluanAgent({ data, currentAgentId, currentJabatan, s
   const stokLabel = isStoker ? "Tanya PIC" : "Tanya Stok";
 
   const handleDownloadPoster = async () => {
-    const payload = buildLelangPosterPayload(data, { agentCode: currentAgentId, selfAgent });
+    const payload = buildLelangPosterPayload(data, { agentCode: currentAgentId, selfAgent, riwayatLelang });
     await downloadLelangPoster(payload, setIsBuildingPoster);
   };
 

@@ -82,6 +82,8 @@ const AWALAN_MS = 2_600;
 type Fase = "awalan" | "ketik" | "hapus";
 
 export interface ContohKetikanProps {
+  /** Internal search routes without a places backend only demonstrate address/ID. */
+  includeNearbyExamples?: boolean;
   /**
    * Kalimat konteks halaman ("Cari properti disewakan"). Bila ada, ia tampil
    * DIAM di antara siklus — konteks halaman tidak boleh hilang hanya karena
@@ -98,6 +100,7 @@ export interface ContohKetikanProps {
 }
 
 function ContohKetikanDasar({
+  includeNearbyExamples = true,
   awalan,
   onJenis,
   className = "",
@@ -119,7 +122,8 @@ function ContohKetikanDasar({
     return () => mq.removeEventListener("change", setel);
   }, []);
 
-  const contoh = CONTOH[indeks % CONTOH.length];
+  const examples = includeNearbyExamples ? CONTOH : CONTOH.filter((example) => example.jenis !== "tempat");
+  const contoh = examples[indeks % examples.length];
 
   /**
    * Jenis dilaporkan hanya SAAT BERUBAH, bukan tiap huruf.
@@ -160,7 +164,7 @@ function ContohKetikanDasar({
     if (huruf > 0) return jadwal(HAPUS_MS, () => setHuruf((h) => h - 1));
 
     const berikut = indeks + 1;
-    const habis = berikut % CONTOH.length === 0;
+    const habis = berikut % examples.length === 0;
     return jadwal(120, () => {
       setIndeks(berikut);
       // Setelah satu putaran penuh, konteks halaman ditampilkan lagi.
@@ -172,7 +176,7 @@ function ContohKetikanDasar({
     return (
       <span className={className}>
         <span className={`whitespace-pre ${kelasAwal}`}>{AWAL_TETAP}</span>
-        <span className={kelasInti}>{CONTOH[0].teks}</span>
+        <span className={kelasInti}>{examples[0].teks}</span>
       </span>
     );
   }

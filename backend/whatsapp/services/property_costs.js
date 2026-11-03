@@ -16,7 +16,7 @@ const GARIS = '━━━━━━━━━━━━━━';
 
 export function isPurchaseCostQuestion(text) {
   const value = normalizeText(text);
-  return /\b(?:biaya(?:nya)?|break\s*down|rincian(?:nya)?|all\s*in|pajak(?:nya)?|b[ph]{2}tb|bphtb|ppn|ajb|bea\s+lelang|balik\s+nama|roya|kerohiman|fee|notaris|ppat|provisi)\b/.test(value) ||
+  return /\b(?:biaya(?:nya|ne)?|break\s*down|rincian(?:nya)?|all\s*in|all\s*inclusive|(?:total\s+)?costs?|fees?|ownership\s+transfer|pajak(?:nya)?|b[ph]{2}tb|bphtb|ppn|ajb|bea\s+lelang|balik\s+nama|roya|kerohiman|notaris|ppat|provisi)\b/.test(value) ||
     /\b(?:siap(?:kan)?\s+dana|nambah\s+(?:berapa|brp|piro)|(?:keluar|habis|entek)\s+(?:berapa|brp|piro)|total\s+duit)\b/.test(value) ||
     /\bmodal(?:nya)?\b|\btotal(?:nya)?\s+(?:harga|dana|pembelian|keseluruhan)\b|\b(?:harga|dana)\s+total(?:nya)?\b|\b(?:berapa|brp)\s+total(?:nya)?$|^total(?:nya)?\s*(?:berapa|brp)?$/.test(value) ||
     /\b(?:sudah|udah|sudh|sdh|belum|apakah|apa|harga|limit)\b.*\b(?:termasuk|include|mencakup|bersih)\b/.test(value);
@@ -63,11 +63,11 @@ function auctionReply(asset, estimate, now) {
   const date = Date.parse(asset.auction_at);
   const rows = (values) => values.map(({ label, amount }) => `• ${label} — ${money(amount)}`);
   const lines = [
-    'Terima kasih atas ketertarikan Bapak/Ibu. Memeriksa seluruh biaya sejak awal adalah langkah investor yang cerdas. Harga limit merupakan harga awal lelang, belum all-in: legalitas dan pengosongan perlu diperhitungkan secara terpisah.',
-    '', '*ESTIMASI BIAYA PEMBELIAN LELANG*', `_${description} di ${location}_`, `📍 ${address}`,
+    '*ESTIMASI BIAYA PEMBELIAN LELANG*', `_${description} di ${location}_`, `📍 ${address}`,
   ];
   if (Number.isFinite(date)) lines.push(`🗓️ Lelang: ${new Intl.DateTimeFormat('id-ID', { dateStyle: 'long', timeZone: 'Asia/Jakarta' }).format(date)}${date <= now ? ' (jadwal tercatat sudah lewat; hasil atau jadwal ulang perlu konfirmasi)' : ''}`);
   lines.push('', GARIS, '*HARGA LIMIT*', `*${money(estimate.limit)}*`,
+    '_Harga limit belum all-in; harga menang lelang dapat lebih tinggi._',
     '_Komponen persentase di bawah dihitung dari harga menang lelang; saat ini diestimasi dari harga limit._',
     '', GARIS, '*A. BIAYA BALIK NAMA*', '_Komponen persentase mengikuti harga menang lelang._',
     ...rows(estimate.transfer), `▸ *Subtotal: ${money(estimate.transfer_total)}*`,
@@ -77,7 +77,8 @@ function auctionReply(asset, estimate, now) {
     '', GARIS, '*C. FEE AGENT*', '_Dihitung dari harga menang lelang._',
     `• Fee Agent 5% — ${money(estimate.agent)}`, `▸ *Subtotal: ${money(estimate.agent)}*`,
     '', GARIS, '*ESTIMASI MODAL — WORST CASE*', `*${money(estimate.total_execution)}*`,
-    `_Limit ${compactMoney(estimate.limit)} + balik nama ${compactMoney(estimate.transfer_total)} + eksekusi ${compactMoney(estimate.execution_total)} + fee agent ${compactMoney(estimate.agent)}_`,
+    `_Limit ${compactMoney(estimate.limit)}_`,
+    `_Balik nama ${compactMoney(estimate.transfer_total)} + eksekusi ${compactMoney(estimate.execution_total)} + fee agent ${compactMoney(estimate.agent)}_`,
     '', '_Tempat perpindahan barang bersifat tentatif dan belum masuk total._',
     '_Angka di atas estimasi, belum termasuk pajak & biaya lain di luar daftar. Tarif dan kebutuhan pengosongan perlu dikonfirmasi sesuai aset._',
     '_Nominal dibulatkan ke rupiah. Uang jaminan bagian pembayaran harga, bukan biaya tambahan. Harga menang dapat melebihi limit._');

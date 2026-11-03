@@ -83,10 +83,13 @@ export async function simulateSingleSelection({ format = 'html', text = REPORTED
     if (closing) {
       await send('Baik pak, saya serius untuk aset ini, langkah selanjutnya bagaimana ya?');
       assert.equal(session.conversion.topic, 'purchase_preparation'); assert.equal(session.conversion.stock_status, 'pending');
-      await send('boleh'); assert.equal(session.conversion.topic, 'purchase_preparation');
+      // The delivered CTA asks whether the buyer has a question about the
+      // draft. "Boleh" invites that question, not a repetition of the DP pitch.
+      await send('boleh'); assert.equal(session.conversion.topic, 'clarify');
       assert.equal(session.conversion.stock_status, 'pending');
-      assert.match(sent.at(-1), /Komitmen tanda jadinya Rp 20\.000\.000/);
-      assert.match(sent.at(-1), /Pembayaran tanda jadi menunggu kepastian aset/);
+      assert.ok(session.conversion.purchase_intake);
+      assert.match(sent.at(-1), /Bagian mana yang ingin ditanyakan/);
+      assert.doesNotMatch(sent.at(-1), /Komitmen tanda jadi|Rp 20\.000\.000/);
       assert.equal(checks.list().items.length, 1, 'Repeated discussion cannot create duplicate stock tasks');
     }
     return { name: `${format}: ${text}`, passed: true, selected_id: session.asset_id,

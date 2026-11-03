@@ -13,6 +13,12 @@ export async function middleware(req: NextRequest) {
     // belum login
     if (!token) {
       const url = req.nextUrl.clone();
+      if (pathname === "/dashboard/pemasaran" || pathname.startsWith("/dashboard/pemasaran/")) {
+        url.pathname = "/signin";
+        url.search = "";
+        url.searchParams.set("callbackUrl", pathname + req.nextUrl.search);
+        return NextResponse.redirect(url);
+      }
       url.pathname = "/";
       url.searchParams.set("auth", "required");
       return NextResponse.redirect(url);
@@ -27,7 +33,7 @@ export async function middleware(req: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    if ((pathname.startsWith("/dashboard/chatbot-integration") || pathname.startsWith("/dashboard/chatbot-playground")) && token.jabatan !== "OWNER") {
+    if ((pathname.startsWith("/dashboard/chatbot-integration") || pathname.startsWith("/dashboard/chatbot-playground") || pathname === "/dashboard/investor" || pathname.startsWith("/dashboard/investor/") || pathname === "/dashboard/pemasaran" || pathname.startsWith("/dashboard/pemasaran/")) && token.jabatan !== "OWNER") {
       const url = req.nextUrl.clone();
       url.pathname = "/dashboard";
       url.search = "";

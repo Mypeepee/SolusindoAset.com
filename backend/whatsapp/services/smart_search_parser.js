@@ -3,6 +3,7 @@ import { extractLandArea } from './land_area.js';
 import { parseBudgetAmounts } from './budget_amounts.js';
 import { isKnownRegionPhrase, knownCityNames } from './region_directory.js';
 import { PROPERTY_CATEGORY_LABELS } from './property_category.js';
+import { normalizeBuyerLanguage } from './buyer_language.js';
 
 const strings = { type: 'array', items: { type: 'string' } };
 const nullableNumber = { type: ['number', 'null'] };
@@ -77,6 +78,7 @@ export function discoveryOnlyText(text) {
 // lists/local expressions take this path; existing administrative resolution
 // remains responsible for single ambiguous names such as Manyar or Pakis.
 export function localDiscovery(text, { city = null } = {}) {
+  text = normalizeBuyerLanguage(text);
   if (acknowledgement.test(text.trim())) return {};
   const patch = {};
   const landmarks = aliases.filter(([, re]) => { re.lastIndex = 0; return re.test(text); }).map(([name]) => name);

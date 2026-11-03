@@ -26,6 +26,7 @@ export function requestsPropertySearch(text) {
   text = normalizeBuyerLanguage(text);
   if (localPropertyScope(text) === 'other') return false;
   text = propertyScopeText(text);
+  if (isPurchaseCostQuestion(text) && !hasSearchIntent(text) && !/\b(?:prefer(?:ensi)?|prioritas)\b/i.test(text)) return false;
   const discovery = localDiscovery(text);
   return !!discovery.locations?.length || !!discovery.route_landmarks?.length || !!discovery.cities?.length || !!transactionPreference(text) || requestsAlternatives(text) || hasLocationInterest(text) ||
     /\b(?:cari(?:kan)?|mencari)\s+(?:di|daerah|kawasan|wilayah|area)\s+[\p{L}]/iu.test(text) ||

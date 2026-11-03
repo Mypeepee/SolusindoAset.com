@@ -1,0 +1,13 @@
+{
+  "mediaId": "18079119182441886",
+  "applicationResponse": { "httpStatus": 200, "success": true },
+  "actionState": "succeeded",
+  "historyErrorCode": "MEDIA_DELETED",
+  "accountMediaCount": 0,
+  "stillListed": false,
+  "actualDeletion": true,
+  "earlierReportedFailure": "The user clarified that the delete button could not be found. Hapus now appears directly on every live card and on the selected-post action row.",
+  "additionalFix": "Request ID generation is inside error handling and uses a CSPRNG fallback when native randomUUID is absent.",
+  "uxVerification": "Direct card confirmation/cancel/focus and successful list refresh passed at 320px. Existing example/gallery/layout checks passed from 320px through 1512px. Production build and 194 unit tests passed; no new type errors appeared in changed files.",
+  "browserRegression": "Pointer click, missing-native-UUID fallback, no-crypto pre-send failure, stable retry ID, narrow viewports and reduced motion passed. Regression writes are intercepted."
+}

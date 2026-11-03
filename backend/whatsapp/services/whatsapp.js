@@ -23,7 +23,7 @@ export function createWhatsAppClient(config, { fetchImpl = fetch } = {}) {
       if (!data.messages?.[0]?.id) throw new ServiceError('INVALID_WA_RESPONSE', 502);
       return data.messages[0].id;
     },
-    async sendText(to, text, replyTo) {
+    async sendText(to, text, replyTo, options = {}) {
       if (!validPhone(to) || typeof text !== 'string' || !text.trim() || text.length > 4096) {
         throw new ServiceError('INVALID_OUTBOUND_MESSAGE', 400);
       }
@@ -31,7 +31,7 @@ export function createWhatsAppClient(config, { fetchImpl = fetch } = {}) {
         headers: { Authorization: `Bearer ${config.accessToken}` },
         body: {
           messaging_product: 'whatsapp', recipient_type: 'individual', to,
-          type: 'text', text: { preview_url: false, body: text },
+          type: 'text', text: { preview_url: !!options.linkPreview, body: text },
           ...(replyTo ? { context: { message_id: replyTo } } : {}),
         },
         timeoutMs: config.timeoutMs, fetchImpl,

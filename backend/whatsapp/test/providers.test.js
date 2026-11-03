@@ -124,6 +124,16 @@ test('kegagalan kirim tidak di-retry otomatis sehingga tidak menggandakan pesan'
   assert.equal(calls, 1);
 });
 
+test('Cloud API automatic recommendation enables the URL picture preview in its single text send', async () => {
+  const requests = [];
+  const client = createWhatsAppClient({ apiVersion: 'v99.0', phoneNumberId: '12345', accessToken: 'test-token', timeoutMs: 1000 }, {
+    fetchImpl: async (_url, options) => { requests.push(JSON.parse(options.body)); return Response.json({ messages: [{ id: 'wamid.preview' }] }); },
+  });
+  const text = 'Rumah Rungkut\nhttps://solusindoaset.com/Lelang/rumah-rungkut-121037/AG108';
+  await client.sendText('6281234567890', text, undefined, { linkPreview: true });
+  assert.equal(requests.length, 1); assert.deepEqual(requests[0].text, { preview_url: true, body: text });
+});
+
 test('konfigurasi gagal cepat ketika secret atau model belum diisi', () => {
   assert.throws(() => loadConfig({}), /ADMIN_API_TOKEN/);
   assert.throws(() => loadConfig({ WA_TRANSPORT: 'cloud' }), /WA_API_VERSION/);

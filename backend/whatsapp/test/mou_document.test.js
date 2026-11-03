@@ -207,8 +207,8 @@ test('real chat sends one PDF and preparation guidance, supports explicit re-sen
   assert.equal(f.docs[0].to, PHONE); assert.equal(f.docs[0].caption, MOU_CAPTION);
   assert.equal(session.conversion.topic, 'purchase_preparation'); assert.equal(session.conversion.process_understood, false);
   assert.equal(session.conversion.draft_document.status, 'sent'); assert.equal(session.is_bot_active, true);
-  await f.send('baik'); assert.equal(session.conversion.topic, 'purchase_preparation'); assert.equal(f.docs.length, 1);
-  assert.match(f.sent.at(-1), /Rp 20\.000\.000/);
+  await f.send('baik'); assert.equal(session.conversion.topic, 'clarify'); assert.equal(f.docs.length, 1);
+  assert.ok(session.conversion.purchase_intake); assert.match(f.sent.at(-1), /Bagian mana yang ingin ditanyakan/);
   await f.send('kirim ulang PDF MOU'); assert.equal(f.docs.length, 2); assert.equal(session.is_bot_active, true);
   await f.send('KTP dan cover buku tabungan sudah siap');
   assert.equal(session.conversion.phase, 'purchasing_handoff'); assert.equal(session.is_bot_active, false);
@@ -222,7 +222,8 @@ test('failed PDF generation preserves the delivered CTA and does not claim attac
   const session = f.store.get(PHONE);
   assert.equal(f.docs.length, 0); assert.equal(session.conversion.draft_document.status, 'failed');
   assert.match(f.sent.at(-1), /belum berhasil/); assert.doesNotMatch(f.sent.at(-1), /private internal/);
-  await f.send('baik'); assert.equal(session.conversion.topic, 'purchase_preparation'); assert.equal(f.errors.length, 1);
+  await f.send('baik'); assert.equal(session.conversion.topic, 'clarify'); assert.equal(f.errors.length, 1);
+  assert.ok(session.conversion.purchase_intake);
 });
 
 test('the selected asset survives bounded history, and an explicit document request can start the reading journey', async () => {

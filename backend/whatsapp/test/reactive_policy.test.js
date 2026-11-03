@@ -41,13 +41,13 @@ test('greeting/media/off-topic send exactly one fixed reply without reading DB o
   assert.deepEqual(f.sent, [INTRODUCTION_MESSAGE]); assert.equal(f.reads.length, 0); assert.equal(f.calls.length, 0);
   assert.equal(f.store.get(PHONE).asset_id, null, 'configured default asset cannot establish customer context');
   await f.send('asset', 'Kode 121791, masih tersedia?');
-  assert.equal(f.calls.length, 1); assert.equal(f.store.get(PHONE).asset_id, '121791');
+  assert.equal(f.calls.length, 0, 'availability and its countdown use the server SOP'); assert.equal(f.store.get(PHONE).asset_id, '121791');
   await f.send('offtopic', 'Buat pantun dong'); await f.send('again', 'Pagi');
   assert.equal(f.sent.filter((text) => text === CONTEXT_REQUIRED_MESSAGE).length, 0);
   await f.send('resume', 'brp harganya?');
-  assert.equal(f.calls.length, 2); assert.equal(f.calls.at(-1).facts.id, '121791');
+  assert.equal(f.calls.length, 1); assert.equal(f.calls.at(-1).facts.id, '121791');
   await f.send('facility', 'Dekat lapangan bola?');
-  assert.equal(f.calls.length, 3, 'facility questions must not be mistaken for casual sports talk');
+  assert.equal(f.calls.length, 2, 'facility questions must not be mistaken for casual sports talk');
 });
 
 test('session stays on the chosen asset; budget alone cannot trigger alternatives and explicit new asset replaces old context', async () => {
@@ -93,17 +93,17 @@ test('semantic out-of-scope classification cannot create repeated notices after 
   const f = fixture({ ai: { async generate() { return classify
     ? { action: 'out_of_scope', reply: 'Never send model wording.', qualification: {} }
     : { reply: 'Harga limit tercatat Rp500 juta.', qualification: {} }; } } });
-  await f.send('first', 'Kode 121791'); classify = true;
+  await f.send('first', 'Kode 121791, berapa harganya?'); classify = true;
   await f.send('off-topic', 'Detail rumah tangga artis itu');
   await f.send('repeat', 'Detail rumah tangga artis lainnya');
   assert.deepEqual(f.sent, ['Harga limit tercatat Rp500 juta.']);
   assert.equal(f.store.get(PHONE).is_bot_active, true);
 });
 
-test('unrecognized property follow-ups ask for clarification and retain the active conversation', async () => {
+test('unrecognized property follow-ups ask for clarification and retain the active conversation', { timeout: 5000 }, async () => {
   let entered, release; const started = new Promise((resolve) => { entered = resolve; });
   const f = fixture({ ai: { async generate() { entered(); return new Promise((resolve) => { release = resolve; }); } } });
-  f.accept('asset', 'Kode 121791'); await started;
+  f.accept('asset', 'Kode 121791, berapa harganya?'); await started;
   f.accept('slang', 'skibibop zxr nganuuu');
   assert.equal(f.store.get(PHONE).is_bot_active, true);
   release({ reply: 'Late property answer', qualification: {} }); await f.processor.drain();
@@ -118,21 +118,21 @@ test('idle reset clears asset, history and qualification using last inbound time
   f.setTime(NOW + IDLE_TIMEOUT_MS + 1); await f.send('tomorrow', 'Halo');
   assert.equal(f.store.get(PHONE).asset_id, null); assert.deepEqual(f.store.get(PHONE).qualification, {});
   assert.equal(f.store.get(PHONE).history[0].content, 'Halo'); assert.equal(f.sent.at(-1), INTRODUCTION_MESSAGE);
-  await f.send('new', 'Kode 119497'); assert.equal(f.calls.at(-1).facts.id, '119497');
+  await f.send('new', 'Kode 119497, berapa harganya?'); assert.equal(f.calls.at(-1).facts.id, '119497');
   await f.send('handoff', 'bisa nego?'); const sent = f.sent.length;
   f.setTime(NOW + IDLE_TIMEOUT_MS * 3); await f.send('late', 'Kode 121791');
   assert.equal(f.store.get(PHONE).is_bot_active, false); assert.equal(f.sent.length, sent);
 });
 
-test('idle reset while a model is running discards its stale result and starts the new property cleanly', async () => {
+test('idle reset while a model is running discards its stale result and starts the new property cleanly', { timeout: 5000 }, async () => {
   let release, enter, count = 0; const started = new Promise((resolve) => { enter = resolve; });
   const f = fixture({ ai: { async generate(input) {
     count++; if (count === 1) { enter(); return new Promise((resolve) => { release = resolve; }); }
-    assert.equal(input.facts.id, '119497'); assert.deepEqual(input.history.map((m) => m.content), ['Kode 119497']);
+    assert.equal(input.facts.id, '119497'); assert.deepEqual(input.history.map((m) => m.content), ['Kode 119497, berapa harganya?']);
     return { reply: 'Jawaban aset baru.', qualification: {} };
   } } });
-  f.accept('old', 'Kode 121791'); await started;
-  f.setTime(NOW + IDLE_TIMEOUT_MS + 1); f.accept('new', 'Kode 119497');
+  f.accept('old', 'Kode 121791, berapa harganya?'); await started;
+  f.setTime(NOW + IDLE_TIMEOUT_MS + 1); f.accept('new', 'Kode 119497, berapa harganya?');
   release({ reply: 'Jawaban lama.', qualification: {} }); await f.processor.drain();
   assert.deepEqual(f.sent, ['Jawaban aset baru.']);
 });
@@ -178,7 +178,7 @@ test('sandbox mirrors one-time greeting, locks and handoff per conversation/agen
   assert.equal(expired.session.asset_id, null); assert.equal(expired.reply, CONTEXT_REQUIRED_MESSAGE);
   const stale = await post('Budget 500 juta', cid, 'AG1', [{ role: 'user', content: 'Cari lelang aset di Sumenep' }, { role: 'user', content: 'Kode 121791' }]);
   assert.equal(stale.suppressed, true); assert.equal(stale.session.asset_id, null, 'stale browser history cannot restore expired context on a later turn');
-  await post('Kode 119497', cid, 'AG1', [{ role: 'user', content: 'Kode 121791' }]);
+  await post('Kode 119497, berapa harganya?', cid, 'AG1', [{ role: 'user', content: 'Kode 121791' }]);
   assert.ok(f.calls.at(-1).history.every((message) => !message.content.includes('121791')));
   assert.equal((await post('bisa nego?')).reply, HANDOVER_MESSAGE);
   time += IDLE_TIMEOUT_MS + 1;

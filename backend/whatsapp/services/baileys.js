@@ -1,11 +1,14 @@
-import makeWASocket, { Browsers, DisconnectReason, jidNormalizedUser, normalizeMessageContent, generateMessageIDV2 } from '@whiskeysockets/baileys';
+import makeWASocket, { Browsers, DisconnectReason, jidNormalizedUser, normalizeMessageContent, generateMessageIDV2, extractUrlFromText } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import QRCode from 'qrcode';
 import { createBaileysAuth } from '../state/baileys_auth.js';
 import { ServiceError, logFailure } from '../lib/http.js';
 import { validatePdf } from './mou_document.js';
+import { validRecommendationPreview, recommendationLinkPreview } from './recommendation_preview.js';
 import { validContact, validPhone } from '../lib/security.js';
 import { ignoredInbound } from './interaction_policy.js';
+import { MarketingStatusStore } from '../state/marketing_status.js';
+import { dirname, join } from 'node:path';
 
 const directJid = (jid) => typeof jid === 'string' && /^\d+(?::\d+)?@(s\.whatsapp\.net|lid)$/.test(jid);
 const terminalReasons = new Map([
@@ -32,8 +35,9 @@ export class BaileysClient {
     socketFactory = makeWASocket, authFactory = createBaileysAuth,
     qrEncoder = (qr) => QRCode.toDataURL(qr, { width: 300, margin: 2 }),
     logger = console, now = Date.now, schedule = setTimeout, cancel = clearTimeout,
+    prepareLinkPreview = recommendationLinkPreview,
   } = {}) {
-    Object.assign(this, { config, socketFactory, authFactory, qrEncoder, logger, now, schedule, cancel });
+    Object.assign(this, { config, socketFactory, authFactory, qrEncoder, logger, now, schedule, cancel, prepareLinkPreview });
     this.socketLogger = pino({ level: 'silent' }); // QR, Signal keys dan isi pesan tidak masuk log.
     this.state = 'stopped';
     this.socket = null;
@@ -54,6 +58,7 @@ export class BaileysClient {
     this.lastError = null;
     this.lastMessageAt = null;
     this.lastPairingAt = 0;
+    this.marketingContacts = new Map();
   }
 
   getStatus() {
@@ -77,7 +82,7 @@ export class BaileysClient {
     const socket = this.socket;
     this.socket = null;
     if (!socket) return;
-    for (const event of ['connection.update', 'creds.update', 'messages.upsert']) socket.ev.removeAllListeners(event);
+    for (const event of ['connection.update', 'creds.update', 'messages.upsert', 'contacts.upsert', 'contacts.update', 'message-receipt.update', 'messages.reaction']) socket.ev.removeAllListeners(event);
     socket.end(new Error('Local connection stopped'));
   }
 
@@ -93,8 +98,9 @@ export class BaileysClient {
         // Sinkronisasi awal diperlukan untuk pemetaan LID dan kunci sesi.
         // Riwayat tetap disaring pada messages.upsert agar tidak dijawab AI.
         markOnlineOnConnect: false, syncFullHistory: false,
-        emitOwnEvents: false, shouldIgnoreJid: (jid) => !!jid && !directJid(jid),
+        emitOwnEvents: false, shouldIgnoreJid: (jid) => !!jid && jid !== 'status@broadcast' && !directJid(jid),
         connectTimeoutMs: 30000, defaultQueryTimeoutMs: 15000, qrTimeout: 60000,
+        generateHighQualityLinkPreview: true,
         getMessage: async (key) => this.messageCache.get(`${key.remoteJid}/${key.id}`),
       });
     } catch (error) {
@@ -104,6 +110,30 @@ export class BaileysClient {
       return;
     }
     this.socket = socket;
+    const captureContacts = (contacts) => {
+      if (socket !== this.socket) return;
+      for (const contact of contacts) {
+        const jid = jidNormalizedUser(contact.id || '');
+        if (!directJid(jid)) continue;
+        this.marketingContacts.set(jid, { jid, name: contact.name || contact.notify || contact.verifiedName || '' });
+        while (this.marketingContacts.size > 5000) this.marketingContacts.delete(this.marketingContacts.keys().next().value);
+      }
+      this.marketingStore?.contacts([...this.marketingContacts.values()]);
+    };
+    socket.ev.on('contacts.upsert', captureContacts);
+    socket.ev.on('contacts.update', captureContacts);
+    socket.ev.on('message-receipt.update', (updates) => {
+      if (socket !== this.socket || !this.marketingStore) return;
+      for (const { key, receipt } of updates) {
+        if (receipt?.readTimestamp) this.marketingStore.observe(key?.id, 'views', receipt.userJid);
+      }
+    });
+    socket.ev.on('messages.reaction', (updates) => {
+      if (socket !== this.socket || !this.marketingStore) return;
+      for (const { key, reaction } of updates) {
+        if (reaction?.text) this.marketingStore.observe(key?.id, 'reactions', reaction.key?.participant || reaction.key?.remoteJid);
+      }
+    });
     socket.ev.on('creds.update', () => {
       if (socket !== this.socket) return;
       try { this.auth.saveCreds(); }
@@ -141,6 +171,10 @@ export class BaileysClient {
       return;
     }
     if (connection === 'open') {
+      const phone = socket.user?.id ? jidNormalizedUser(socket.user.id).split('@')[0] : null;
+      if (this.marketingPhone && this.marketingPhone !== phone) this.marketingContacts.clear();
+      this.marketingPhone = phone;
+      this.marketingStore?.bindAccount(phone);
       this.state = 'connected'; this.retries = 0; this.lastError = null;
       this.qr = null; this.code = null;
       this.logger.info?.({ event: 'whatsapp_connected', transport: 'baileys' });
@@ -207,6 +241,7 @@ export class BaileysClient {
     this.cancel(this.reconnectTimer); this.reconnectTimer = null;
     this.detach();
     if (reset) {
+      this.marketingContacts.clear(); this.marketingStore?.clearContacts();
       this.auth.reset();
       this.aliases.clear(); this.destinations.clear(); this.messageCache.clear();
       this.received = 0; this.sent = 0; this.lastMessageAt = null; this.lastPairingAt = 0;
@@ -263,6 +298,11 @@ export class BaileysClient {
     if (this.stopped || socket !== this.socket) return;
     for (const message of event.messages || []) {
       const key = message.key;
+      const quoted = normalizeMessageContent(message.message)?.extendedTextMessage?.contextInfo?.stanzaId;
+      if (!key?.fromMe && quoted && this.marketingStore?.byMessage(quoted)) {
+        this.marketingStore.observe(quoted, 'replies', key.participant || key.remoteJid, key.id);
+        continue; // Status replies do not enter the chatbot or human-takeover flow.
+      }
       if (!key?.id || !directJid(key.remoteJid)) continue;
       if (!key.fromMe && ignoredInbound(message)) continue;
       const content = extractBaileysContent(message.message);
@@ -289,7 +329,17 @@ export class BaileysClient {
     if (!validContact(contact) || typeof text !== 'string' || !text.trim() || text.length > 4096) {
       throw new ServiceError('INVALID_OUTBOUND_MESSAGE', 400);
     }
-    return this.sendContent(contact, { text }, options);
+    let linkPreview;
+    const firstUrl = extractUrlFromText(text);
+    // Installing the preview reader must not enable fetching arbitrary URLs
+    // echoed in chat. Automatic previews are limited to our public listings.
+    if (options.linkPreview === false || firstUrl && !validRecommendationPreview({ url: firstUrl, title: 'Properti', description: '' }, text)) linkPreview = null;
+    else if (options.linkPreview && typeof options.linkPreview === 'object') {
+      if (!validRecommendationPreview(options.linkPreview, text)) throw new ServiceError('INVALID_OUTBOUND_MESSAGE', 400);
+      if (this.state !== 'connected' || !this.socket) throw new ServiceError('WHATSAPP_NOT_CONNECTED', 503);
+      linkPreview = await this.prepareLinkPreview(options.linkPreview, { upload: this.socket.waUploadToServer, logger: this.logger });
+    }
+    return this.sendContent(contact, { text, ...(linkPreview !== undefined ? { linkPreview } : {}) }, options);
   }
 
   async acknowledgeOwnerCommand(message, command) {
@@ -353,10 +403,53 @@ export class BaileysClient {
     } finally { this.disconnecting = false; }
   }
 
+  getMarketingStore() {
+    this.marketingStore ||= new MarketingStatusStore(join(dirname(this.config.authFile), 'marketing-status.sqlite'), this.now);
+    this.marketingStore.bindAccount(this.getStatus().phone);
+    this.marketingStore.contacts([...this.marketingContacts.values()]);
+    return this.marketingStore;
+  }
+  marketingStatus() {
+    const store = this.getMarketingStore(), status = this.getStatus();
+    return { connected: status.connected, phone: status.phone, tested_at: status.phone ? store.latestTest(status.phone) : null,
+      contacts: store.listContacts(), analytics: 'observed_events_only' };
+  }
+  marketingMetrics(id) { return this.getMarketingStore().metrics(id); }
+  async sendMarketingStatus({ id, imageBase64, caption, audience, test = false }) {
+    if (!/^[a-f0-9-]{36}$/.test(id || '') || typeof caption !== 'string' || caption.length > 2200 ||
+      !Array.isArray(audience) || !audience.length || audience.length > 2000 ||
+      audience.some(jid => !/^[1-9]\d{6,14}@(s\.whatsapp\.net|lid)$/.test(jid)) ||
+      typeof imageBase64 !== 'string' || imageBase64.length > 5 * 1024 * 1024 || !/^[A-Za-z0-9+/]+=*$/.test(imageBase64)) throw new ServiceError('INVALID_AUDIENCE', 400);
+    const store = this.getMarketingStore(), previous = store.get(id);
+    if (previous) return store.metrics(id);
+    if (!this.socket || this.state !== 'connected') throw new ServiceError('WA_DISCONNECTED', 503);
+    const account = this.getStatus().phone;
+    if (!test && !store.latestTest(account)) throw new ServiceError('WA_TEST_REQUIRED', 409);
+    const image = Buffer.from(imageBase64, 'base64');
+    if (image.length < 3 || image[0] !== 0xff || image[1] !== 0xd8) throw new ServiceError('INVALID_IMAGE', 400);
+    const messageId = generateMessageIDV2(this.socket.user?.id);
+    const intent = store.begin(id, messageId, account, test === true);
+    if (intent.message_id !== messageId) return store.metrics(id);
+    let timer;
+    try {
+      const result = await Promise.race([
+        this.socket.sendMessage('status@broadcast', { image, caption }, { messageId, broadcast: true, statusJidList: [...new Set(audience)] }),
+        new Promise((resolve, reject) => { timer = setTimeout(() => reject(new Error('timeout')), this.config.timeoutMs); }),
+      ]);
+      if (result?.key?.id !== messageId) throw new Error('Uncertain acknowledgement');
+      store.sent(id); this.cache(result.key, result.message);
+      return store.metrics(id);
+    } catch {
+      store.uncertain(id);
+      return store.metrics(id);
+    } finally { clearTimeout(timer); }
+  }
+
   async stop() {
     this.stopped = true;
     this.cancel(this.reconnectTimer); this.reconnectTimer = null;
     this.detach(); this.qr = null; this.code = null; this.state = 'stopped';
     await this.inbound;
+    this.marketingStore?.close(); this.marketingStore = null;
   }
 }

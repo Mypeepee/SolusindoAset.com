@@ -37,8 +37,14 @@ interface LocationPickerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   theme?: Theme;
+  /** Neutral keyboard/input focus for the Investor business variant. */
+  focusTone?: "brand" | "neutral";
+  /** Scoped campaign palette; Home and listing presentations keep their theme. */
+  presentation?: "default" | "campaign";
   /** label kecil di atas field (default "Lokasi") */
   label?: string;
+  /** Investor uses the same picker, ending at kota/kabupaten. */
+  maxLevel?: "kota" | "kelurahan";
 }
 
 interface ThemeTokens {
@@ -80,7 +86,7 @@ const THEMES: Record<Theme, ThemeTokens> = {
     rowHover: "hover:bg-gray-50",
     rowBorder: "border-gray-50",
     input:
-      "bg-gray-50 border-gray-200 text-gray-800 placeholder:text-gray-400 focus:border-primary",
+      "bg-gray-50 border-gray-200 text-gray-800 placeholder:text-gray-400",
     inputIcon: "text-gray-400",
     checkboxIdle: "border-gray-300 bg-white",
     footer: "bg-gray-50 border-gray-100",
@@ -104,7 +110,7 @@ const THEMES: Record<Theme, ThemeTokens> = {
     rowHover: "hover:bg-white/5",
     rowBorder: "border-white/5",
     input:
-      "bg-[#1A1A1A] border-white/10 text-white placeholder:text-gray-600 focus:border-primary",
+      "bg-[#1A1A1A] border-white/10 text-white placeholder:text-gray-600",
     inputIcon: "text-gray-500",
     checkboxIdle: "border-gray-600 bg-transparent",
     footer: "bg-[#2A2A2A] border-white/10",
@@ -147,8 +153,26 @@ export default function LocationPicker({
   onOpenChange,
   theme = "light",
   label = "Lokasi",
+  maxLevel = "kelurahan",
+  focusTone = "brand",
+  presentation = "default",
 }: LocationPickerProps) {
-  const t = THEMES[theme];
+  const campaign = presentation === "campaign";
+  const t = campaign ? {
+    ...THEMES.dark,
+    triggerLabel: "text-gray-400 group-hover:text-gray-200",
+    triggerIcon: "text-gray-400 group-hover:text-gray-200",
+    panel: "bg-[#0d241d] border-white/15 campaign-location-popover",
+    header: "bg-[#0d241d] border-white/10",
+    bodyBg: "bg-[#0d241d]",
+    input: "bg-[#081c16] border-white/20 text-white placeholder:text-gray-400",
+    footer: "bg-[#0d241d] border-white/10",
+  } : THEMES[theme];
+  const triggerChip = focusTone === "neutral"
+    ? theme === "light"
+      ? "bg-gray-50 border-gray-200 text-gray-800 hover:bg-gray-100"
+      : "bg-white/5 border-white/15 text-white hover:bg-white/10"
+    : t.triggerChip;
 
   // --- responsif: desktop popover vs mobile bottom sheet ---
   const [isDesktop, setIsDesktop] = useState(true);
@@ -239,10 +263,16 @@ export default function LocationPicker({
   useEffect(() => {
     if (!open) return;
     ensureIndex();
+  }, [open, ensureIndex]);
+
+  // Loading the index changes ensureIndex's identity. Only opening the picker
+  // should reset navigation; completing a fetch must preserve the user's typing.
+  useEffect(() => {
+    if (!open) return;
     setPath([]);
     setChildList([]);
     setQuery("");
-  }, [open, ensureIndex]);
+  }, [open]);
 
   // tutup dengan Escape
   useEffect(() => {
@@ -332,6 +362,7 @@ export default function LocationPicker({
   // --- navigasi drill-down ---
   // Muat anak dari sebuah induk → isi childList.
   const loadChildren = useCallback(async (parent: SelectedRegion) => {
+    if (parent.level === maxLevel) return;
     const lvl = NEXT_LEVEL[parent.level];
     if (!lvl) return;
     setLoadingList(true);
@@ -374,7 +405,7 @@ export default function LocationPicker({
     } finally {
       setLoadingList(false);
     }
-  }, []);
+  }, [maxLevel]);
 
   const drillInto = useCallback(
     (region: SelectedRegion) => {
@@ -433,7 +464,7 @@ export default function LocationPicker({
   const checkBox = (checked: boolean) => (
     <div
       className={`w-5 h-5 rounded border flex items-center justify-center transition-colors shrink-0 ${
-        checked ? "bg-primary border-primary" : t.checkboxIdle
+        checked ? campaign ? "bg-slate-500 border-slate-400" : "bg-primary border-primary" : t.checkboxIdle
       }`}
     >
       {checked && (
@@ -444,7 +475,7 @@ export default function LocationPicker({
 
   const regionRow = (region: SelectedRegion) => {
     const selected = isSelected(region);
-    const hasChild = region.level !== "kelurahan";
+    const hasChild = region.level !== "kelurahan" && region.level !== maxLevel;
     return (
       <div
         key={`${region.level}-${region.id}`}
@@ -593,7 +624,7 @@ export default function LocationPicker({
                 ? "Cari kota / wilayah (mis. Surabaya)"
                 : `Cari ${viewLevel}${parentRegion ? ` di ${parentRegion.name}` : ""}`
             }
-            className={`w-full border rounded-xl pl-9 pr-8 py-2.5 text-sm outline-none font-medium transition-colors ${t.input}`}
+            className={`w-full border rounded-xl pl-9 pr-8 py-2.5 text-sm outline-none font-medium transition-colors ${t.input} ${focusTone === "neutral" ? "focus:border-slate-400" : "focus:border-primary"}`}
           />
           {query && (
             <button
@@ -618,7 +649,7 @@ export default function LocationPicker({
               type="button"
               key={`${loc.level}-${loc.id}`}
               onClick={() => toggle(loc)}
-              className={`inline-flex items-center gap-1 px-2 py-1 rounded-full border text-[11px] font-bold whitespace-nowrap transition-colors ${t.triggerChip}`}
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-full border text-[11px] font-bold whitespace-nowrap transition-colors ${triggerChip}`}
             >
               {regionLabel(loc)}
               <Icon icon="solar:close-circle-bold" className="text-xs" />
@@ -634,7 +665,7 @@ export default function LocationPicker({
           <button
             type="button"
             onClick={() => toggle(parentRegion)}
-            className={`w-full text-left px-4 py-3 bg-primary/5 hover:bg-primary/10 border-b ${t.rowBorder} flex items-center gap-3 transition-colors`}
+            className={`w-full text-left px-4 py-3 ${campaign ? "bg-white/5 hover:bg-white/10" : "bg-primary/5 hover:bg-primary/10"} border-b ${t.rowBorder} flex items-center gap-3 transition-colors`}
           >
             {checkBox(isSelected(parentRegion))}
             <span className={`text-sm font-bold ${t.title}`}>
@@ -672,7 +703,7 @@ export default function LocationPicker({
           type="button"
           onClick={() => onOpenChange(false)}
           disabled={value.length === 0}
-          className="px-5 py-2.5 rounded-xl text-sm font-bold bg-primary text-darkmode hover:bg-[#6ee7b7] transition-colors shadow-lg shadow-primary/30 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed"
+          className={`px-5 py-2.5 rounded-xl text-sm font-bold ${campaign ? "bg-slate-100 text-slate-900 hover:bg-white" : "bg-primary text-darkmode hover:bg-[#6ee7b7] shadow-lg shadow-primary/30"} transition-colors disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed`}
         >
           Terapkan{value.length > 0 ? ` (${value.length})` : ""}
         </button>
@@ -707,7 +738,10 @@ export default function LocationPicker({
                   // ---- DESKTOP: popover fixed, anti-overflow ----
                   <motion.div
                     key="popover"
+                    role="dialog"
+                    aria-label="Pilih lokasi"
                     data-search-portal="true"
+                    data-presentation={presentation}
                     initial={{ opacity: 0, y: openUpward ? -8 : 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: openUpward ? -8 : 8 }}
@@ -736,7 +770,11 @@ export default function LocationPicker({
                   // karena berebut sisi bawah viewport yang sama.
                   <motion.div
                     key="sheet"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Pilih lokasi"
                     data-search-portal="true"
+                    data-presentation={presentation}
                     initial={{ y: "100%" }}
                     animate={{ y: 0 }}
                     exit={{ y: "100%" }}
@@ -761,6 +799,18 @@ export default function LocationPicker({
       {/* TRIGGER */}
       <div
         ref={triggerRef}
+        role="button"
+        tabIndex={0}
+        aria-label={label || "Lokasi"}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget) return;
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onOpenChange(!open);
+          }
+        }}
         className="cursor-pointer h-full flex flex-col justify-center group"
         onClick={() => onOpenChange(!open)}
       >
@@ -785,14 +835,20 @@ export default function LocationPicker({
               value.map((loc) => (
                 <span
                   key={`${loc.level}-${loc.id}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggle(loc);
-                  }}
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold whitespace-nowrap transition-colors cursor-pointer ${t.triggerChip}`}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold whitespace-nowrap transition-colors cursor-pointer ${triggerChip}`}
                 >
                   {regionLabel(loc)}
-                  <Icon icon="solar:close-circle-bold" className="text-xs" />
+                  <button
+                    type="button"
+                    aria-label={`Hapus ${regionLabel(loc)}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggle(loc);
+                    }}
+                    className="inline-flex items-center justify-center rounded-full p-1 -m-1"
+                  >
+                    <Icon icon="solar:close-circle-bold" className="text-xs" />
+                  </button>
                 </span>
               ))
             )}

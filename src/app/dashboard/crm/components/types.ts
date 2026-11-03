@@ -1,6 +1,7 @@
 import type { SelectedRegion } from "@/lib/regionSearch";
 import type { TempatDipilih } from "@/lib/searchTabs";
 import type { BuyerCriteria } from "@/lib/chatbot/property-knowledge";
+import type { JenisDiskon } from "@/lib/preferensiDiskon";
 
 export type KlienStatus =
   | "lead_baru"
@@ -54,6 +55,8 @@ export interface PreferensiKlien {
   budget_max: number | null;
   luas_min: number | null;
   luas_max: number | null;
+  diskon_jenis?: JenisDiskon | null;
+  diskon_persen?: number | null;
   legalitas: Sertifikat | null;
   dekat_nilai: string | null;
   dekat_radius: number | null;
@@ -113,6 +116,8 @@ export interface PreferensiForm {
   budget_max: string;
   luas_min: string;
   luas_max: string;
+  diskon_jenis: JenisDiskon | "";
+  diskon_persen: string;
   /** "" = tidak mempermasalahkan. Itu keadaan bawaan dan yang paling sering
    *  benar — memaksa agent memilih akan membuatnya mengarang jawaban. */
   legalitas: Sertifikat | "";
@@ -219,6 +224,8 @@ export const EMPTY_PREFERENSI: PreferensiForm = {
   budget_max:      "",
   luas_min:        "",
   luas_max:        "",
+  diskon_jenis:    "",
+  diskon_persen:   "",
   legalitas:       "",
   dekat:           null,
   alamat_teks:     "",

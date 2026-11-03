@@ -32,6 +32,8 @@ import {
 } from "@/lib/klienMatch";
 import { ringkasGrup, kunciGrup, bagiSlot } from "@/lib/klienRingkas";
 import { siapkanDekat, dekatUntuk } from "@/lib/klienDekat";
+import { siapkanBuktiDiskon, kunciDiskon } from "@/lib/klienMatch";
+import type { MetrikDiskon } from "@/lib/preferensiDiskon";
 import { muatPengecualian, gabung } from "@/lib/klienPengecualian";
 
 export const runtime = "nodejs";
@@ -116,6 +118,8 @@ export async function GET(req: NextRequest, { params }: Ctx) {
      Menerjemahkannya di dalam keKriteria() berarti satu query kamus tiap kali
      kriteria disusun — dan ia disusun berkali-kali per permintaan. */
   const petaDekat = await siapkanDekat(prefTerpakai);
+  const petaBuktiDiskon = await siapkanBuktiDiskon(prefTerpakai);
+  const petaDiskon = new Map([...petaBuktiDiskon].map(([key, rows]) => [key, new Set(rows.keys())]));
 
   const keKriteria = (p: (typeof semuaPref)[number]): KriteriaMatch => ({
     id_preferensi: p.id_preferensi,
@@ -133,6 +137,9 @@ export async function GET(req: NextRequest, { params }: Ctx) {
     legalitas: p.legalitas,
     dekat: dekatUntuk(p, petaDekat),
     alamat_teks: p.alamat_teks,
+    diskon_jenis: p.diskon_jenis,
+    diskon_persen: p.diskon_persen,
+    diskon_ids: petaDiskon.get(kunciDiskon(p)),
   });
 
   /* Seluruh preferensi dijalankan berbarengan. Jumlahnya kecil (satu klien
@@ -153,7 +160,7 @@ export async function GET(req: NextRequest, { params }: Ctx) {
     ids: string[];
     rows: (typeof semuaPref)[number][];
     /** id_property → simpul terbaik DI DALAM grup ini. */
-    aset: Map<string, { l: any; skor: number; alasan: string[]; idPref: string }>;
+    aset: Map<string, { l: any; skor: number; alasan: string[]; idPref: string; diskon: MetrikDiskon | null }>;
   };
 
   const grupPeta = new Map<string, Grup>();
@@ -176,7 +183,10 @@ export async function GET(req: NextRequest, { params }: Ctx) {
       /* Dedup DI DALAM grup: aset yang cocok dengan "Gudang Surabaya" dan
          "Gudang Sidoarjo" sekaligus tidak mungkin ada, tapi aset yang cocok
          dengan dua tipe dalam satu grup sangat mungkin. */
-      if (!ada || skor > ada.skor) g.aset.set(id, { l, skor, alasan: alasanCocok(l, k), idPref });
+      if (!ada || skor > ada.skor) g.aset.set(id, {
+        l, skor, alasan: alasanCocok(l, k), idPref,
+        diskon: petaBuktiDiskon.get(kunciDiskon(p))?.get(id) ?? null,
+      });
     }
   });
 
@@ -198,19 +208,27 @@ export async function GET(req: NextRequest, { params }: Ctx) {
       .slice(0, jatah[i]),
   );
 
-  /* Satukan untuk tampilan "Semua". Aset yang terpilih di dua grup muncul
-     SEKALI, tapi membawa kedua grupnya — kalau tidak, ia akan lenyap dari
-     salah satu pill tanpa alasan yang terlihat. */
-  type Simpul = { l: any; skor: number; alasan: string[]; idPref: string; grup: string; cocokGrup: Set<string> };
+  /* Slot menentukan aset yang tampil, bukan bukti kecocokannya. Setelah
+     pemilihan, lengkapi dari SEMUA grup yang mencocoki aset itu: suatu grup
+     bisa mengalokasikan slotnya untuk aset lain, tetapi diskon dan keanggotaan
+     aset yang sudah tampil tetap harus terbawa. */
+  type Simpul = { l: any; skor: number; alasan: string[]; idPref: string; grup: string; cocokGrup: Set<string>; diskon: MetrikDiskon | null };
+  const idsTerpilih = new Set(terpilihPerGrup.flatMap(daftar => daftar.map(([id]) => id)));
   const peta = new Map<string, Simpul>();
-  terpilihPerGrup.forEach((daftar, i) => {
-    const idGrup = grup[i].id_grup;
-    for (const [id, v] of daftar) {
+  grup.forEach(g => {
+    const idGrup = g.id_grup;
+    for (const id of idsTerpilih) {
+      const v = g.aset.get(id);
+      if (!v) continue;
       const ada = peta.get(id);
       if (!ada) {
         peta.set(id, { ...v, grup: idGrup, cocokGrup: new Set([idGrup]) });
       } else {
         ada.cocokGrup.add(idGrup);
+        if (v.diskon) ada.diskon = {
+          kelurahan: v.diskon.kelurahan ?? ada.diskon?.kelurahan ?? null,
+          turunLelang: v.diskon.turunLelang ?? ada.diskon?.turunLelang ?? null,
+        };
         if (v.skor > ada.skor) { ada.skor = v.skor; ada.alasan = v.alasan; ada.idPref = v.idPref; ada.grup = idGrup; }
       }
     }
@@ -218,7 +236,7 @@ export async function GET(req: NextRequest, { params }: Ctx) {
 
   const items = [...peta.values()]
     .sort((a, b) => b.skor - a.skor)
-    .map(({ l, skor, alasan, idPref, grup: idGrup, cocokGrup }) => ({
+    .map(({ l, skor, alasan, idPref, grup: idGrup, cocokGrup, diskon }) => ({
       id_property: l.id_property.toString(),
       id_preferensi: idPref,
       grup: idGrup,
@@ -244,6 +262,7 @@ export async function GET(req: NextRequest, { params }: Ctx) {
       agent_name: "", agent_office: "",
       skor,
       alasan,
+      diskon,
     }));
 
   /* `ditampilkan` DIHITUNG DARI DAFTAR YANG BENAR-BENAR DIKIRIM, bukan dari
@@ -274,7 +293,10 @@ export async function GET(req: NextRequest, { params }: Ctx) {
     const hasil = await Promise.all(
       kandidat.map(async p => ({ p, d: await diagnosaKosong(prisma, keKriteria(p), { kecuali }) })),
     );
-    const jalanKeluar = (d: Diagnosa) => Math.max(d.jikaBudgetNaik10, d.jikaLokasiDiperluas, d.jikaLuasDiabaikan);
+    const jalanKeluar = (d: Diagnosa) => Math.max(
+      d.jikaBudgetNaik10, d.jikaLokasiDiperluas, d.jikaLuasDiabaikan,
+      d.jikaBentukDiabaikan, d.lelangTersaringTanggal, d.jikaDiskonDiabaikan,
+    );
     const terbaik = hasil.reduce((a, b) => (jalanKeluar(b.d) > jalanKeluar(a.d) ? b : a));
     diagnosa = { ...terbaik.d, id_preferensi: terbaik.p.id_preferensi.toString(), label: ringkasGrup([terbaik.p]) };
   }

@@ -5,31 +5,27 @@
 // JPEG via Puppeteer — sehingga bebas dari masalah CORS foto.
 
 import { downloadPosterImage, safeFileName } from "@/lib/poster/downloadPoster";
+import type { AuctionHistoryResult } from "@/lib/auctionHistory";
 
 export interface LelangPosterPayload {
   heroTitle: string;
   eyebrow: string;
   alamat: string;
-  addrSpecs: string;
-  calDay: string;
-  calMonth: string;
-  calTime: string;
+  luasTanah: string;
+  luasTanahTerbilang?: string | null;
+  luasBangunan?: string | null;
   legalMain: string;
   legalSub: string;
   hargaLimit: string;          // sudah diformat: "Rp 317.000.000"
-  hargaPasar?: string | null;  // diformat, atau null bila tak ada
-  hematPct?: number | null;
+  hargaLelangAwal?: string | null;
+  diskonPct?: number | null;
+  hematNominal?: string | null;
   uangJaminan?: string | null; // diformat, atau null bila tak ada
   contactNum: string;
   agentName: string;
   qrUrl: string;
   photos: string[];
 }
-
-const MONTHS = [
-  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
-];
 
 const money = (n: number): string =>
   new Intl.NumberFormat("id-ID", {
@@ -47,16 +43,38 @@ const toNum = (v: any): number => {
   return 0;
 };
 
-/** Parse tanggal lelang tanpa pergeseran timezone (ambil bagian tanggal apa adanya). */
-function parseLelangDate(raw?: string | null) {
-  if (!raw) return null;
-  const m = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/);
-  if (m) {
-    return { d: +m[3], mo: +m[2], y: +m[1], hh: m[4] ? +m[4] : 0, mm: m[5] ? +m[5] : 0 };
+const ANGKA = [
+  "nol", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh",
+  "delapan", "sembilan", "sepuluh", "sebelas",
+];
+
+function ejaBilangan(n: number): string {
+  if (n < 12) return ANGKA[n];
+  if (n < 20) return `${ejaBilangan(n - 10)} belas`;
+  const gabung = (awalan: string, sisa: number) =>
+    sisa ? `${awalan} ${ejaBilangan(sisa)}` : awalan;
+  if (n < 100) return gabung(`${ejaBilangan(Math.floor(n / 10))} puluh`, n % 10);
+  if (n < 200) return gabung("seratus", n - 100);
+  if (n < 1000) return gabung(`${ejaBilangan(Math.floor(n / 100))} ratus`, n % 100);
+  if (n < 2000) return gabung("seribu", n - 1000);
+  for (const [nilai, nama] of [
+    [1e12, "triliun"], [1e9, "miliar"], [1e6, "juta"], [1000, "ribu"],
+  ] as const) {
+    if (n >= nilai) return gabung(`${ejaBilangan(Math.floor(n / nilai))} ${nama}`, n % nilai);
   }
-  const dt = new Date(raw);
-  if (Number.isNaN(dt.getTime())) return null;
-  return { d: dt.getDate(), mo: dt.getMonth() + 1, y: dt.getFullYear(), hh: dt.getHours(), mm: dt.getMinutes() };
+  return "";
+}
+
+/** Eja angka yang sudah diformat agar desimalnya sama dengan angka di kartu. */
+function terbilangLuas(formatted: string | null): string | null {
+  if (!formatted) return null;
+  const [bulat, desimal] = formatted.replace(/ m²$/, "").split(",");
+  const n = Number(bulat.replace(/\./g, ""));
+  if (!Number.isSafeInteger(n) || n < 0) return null;
+  const koma = desimal
+    ? ` koma ${desimal.split("").map((digit) => ANGKA[Number(digit)]).join(" ")}`
+    : "";
+  return `${ejaBilangan(n)}${koma} meter persegi`;
 }
 
 /** Rapikan nomor telepon jadi format lokal (0812-3456-7890). */
@@ -83,6 +101,8 @@ interface BuildOpts {
   agentCode?: string | null;
   /** Profil agent yang sedang login, untuk kontak di poster. */
   selfAgent?: { nama?: string; whatsapp?: string; telepon?: string } | null;
+  /** Riwayat aset dari mesin pencocokan yang juga dipakai halaman detail. */
+  riwayatLelang?: AuctionHistoryResult | null;
   /** Origin (default window.location.origin). */
   origin?: string;
 }
@@ -96,31 +116,19 @@ export function buildLelangPosterPayload(data: any, opts: BuildOpts = {}): Lelan
   const judul: string = data?.judul || data?.title || "Aset Lelang";
   const kota: string = data?.kota || data?.area_lokasi || "";
 
-  const luasTanah = toNum(data?.luas_tanah);
-  const luasBangunan = toNum(data?.luas_bangunan);
-  const addrSpecs =
-    [
-      luasTanah ? `Luas Tanah ${luasTanah} m²` : "",
-      luasBangunan ? `Luas Bangunan ${luasBangunan} m²` : "",
-    ]
-      .filter(Boolean)
-      .join(" · ") || "Luas menyesuaikan dokumen lelang";
-
-  const dt = parseLelangDate(data?.tanggal_lelang);
-  const calDay = dt ? String(dt.d).padStart(2, "0") : "—";
-  const calMonth = dt ? `${MONTHS[dt.mo - 1]} ${dt.y}` : "Jadwal menyusul";
-  const calTime =
-    dt && (dt.hh || dt.mm)
-      ? `Pukul ${String(dt.hh).padStart(2, "0")}.${String(dt.mm).padStart(2, "0")} WIB`
-      : "Pukul 10.00 WIB";
+  const formatLuas = (value: unknown): string | null => {
+    const n = toNum(value);
+    return Number.isFinite(n) && n > 0
+      ? `${new Intl.NumberFormat("id-ID", { maximumFractionDigits: 2 }).format(n)} m²`
+      : null;
+  };
+  const formattedTanah = formatLuas(data?.luas_tanah);
+  const luasTanah = formattedTanah || "Belum tersedia";
+  const luasTanahTerbilang = terbilangLuas(formattedTanah);
+  const luasBangunan = formatLuas(data?.luas_bangunan);
 
   const legalitas: string = (data?.legalitas || "").toString().trim();
-  const nomorLegal: string = (data?.nomor_legalitas || "").toString().trim();
-  const legalMain = legalitas
-    ? nomorLegal
-      ? `${legalitas} No. ${nomorLegal}`
-      : legalitas
-    : "Cek Dokumen";
+  const legalMain = legalitas || "Cek Dokumen";
   const legalSub = legalitas
     ? LEGAL_SUB[legalitas.toUpperCase()] || "Legalitas Aset"
     : "Legalitas Aset";
@@ -128,13 +136,42 @@ export function buildLelangPosterPayload(data: any, opts: BuildOpts = {}): Lelan
   const limitNum = toNum(data?.nilai_limit_lelang) || toNum(data?.harga) || toNum(data?.priceRates?.monthly);
   const hargaLimit = money(limitNum);
 
-  // Hanya tampilkan "harga pasar / hemat" bila ada nilai pasar yang jelas lebih tinggi.
-  const pasarNum = toNum(data?.harga);
-  let hargaPasar: string | null = null;
-  let hematPct: number | null = null;
-  if (pasarNum && limitNum && pasarNum > limitNum * 1.02) {
-    hargaPasar = money(pasarNum);
-    hematPct = Math.round(((pasarNum - limitNum) / pasarNum) * 100);
+  // Bandingkan dengan lelang PERTAMA yang tercatat untuk bidang persis sama.
+  // Harga pasar, paket bidang lain, event kembar, dan lelang setelah listing
+  // ini tidak boleh menghasilkan klaim diskon.
+  const history = opts.riwayatLelang?.ok ? opts.riwayatLelang.items : [];
+  const current = history.find(
+    (item) =>
+      item.is_current &&
+      item.id_property === String(data?.id_property || data?.id || ""),
+  );
+  const currentDate = Date.parse(current?.tanggal_lelang || data?.tanggal_lelang || "");
+  const first = history
+    .filter(
+      (item) =>
+        !item.is_current &&
+        item.cakupan === "SAMA" &&
+        Date.parse(item.tanggal_lelang || "") < currentDate,
+    )
+    .sort((a, b) => Date.parse(a.tanggal_lelang!) - Date.parse(b.tanggal_lelang!))[0];
+  const firstLimit = toNum(first?.harga_efektif);
+  let hargaLelangAwal: string | null = null;
+  let diskonPct: number | null = null;
+  let hematNominal: string | null = null;
+  if (
+    current &&
+    Number.isFinite(firstLimit) &&
+    Number.isFinite(limitNum) &&
+    firstLimit > limitNum &&
+    limitNum > 0
+  ) {
+    // Bulatkan ke bawah agar tidak mengklaim 100% untuk harga yang masih > 0.
+    const pct = Math.floor(((firstLimit - limitNum) / firstLimit) * 1000) / 10;
+    if (pct > 0) {
+      hargaLelangAwal = money(firstLimit);
+      diskonPct = pct;
+      hematNominal = money(firstLimit - limitNum);
+    }
   }
 
   const jaminanNum = toNum(data?.uang_jaminan);
@@ -165,15 +202,15 @@ export function buildLelangPosterPayload(data: any, opts: BuildOpts = {}): Lelan
     heroTitle: judul,
     eyebrow: `Lelang · Solusindo Premier Property${kota ? ` ${kota}` : ""}`,
     alamat: data?.alamat_lengkap || data?.address || "-",
-    addrSpecs,
-    calDay,
-    calMonth,
-    calTime,
+    luasTanah,
+    luasTanahTerbilang,
+    luasBangunan,
     legalMain,
     legalSub,
     hargaLimit,
-    hargaPasar,
-    hematPct,
+    hargaLelangAwal,
+    diskonPct,
+    hematNominal,
     uangJaminan,
     contactNum,
     agentName,

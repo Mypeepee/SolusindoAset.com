@@ -12,6 +12,19 @@
  * serialize/parse-nya.
  */
 
+/** Sale/auction categories shared by Home and campaign validation. Kos is rental-only. */
+export const BUY_PROPERTY_TYPES = [
+  "RUMAH",
+  "TANAH",
+  "GUDANG",
+  "APARTEMEN",
+  "PABRIK",
+  "RUKO",
+  "TOKO",
+  "HOTEL_DAN_VILLA",
+] as const;
+export type BuyPropertyType = (typeof BUY_PROPERTY_TYPES)[number];
+
 export const TYPE_DISPLAY_TO_DB: Record<string, string> = {
   Rumah: "RUMAH",
   Tanah: "TANAH",
@@ -25,7 +38,7 @@ export const TYPE_DISPLAY_TO_DB: Record<string, string> = {
 };
 
 export const TYPE_DB_TO_DISPLAY: Record<string, string> = Object.fromEntries(
-  Object.entries(TYPE_DISPLAY_TO_DB).map(([display, db]) => [db, display])
+  Object.entries(TYPE_DISPLAY_TO_DB).map(([display, db]) => [db, display]),
 );
 
 export const ALLOWED_CATEGORIES = Object.values(TYPE_DISPLAY_TO_DB);
@@ -50,7 +63,7 @@ export function serializeTypes(displays: string[]): string {
 
 /** Param URL (enum koma) → daftar nama tampilan (untuk menghidrasi picker). */
 export function parseTypeParamToDisplays(
-  param: string | string[] | undefined | null
+  param: string | string[] | undefined | null,
 ): string[] {
   if (param == null) return [];
   const raw = Array.isArray(param) ? param.join(",") : param;
@@ -67,7 +80,7 @@ export function parseTypeParamToDisplays(
  * (`kategori: { in: [...] }`). Hanya kategori yang dikenal yang lolos.
  */
 export function parseCategoryDbList(
-  param: string | string[] | undefined | null
+  param: string | string[] | undefined | null,
 ): string[] {
   if (param == null) return [];
   const raw = Array.isArray(param) ? param.join(",") : param;

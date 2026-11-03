@@ -60,7 +60,7 @@ test('recommendations render full addresses, exact prices, WIB dates and clickab
   assert.match(text, /21 Oktober 2026 WIB/);
   assert.match(text, /LT 60 m² · LB 45 m² · SHM/);
   assert.doesNotMatch(text, /Kode|\[\[PROPERTY/);
-  assert.equal(text.split('\n\n').length, 3);
+  assert.ok(text.includes(`${options[0].detail_url}\n\n2. *`));
   assert.deepEqual(recommendationIds(text), ['123', '456']);
   assert.match(text, /^1\. \*/m);
   assert.match(text, /^2\. \*/m);

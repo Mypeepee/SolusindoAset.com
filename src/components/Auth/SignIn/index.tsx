@@ -8,6 +8,7 @@ import Loader from "@/components/Common/Loader";
 import Image from "next/image";
 import { Icon } from "@iconify/react";
 import { motion, AnimatePresence } from "framer-motion";
+import { signInReturnUrl } from "@/lib/auth-return-url";
 
 type Mode = "email" | "phone";
 
@@ -105,7 +106,7 @@ const Signin = ({ closeModal, openSignupModal, openForgotModal, skipRedirect, on
   // URL tujuan setelah login: full URL kalau di browser, fallback ke pathname
   const getReturnUrl = () => {
     if (typeof window !== "undefined") {
-      return window.location.href;
+      return signInReturnUrl(window.location.href);
     }
     return pathname || "/";
   };

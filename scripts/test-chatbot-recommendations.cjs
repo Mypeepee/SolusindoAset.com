@@ -64,7 +64,7 @@ const call = (db, action, more = {}) => run(db, { agent_id: 'AG108', action, ...
 test('matches the exact tanah/Surabaya/1B/100m2 request, excluding wrong type, city, price, size, unavailable and expired auctions', async () => {
   const f = await fixture(); f.stock([
     listing(101), listing(102, { kategori: 'RUMAH', ada_bangunan: true }), listing(103, { kota: 'Sidoarjo' }),
-    listing(104, { harga_efektif: decimal(1000000001) }), listing(105, { luas_tanah: decimal(99) }),
+    listing(104, { nilai_limit_lelang: decimal(1000000001), harga_efektif: decimal(1000000001) }), listing(105, { luas_tanah: decimal(99) }),
     listing(106, { status_tayang: 'TERJUAL' }), listing(107, { tanggal_lelang: new Date('2026-04-20T03:00:00Z') }),
     listing(108, { tanggal_lelang: null }), listing(109, { bukan_properti: true }), listing(110, { jenis_transaksi: 'SEWA' }),
   ]);
@@ -154,15 +154,71 @@ test('bootstrap returns only the baseline and malformed/cross-scope payloads fai
 test('morning matching searches pre-existing stock for saved preferences without a new property insert', async () => {
   const f = await fixture(); f.stock([listing(90)]);
   const result = await call(f.db, 'daily', { after_client: '' });
-  assert.deepEqual(result.candidates, [{ client_id: 'KL00001', property_id: '90' }]);
+  assert.deepEqual(result.candidates, [{ client_id: 'KL00001', property_id: '90', listed_at: new Date(NOW).toISOString() }]);
   assert.equal(result.checked, 1); assert.equal(result.matched, 1); assert.equal(result.more, false); assert.equal(result.after_client, 'KL00001');
   const query = f.reads[0]; assert.ok(query.where.AND, 'all SQL preference gates remain combined with the future-auction condition');
   assert.deepEqual((await call(f.db, 'daily', { after_client: 'KL00001' })).candidates, []);
 });
 
+test('morning recommendations rank by listing creation before hot deals, price, update time or auction date', async () => {
+  const f = await fixture();
+  f.stock([
+    listing(101, { tanggal_dibuat: new Date(NOW - 86400000), is_hot_deal: true, nilai_limit_lelang: decimal(100000000), harga_efektif: decimal(100000000), tanggal_diupdate: new Date(NOW) }),
+    listing(90, { tanggal_dibuat: new Date(NOW), tanggal_lelang: new Date(NOW - 86400000), luas_tanah: decimal(110) }),
+    listing(102, { tanggal_dibuat: new Date(NOW - 2 * 86400000), luas_tanah: decimal(120) }),
+    listing(999, { tanggal_dibuat: null, luas_tanah: decimal(130) }),
+    listing(103, { tanggal_dibuat: new Date(NOW + 1000), nilai_limit_lelang: decimal(1000000001), harga_efektif: decimal(1000000001) }),
+    listing(104, { tanggal_dibuat: new Date(NOW + 1000), kategori: 'RUMAH', ada_bangunan: true }),
+  ]);
+  const daily = await call(f.db, 'daily', { after_client: '' });
+  assert.deepEqual(daily.candidates.map(c => c.property_id), ['90', '101', '102', '999']);
+  const draft = await call(f.db, 'prepare', { client_id: 'KL00001', property_ids: ['101', '999', '90', '102'] });
+  assert.deepEqual(draft.property_ids, ['90', '101', '102', '999']);
+  const query = f.reads.find(q => q.orderBy);
+  assert.deepEqual(query.orderBy, [{ tanggal_dibuat: { sort: 'desc', nulls: 'last' } }, { id_property: 'desc' }]);
+});
+
+test('newest candidates from later saved preferences can replace older matches from the first preference', async () => {
+  const f = await fixture(), first = { ...f.preferences[0], loc_kecamatan: 'Tandes' };
+  f.prefs([first, { ...first, id_preferensi: 2n, loc_kecamatan: 'Rungkut' }]);
+  f.stock([...[101, 102, 103, 104].map(id => listing(id, { tanggal_dibuat: new Date(NOW - 86400000), luas_tanah: decimal(id) })),
+    listing(90, { kecamatan: 'Rungkut', alamat_lengkap: 'Jalan Rungkut', tanggal_dibuat: new Date(NOW) })]);
+  const result = await call(f.db, 'daily', { after_client: '' });
+  assert.equal(result.candidates[0].property_id, '90'); assert.equal(result.candidates.length, 4);
+});
+
+test('SQL chooses newest matching stock before the bounded pool can be consumed by old hot deals', async () => {
+  const f = await fixture();
+  const stock = [...Array.from({ length: 220 }, (_, i) => listing(200 + i, { is_hot_deal: true, tanggal_dibuat: new Date(NOW - 86400000), luas_tanah: decimal(100 + i) })),
+    listing(90, { is_hot_deal: false, tanggal_dibuat: new Date(NOW), luas_tanah: decimal(500) })];
+  f.db.listing.findMany = async query => {
+    f.reads.push(query);
+    const byHotDeal = query.orderBy?.[0]?.is_hot_deal;
+    return stock.slice().sort((a, b) => byHotDeal && a.is_hot_deal !== b.is_hot_deal
+      ? Number(b.is_hot_deal) - Number(a.is_hot_deal) : b.tanggal_dibuat - a.tanggal_dibuat).slice(0, query.take);
+  };
+  const result = await call(f.db, 'daily', { after_client: '' });
+  assert.equal(result.candidates[0].property_id, '90');
+});
+
+test('preview metadata uses the first ranked asset and its proxied public image with the sending agent URL', async () => {
+  const f = await fixture();
+  f.stock([listing(101, { tanggal_dibuat: new Date(NOW - 86400000) }),
+    listing(90, { tanggal_dibuat: new Date(NOW), luas_tanah: decimal(110), judul: 'Tanah terbaru', gambar: 'https://file.lelang.go.id/foto.jpg' })]);
+  const draft = await call(f.db, 'prepare', { client_id: 'KL00001', property_ids: ['101', '90'] });
+  assert.deepEqual(draft.property_ids, ['90', '101']);
+  assert.equal(draft.link_preview.url, 'https://solusindoaset.com/Lelang/tanah-surabaya-90/AG108');
+  assert.equal(draft.link_preview.image_url, 'https://solusindoaset.com/api/og/lelang/90');
+  assert.match(draft.link_preview.title, /^Tanah terbaru - Rp 900/);
+  assert.ok(draft.text.includes(draft.link_preview.url));
+  assert.doesNotMatch(JSON.stringify(draft.link_preview), /file\.lelang\.go\.id/);
+  f.stock([listing(90)]);
+  assert.equal((await call(f.db, 'prepare', { client_id: 'KL00001', property_ids: ['90'] })).link_preview.image_url, undefined);
+});
+
 test('morning matching excludes stale auctions, delivered/dismissed assets and wrong budgets or types', async () => {
   const f = await fixture();
-  f.stock([listing(90, { tanggal_lelang: new Date('2026-04-20T03:00:00Z') }), listing(91), listing(92), listing(93, { harga_efektif: decimal(1000000001) }), listing(94, { kategori: 'RUMAH', ada_bangunan: true })]);
+  f.stock([listing(90, { tanggal_lelang: new Date('2026-04-20T03:00:00Z') }), listing(91), listing(92), listing(93, { nilai_limit_lelang: decimal(1000000001), harga_efektif: decimal(1000000001) }), listing(94, { kategori: 'RUMAH', ada_bangunan: true })]);
   f.sent([{ id_klien: 'KL00001', id_property: 91n }]); f.dismissed([{ id_klien: 'KL00001', id_property: 92n }]);
   const result = await call(f.db, 'daily', { after_client: '' }); assert.deepEqual(result.candidates, []); assert.equal(result.matched, 0);
   assert.equal(validRecommendationRequest({ agent_id: 'AG108', action: 'daily', after_client: '', phone: '628123' }), false);
@@ -170,11 +226,25 @@ test('morning matching excludes stale auctions, delivered/dismissed assets and w
 });
 
 test('fractional rupiah listing prices remain eligible and are rounded only in the offered snapshot', async () => {
-  const f = await fixture(); f.stock([listing(90, { harga_efektif: decimal(299999999.99) })]);
+  const f = await fixture(); f.stock([listing(90, { nilai_limit_lelang: decimal(299999999.99), harga_efektif: decimal(299999999.99) })]);
   const morning = await call(f.db, 'daily', { after_client: '' }); assert.equal(morning.candidates.length, 1);
   const draft = await call(f.db, 'prepare', { client_id: 'KL00001', property_ids: ['90'] });
   const receipt = JSON.parse(Buffer.from(draft.receipt.split('.')[0], 'base64url')); assert.equal(receipt.assets[0].price, 300000000);
   f.preferences[0].budget_max = decimal(299999999); assert.equal((await call(f.db, 'prepare', { client_id: 'KL00001', property_ids: ['90'] })).skipped, true);
+});
+
+test('scan, morning and final prepare compare budget and report price using the current auction limit', async () => {
+  const f = await fixture();
+  f.preferences[0].budget_max = decimal(300000000);
+  f.stock([listing(101, { nilai_limit_lelang: decimal(250000000), harga_efektif: decimal(700000000) }),
+    listing(102, { nilai_limit_lelang: decimal(350000000), harga_efektif: decimal(250000000) })]);
+  assert.deepEqual((await call(f.db, 'scan', { cursor: '100' })).candidates.map(c => c.property_id), ['101']);
+  assert.deepEqual((await call(f.db, 'daily', { after_client: '' })).candidates.map(c => c.property_id), ['101']);
+  const draft = await call(f.db, 'prepare', { client_id: 'KL00001', property_ids: ['101', '102'] });
+  assert.deepEqual(draft.property_ids, ['101']);
+  const receipt = JSON.parse(Buffer.from(draft.receipt.split('.')[0], 'base64url'));
+  assert.equal(receipt.assets[0].price, 250000000);
+  assert.match(draft.text, /250/);
 });
 
 test('scan, daily and final prepare apply the same one-month auction cutoff and label past dates honestly', async () => {

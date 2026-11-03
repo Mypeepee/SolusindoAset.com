@@ -15,11 +15,9 @@ const TEMPLATE_PATH = path.join(
   "katalog_lelang_solusindo.html",
 );
 
-// Cache template di memori proses (file statis, tak berubah saat runtime).
-let templateCache: string | null = null;
+// Baca ulang tiap unduhan supaya perubahan HTML/CSS langsung dipakai server.
 async function getTemplate(): Promise<string> {
-  if (!templateCache) templateCache = await readFile(TEMPLATE_PATH, "utf8");
-  return templateCache;
+  return readFile(TEMPLATE_PATH, "utf8");
 }
 
 // Ambil base64 logo brand dari template untuk ditaruh di tengah QR (sekali saja).
@@ -67,13 +65,33 @@ function buildHtml(tpl: string, d: LelangPosterPayload): string {
     photos.length ? photos[i % photos.length] : undefined;
   const mainSrc = pick(0) || "";
 
+  const hasDiscount =
+    Boolean(d.hargaLelangAwal) &&
+    typeof d.diskonPct === "number" &&
+    Number.isFinite(d.diskonPct) &&
+    d.diskonPct > 0 &&
+    d.diskonPct < 100;
+  const discountBadge = hasDiscount
+    ? `<div class="ticket-discount">` +
+      `<svg class="ticket-discount-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">` +
+      `<path d="M12 2c1.3 4-2.5 6.1-2.5 9.2-1.1-.8-1.8-1.8-1.9-3.2C5.2 10.6 4 12.8 4 15a8 8 0 0 0 16 0c0-4.4-2.8-8.3-5.5-10.4.1 2.1-.6 3.5-1.7 4.6C13.5 6.6 13.1 4 12 2Z" fill="currentColor"/>` +
+      `<path d="M12.3 12c.4 2.2-2.8 3.4-2.8 5.5a2.8 2.8 0 0 0 5.6 0c0-1.8-1.2-3.8-2.8-5.5Z" fill="#FFF1C9"/></svg>` +
+      `<span class="ticket-discount-label">Hemat</span>` +
+      `<span class="ticket-discount-value">${esc(new Intl.NumberFormat("id-ID", { maximumFractionDigits: 1 }).format(d.diskonPct!))}%</span></div>`
+    : "";
+  const ticketCompare = hasDiscount
+    ? `<div class="ticket-topline"><div class="ticket-compare">` +
+      `<span class="ticket-compare-label">Harga pasaran</span>` +
+      `<s class="ticket-compare-price">${esc(d.hargaLelangAwal)}</s></div>${discountBadge}</div>`
+    : "";
+  const ticketSaving = hasDiscount && d.hematNominal
+    ? `<div class="ticket-saving">Lebih hemat ${esc(d.hematNominal)}</div>`
+    : "";
+  const limitParts = String(d.hargaLimit || "").match(/^Rp\s*(.+)$/i);
+  const hargaLimit = limitParts
+    ? `<span class="ticket-currency">Rp</span> <span class="ticket-price-amount">${esc(limitParts[1])}</span>`
+    : esc(d.hargaLimit);
   const extraParts: string[] = [];
-  if (d.hargaPasar && d.hematPct != null) {
-    extraParts.push(
-      `<div class="ticket-compare">Harga pasar <s>${esc(d.hargaPasar)}</s></div>` +
-        `<div class="ticket-save">Hemat ${esc(d.hematPct)}%</div>`,
-    );
-  }
   if (d.uangJaminan) {
     extraParts.push(
       `<div class="ticket-jaminan">` +
@@ -97,13 +115,18 @@ function buildHtml(tpl: string, d: LelangPosterPayload): string {
     "{{HERO_TITLE}}": esc(d.heroTitle),
     "{{EYEBROW}}": esc(d.eyebrow),
     "{{ALAMAT}}": esc(d.alamat),
-    "{{ADDR_SPECS}}": esc(d.addrSpecs),
-    "{{CAL_DAY}}": esc(d.calDay),
-    "{{CAL_MONTH}}": esc(d.calMonth),
-    "{{CAL_TIME}}": esc(d.calTime),
+    "{{LUAS_TANAH}}": esc(d.luasTanah || "Belum tersedia"),
+    "{{LUAS_TANAH_TERBILANG}}": d.luasTanahTerbilang
+      ? `<div class="land-words">${esc(d.luasTanahTerbilang)}</div>`
+      : "",
+    "{{LUAS_BANGUNAN}}": d.luasBangunan
+      ? `<div class="land-sub">Luas bangunan ${esc(d.luasBangunan)}</div>`
+      : "",
     "{{LEGAL_MAIN}}": esc(d.legalMain),
     "{{LEGAL_SUB}}": esc(d.legalSub),
-    "{{HARGA_LIMIT}}": esc(d.hargaLimit),
+    "{{HARGA_LIMIT}}": hargaLimit,
+    "{{TICKET_COMPARE}}": ticketCompare,
+    "{{TICKET_SAVING}}": ticketSaving,
     "{{TICKET_EXTRA}}": ticketExtra,
     "{{CONTACT_NUM}}": esc(d.contactNum),
     "{{AGENT_NAME}}": esc(d.agentName),
@@ -112,7 +135,7 @@ function buildHtml(tpl: string, d: LelangPosterPayload): string {
   };
 
   return tpl.replace(
-    /\{\{(PHOTO_MAIN|THUMB_2|THUMB_3|HERO_TITLE|EYEBROW|ALAMAT|ADDR_SPECS|CAL_DAY|CAL_MONTH|CAL_TIME|LEGAL_MAIN|LEGAL_SUB|HARGA_LIMIT|TICKET_EXTRA|CONTACT_NUM|AGENT_NAME|QR_SRC|QR_LOGO)\}\}/g,
+    /\{\{(PHOTO_MAIN|THUMB_2|THUMB_3|HERO_TITLE|EYEBROW|ALAMAT|LUAS_TANAH|LUAS_TANAH_TERBILANG|LUAS_BANGUNAN|LEGAL_MAIN|LEGAL_SUB|HARGA_LIMIT|TICKET_COMPARE|TICKET_SAVING|TICKET_EXTRA|CONTACT_NUM|AGENT_NAME|QR_SRC|QR_LOGO)\}\}/g,
     (m) => map[m] ?? "",
   );
 }
@@ -131,7 +154,24 @@ export async function POST(req: NextRequest) {
   try {
     const tpl = await getTemplate();
     const html = buildHtml(tpl, payload);
-    const buffer = await renderStoryPoster(html);
+    const buffer = await renderStoryPoster(html, async (page) => {
+      await page.evaluate(async () => {
+        await Promise.race([
+          document.fonts.ready,
+          new Promise((resolve) => setTimeout(resolve, 5000)),
+        ]);
+        // Semua angka tetap utuh, termasuk harga awal dan jaminan bernilai besar.
+        for (const el of document.querySelectorAll<HTMLElement>(
+          ".ticket-price, .ticket-compare-price, .ticket-saving, .tj-value, .land-main",
+        )) {
+          let size = parseFloat(getComputedStyle(el).fontSize);
+          while (el.scrollWidth > el.clientWidth && size > 7) {
+            size -= 0.5;
+            el.style.fontSize = `${size}px`;
+          }
+        }
+      });
+    });
 
     return new NextResponse(buffer as any, {
       status: 200,

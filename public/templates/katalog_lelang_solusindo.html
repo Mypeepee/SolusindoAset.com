@@ -285,14 +285,7 @@
     margin-bottom: 3px;
   }
   .addr-text { font-size: 12px; color: var(--ink); line-height: 1.45; }
-  .addr-specs {
-    font-size: 9px;
-    color: var(--muted);
-    margin-top: 5px;
-    letter-spacing: 0.04em;
-  }
-
-  /* ── TANGGAL + LEGALITAS ──────────────────────── */
+  /* ── LUASAN TANAH + LEGALITAS ─────────────────── */
   .fact-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -305,65 +298,45 @@
     border-radius: var(--radius-md);
     overflow: hidden;
   }
-  .cal-strip, .legal-strip {
+  .land-strip, .legal-strip {
     font-size: 8px;
     letter-spacing: 0.16em;
     text-transform: uppercase;
     padding: 5px 12px;
   }
-  .cal-strip   { background: var(--gold); color: var(--navy); }
+  .land-strip  { background: var(--gold); color: var(--navy); }
   .legal-strip { background: var(--navy); color: var(--gold-light); }
-  .cal-body {
+  .land-body, .legal-body {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 9px;
     padding: 10px 12px 11px;
   }
-  .cal-day { font-size: 30px; color: var(--crimson); line-height: 1; }
-  .cal-month {
-    font-size: 11px;
-    color: var(--navy);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    line-height: 1.2;
-  }
-  .cal-time { font-size: 9px; color: var(--muted); margin-top: 2px; }
-  .legal-body {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 12px 11px;
-  }
+  .land-details, .legal-details { flex: 1; min-width: 0; }
+  .land-main, .legal-main { font-size: 24px; line-height: 1.1; white-space: nowrap; }
+  .land-main { color: var(--crimson); }
+  .legal-main { color: var(--navy); }
+  .land-words, .legal-sub { font-size: 8.5px; color: var(--muted); line-height: 1.35; margin-top: 4px; }
+  .land-sub { font-size: 9px; color: var(--muted); margin-top: 3px; }
   .fact-icon, .legal-icon { width: 24px; height: 24px; flex-shrink: 0; }
-  .legal-main { font-size: 14px; color: var(--navy); line-height: 1.2; }
-  .legal-sub { font-size: 9px; color: var(--muted); margin-top: 2px; }
 
-  /* ── TIKET HARGA LIMIT + QR ───────────────────── */
+  /* ── HARGA LIMIT + PENGHEMATAN + QR ───────────── */
   .ticket {
+    --offer-accent: #B7F4CD;
+    --offer-muted: #E5C1B9;
+    --coupon-stub-width: 128px;
     position: relative;
     display: flex;
+    min-height: 168px;
     background:
       radial-gradient(120% 160% at 0% 0%, rgba(255,255,255,0.10) 0%, transparent 45%),
       linear-gradient(135deg, #6E1010 0%, #8B1A1A 48%, #9E1E1E 100%);
+    border: 1px solid rgba(224,168,48,0.45);
     border-radius: var(--radius-md);
     margin-bottom: 16px;
-    box-shadow:
-      var(--shadow-img),
-      inset 0 0 0 1px rgba(224,168,48,0.30),
-      inset 0 0 0 4px rgba(110,16,16,0.0);
+    box-shadow: var(--shadow-img), inset 0 0 0 1px rgba(224,168,48,0.12);
     overflow: hidden;
   }
-  /* garis keyline emas ganda di dalam tiket */
-  .ticket .ticket-left::after {
-    content: '';
-    position: absolute;
-    inset: 6px;
-    right: 134px;
-    border: 1px solid rgba(224,168,48,0.28);
-    border-radius: 9px;
-    pointer-events: none;
-  }
-  /* kilau emas lembut */
   .ticket-glow {
     position: absolute;
     inset: 0;
@@ -372,7 +345,6 @@
       repeating-linear-gradient(115deg, rgba(255,255,255,0.025) 0 2px, transparent 2px 9px);
     pointer-events: none;
   }
-  /* watermark besar */
   .ticket-watermark {
     position: absolute;
     left: -6px;
@@ -380,142 +352,176 @@
     font-size: 58px;
     letter-spacing: 0.14em;
     color: rgba(255,255,255,0.05);
-    text-transform: uppercase;
-    pointer-events: none;
-    user-select: none;
     line-height: 1;
+    pointer-events: none;
   }
-  /* lubang perforasi tiket */
+  /* Lekukan dan perforasi menandai sambungan kupon dengan bagian QR. */
   .ticket::before, .ticket::after {
     content: '';
     position: absolute;
-    width: 14px;
-    height: 14px;
-    background: var(--cream);
+    right: calc(var(--coupon-stub-width) - 9px);
+    width: 18px;
+    height: 18px;
     border-radius: 50%;
-    right: 121px;
+    background: var(--cream);
     z-index: 2;
   }
-  .ticket::before { top: -7px; }
-  .ticket::after  { bottom: -7px; }
+  .ticket::before { top: -9px; }
+  .ticket::after { bottom: -9px; }
   .ticket-left {
     flex: 1;
     min-width: 0;
-    padding: 17px 12px 16px 18px;
-    position: relative;
-    z-index: 1;
+    padding: 14px 16px;
     display: flex;
     flex-direction: column;
     justify-content: center;
+    position: relative;
+    z-index: 1;
   }
-  /* baris uang jaminan / info sekunder di dalam tiket */
-  .ticket-jaminan {
+  .ticket-left::after {
+    content: '';
+    position: absolute;
+    inset: 6px;
+    border: 1px solid rgba(224,168,48,0.28);
+    border-radius: 9px;
+    pointer-events: none;
+  }
+  .ticket-topline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 7px;
+  }
+  .ticket-compare {
+    flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
+  }
+  .ticket-compare-label {
+    font-size: 7px;
+    color: var(--offer-muted);
+    letter-spacing: 0.04em;
+  }
+  .ticket-compare-price {
+    display: block;
+    font-size: 20px;
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+    color: #F1DDD7;
+    text-decoration-color: #FF6666;
+    text-decoration-thickness: 2px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .ticket-discount {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    gap: 4px;
+    padding: 5px 10px 5px 8px;
+    border-radius: 18px 18px 18px 6px;
+    background: linear-gradient(135deg, #FFE2A3 0%, #FFBA50 55%, #FF8C38 100%);
+    border: 1px solid #FFD083;
+    color: #6A210F;
+    box-shadow: 0 3px 12px rgba(255,108,31,0.20), inset 0 1px 0 rgba(255,255,255,0.35);
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .ticket-discount-icon { width: 18px; height: 22px; flex-shrink: 0; color: #D83616; }
+  .ticket-discount-label { font-size: 8px; }
+  .ticket-discount-value { font-size: 13px; letter-spacing: -0.04em; }
+  .ticket-price {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    min-width: 0;
+    font-size: 35px;
+    line-height: 1.05;
+    letter-spacing: -0.045em;
+    color: #FFFCF6;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .ticket-currency {
+    font-size: 0.48em;
+    letter-spacing: -0.01em;
+    color: #F8EADD;
+  }
+  .ticket-saving {
     margin-top: 4px;
+    color: var(--offer-accent);
+    font-size: 9.5px;
+    line-height: 1.3;
+    white-space: nowrap;
+  }
+  .ticket-jaminan {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: baseline;
+    column-gap: 7px;
+    row-gap: 3px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(245,237,214,0.22);
   }
   .ticket-jaminan .tj-label {
-    font-size: 8px;
-    letter-spacing: 0.16em;
+    font-size: 7px;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: rgba(255,255,255,0.62);
+    color: var(--offer-muted);
   }
   .ticket-jaminan .tj-value {
-    font-size: 14px;
+    min-width: 0;
+    font-size: 12px;
     line-height: 1.1;
-    color: #FBEAB8;
+    color: #FFF0DC;
     white-space: nowrap;
   }
   .ticket-jaminan .tj-note {
-    font-size: 7.5px;
-    letter-spacing: 0.04em;
-    color: rgba(255,255,255,0.42);
-    margin-top: 1px;
-    text-transform: none;
-  }
-  .ticket-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 8px;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--gold-light);
-    margin-bottom: 7px;
-  }
-  .ticket-label .label-line {
-    width: 18px;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(224,168,48,0.7));
-  }
-  .ticket-label .label-line:last-child {
-    background: linear-gradient(90deg, rgba(224,168,48,0.7), transparent);
-  }
-  .ticket-price {
-    font-size: 29px;
-    line-height: 1;
-    letter-spacing: -0.01em;
-    margin-bottom: 8px;
-    white-space: nowrap;
-    background: linear-gradient(180deg, #FBEAB8 0%, #EFC35C 55%, #C9902A 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    text-shadow: 0 2px 14px rgba(0,0,0,0.25);
-  }
-  .ticket-compare {
-    font-size: 10px;
-    color: rgba(255,255,255,0.80);
-    margin-bottom: 8px;
-  }
-  .ticket-compare s { color: rgba(255,255,255,0.55); }
-  .ticket-save {
-    display: inline-block;
-    background: linear-gradient(135deg, #E0A830, #C9902A);
-    color: #3B1010;
-    font-size: 8px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    padding: 4px 10px;
-    border-radius: 999px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    grid-column: 1 / -1;
+    color: var(--offer-muted);
+    font-size: 7px;
+    line-height: 1.2;
   }
   .ticket-perf {
+    flex-shrink: 0;
     width: 0;
-    border-left: 2px dashed rgba(255,255,255,0.4);
     margin: 12px 0;
+    border-left: 2px dashed rgba(245,237,214,0.48);
     position: relative;
     z-index: 1;
   }
   .ticket-stub {
-    width: 128px;
+    width: var(--coupon-stub-width);
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    padding: 12px 10px;
+    gap: 8px;
+    margin: 14px 0;
+    padding: 0 10px;
     position: relative;
     z-index: 1;
   }
   .qr-frame {
     background: #FFFFFF;
-    border-radius: 10px;
-    padding: 7px;
+    border-radius: 8px;
+    padding: 6px;
     width: 94px;
     height: 94px;
-    box-shadow: 0 3px 12px rgba(0,0,0,0.28), 0 0 0 1px rgba(224,168,48,0.45);
   }
   .qr-frame svg { width: 100%; height: 100%; display: block; }
   .stub-text {
-    font-size: 8px;
-    color: var(--gold-light);
+    font-size: 10px;
+    color: #F8E8BF;
     text-align: center;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    line-height: 1.5;
+    letter-spacing: 0.02em;
+    line-height: 1.4;
   }
 
   /* ── FOOTER ───────────────────────────────────── */
@@ -639,25 +645,23 @@
       <div>
         <div class="addr-label">Alamat Lengkap</div>
         <div class="addr-text">{{ALAMAT}}</div>
-        <div class="addr-specs">{{ADDR_SPECS}}</div>
       </div>
     </div>
 
-    <!-- 3. Tanggal lelang + 4. Legalitas -->
+    <!-- 3. Luasan tanah + 4. Legalitas -->
     <div class="fact-row">
       <div class="fact-card">
-        <div class="cal-strip">Tanggal Lelang</div>
-        <div class="cal-body">
+        <div class="land-strip">Luasan Tanah</div>
+        <div class="land-body">
           <svg class="fact-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="3" y="5" width="18" height="16" rx="2.5" stroke="#8B1A1A" stroke-width="1.8"/>
-            <path d="M3 9.5h18" stroke="#8B1A1A" stroke-width="1.8"/>
-            <path d="M8 2.5v4M16 2.5v4" stroke="#8B1A1A" stroke-width="1.8" stroke-linecap="round"/>
-            <rect x="7" y="13" width="4" height="4" rx="1" fill="#C9902A"/>
+            <rect x="4" y="4" width="16" height="16" rx="2" stroke="#8B1A1A" stroke-width="1.8"/>
+            <path d="M8 4v4M12 4v2M16 4v4M4 8h4M4 12h2M4 16h4" stroke="#C9902A" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M11 16h5v-5" stroke="#8B1A1A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          <div class="cal-day">{{CAL_DAY}}</div>
-          <div>
-            <div class="cal-month">{{CAL_MONTH}}</div>
-            <div class="cal-time">{{CAL_TIME}}</div>
+          <div class="land-details">
+            <div class="land-main">{{LUAS_TANAH}}</div>
+            {{LUAS_TANAH_TERBILANG}}
+            {{LUAS_BANGUNAN}}
           </div>
         </div>
       </div>
@@ -668,7 +672,7 @@
             <path d="M12 2 20 5v6c0 5-3.4 9.2-8 11-4.6-1.8-8-6-8-11V5l8-3z" stroke="#0D1B2A" stroke-width="1.8" stroke-linejoin="round"/>
             <path d="M8.5 12l2.4 2.4L15.5 9.5" stroke="#C9902A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          <div>
+          <div class="legal-details">
             <div class="legal-main">{{LEGAL_MAIN}}</div>
             <div class="legal-sub">{{LEGAL_SUB}}</div>
           </div>
@@ -676,16 +680,19 @@
       </div>
     </div>
 
-    <!-- 1. Harga limit — tiket lelang + QR -->
+    <!-- 1. Perbandingan harga lelang + penghematan + QR -->
     <div class="ticket">
-      <div class="ticket-glow"></div>
-      <div class="ticket-watermark">LELANG</div>
+      <div class="ticket-glow" aria-hidden="true"></div>
+      <div class="ticket-watermark" aria-hidden="true">LELANG</div>
       <div class="ticket-left">
-        <div class="ticket-label"><span class="label-line"></span>Harga Limit Lelang<span class="label-line"></span></div>
-        <div class="ticket-price">{{HARGA_LIMIT}}</div>
+        {{TICKET_COMPARE}}
+        <div class="ticket-offer">
+          <div class="ticket-price">{{HARGA_LIMIT}}</div>
+        </div>
+        {{TICKET_SAVING}}
         {{TICKET_EXTRA}}
       </div>
-      <div class="ticket-perf"></div>
+      <div class="ticket-perf" aria-hidden="true"></div>
       <div class="ticket-stub">
         <div class="qr-frame" style="position:relative"><img src="{{QR_SRC}}" alt="QR" style="width:100%;height:100%;display:block;border-radius:4px" /><img src="{{QR_LOGO}}" alt="" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:27%;height:27%;object-fit:contain;background:#fff;border-radius:5px;box-shadow:0 0 0 3px #fff" /></div>
         <div class="stub-text">Scan untuk<br>detail aset</div>

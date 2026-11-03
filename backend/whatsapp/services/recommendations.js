@@ -36,12 +36,13 @@ function propertyCard(asset, now, index) {
   const price = asset.price_display ? `${label}: *${plain(asset.price_display)}*` : 'Harga perlu dikonfirmasi';
   const auction = Date.parse(asset.auction_at);
   const schedule = asset.transaction_type !== 'LELANG' ? '' : Number.isFinite(auction)
-    ? `\n  Lelang tercatat: ${dateLabel(auction)} WIB${auction <= now ? ' (sudah lewat)' : ''}.`
-    : '\n  Jadwal lelang belum tercatat; perlu konfirmasi.';
-  const incomplete = !asset.address?.street ? '\n  Alamat rinci belum tercatat.' : '';
+    ? `\n  🗓️ Lelang tercatat: ${dateLabel(auction)} WIB${auction <= now ? ' (sudah lewat)' : ''}.`
+    : '\n  ℹ️ Jadwal lelang belum tercatat; perlu konfirmasi.';
+  const incomplete = !asset.address?.street ? '\n  ℹ️ Alamat rinci belum tercatat.' : '';
   const transaction = TRANSACTION_LABELS[asset.transaction_type];
+  const transactionIcon = asset.transaction_type === 'LELANG' ? '🔨' : asset.transaction_type === 'SEWA' ? '🔑' : '🏡';
   const period = asset.transaction_type === 'SEWA' && asset.rental?.period ? ` (${plain(asset.rental.period).toLowerCase()})` : '';
-  return `${index + 1}. *${address}*${transaction ? `\n  Transaksi: ${transaction}` : ''}\n  ${price}${period}${details.length ? ` · ${details.join(' · ')}` : ''}${incomplete}${schedule}\n  Lihat detail: ${asset.detail_url}`;
+  return `${index + 1}. *📍 ${address}*${transaction ? `\n  ${transactionIcon} Transaksi: ${transaction}` : ''}\n  💰 ${price}${period}${details.length ? `\n  📐 ${details.join(' · ')}` : ''}${incomplete}${schedule}\n  🔗 Lihat detail: ${asset.detail_url}`;
 }
 
 // The model chooses IDs and writes the opening/CTA. Addresses, prices, dates
@@ -60,7 +61,7 @@ export function renderRecommendations(reply, options, selection, now = Date.now(
     ? `Belum ada jadwal lelang mendatang yang sesuai kriteria Bapak/Ibu. Berikut pilihan yang masih ditayangkan sebagai *Tersedia*, diurutkan dari ${selection.sort_by === 'price_asc' ? 'harga limit terendah' : 'jadwal tercatat terbaru'}; hasil lelang atau jadwal ulang perlu dikonfirmasi tim.`
     : prefix.replace(/\n\s*\n/g, ' ') + (selection?.sort_by === 'price_asc' ? ' Saya urutkan dari harga terendah.' : '');
   const cards = ids.map((id, index) => propertyCard(byId.get(id), now, index));
-  return [introduction, opening, cards.join('\n'), suffix.replace(/\n\s*\n/g, ' ')].filter(Boolean).join('\n\n');
+  return [introduction, opening, cards.join('\n\n'), suffix.replace(/\n\s*\n/g, ' ')].filter(Boolean).join('\n\n');
 }
 
 // Preserve every card and its complete address/link. Each part fits both the

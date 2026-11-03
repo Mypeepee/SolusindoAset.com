@@ -1,6 +1,22 @@
 // Shared by the worker, Next API and dashboard. No server-only dependencies.
 export const RECOMMENDATION_BATCH_SIZE = 4;
 export const MAX_RECOMMENDATION_HISTORY = 64;
+export const RECOMMENDATION_ORDER_VERSION = '2026-10-22-newest-listings-v1';
+
+export function listingCreatedAt(value) {
+  const time = value instanceof Date ? value.getTime() : typeof value === 'string' && value.trim() ? Date.parse(value) : NaN;
+  return Number.isFinite(time) ? time : null;
+}
+
+// Import/update timestamps and hot-deal labels cannot make an older listing
+// outrank a newly added match. BigInt preserves ordering for long listing IDs.
+export function compareNewestListings(a, b) {
+  const first = listingCreatedAt(a.tanggal_dibuat), second = listingCreatedAt(b.tanggal_dibuat);
+  if (first !== second) return first == null ? 1 : second == null ? -1 : second - first;
+  const id = value => /^[1-9]\d{0,17}$/.test(String(value)) ? BigInt(value) : 0n;
+  const left = id(a.id_property), right = id(b.id_property);
+  return left === right ? 0 : left > right ? -1 : 1;
+}
 export const SEARCH_CRITERIA_FIELDS = ['location', 'locations', 'cities', 'route_landmarks', 'certificate_types', 'legal_requirements', 'special_requirements', 'city', 'province', 'district', 'village', 'region_group', 'nearby',
   'category', 'categories', 'transaction_type', 'transaction_types', 'rental_period', 'min_price', 'max_price',
   'purpose', 'sort_by', 'min_land_area_m2', 'max_land_area_m2'];

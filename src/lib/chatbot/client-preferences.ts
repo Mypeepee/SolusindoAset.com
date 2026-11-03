@@ -9,7 +9,10 @@ import { normalNama, kelasDariKata } from "../tempat/normalisasi.ts";
 const fields = ["tipe_properti", "maksud", "jenis_transaksi", "lokasi_dicari", "loc_provinsi", "loc_kota", "loc_kecamatan", "loc_kelurahan", "budget_min", "budget_max", "luas_min", "luas_max", "tujuan_beli", "legalitas", "dekat_nilai", "dekat_radius", "alamat_teks", "catatan"] as const;
 const numbers = new Set(["budget_min", "budget_max", "luas_min", "luas_max", "dekat_radius"]);
 export function preferenceFingerprint(row: Record<string, any>) {
-  return createHash("sha256").update(JSON.stringify(fields.map((field) => row[field] == null ? null : numbers.has(field) ? Number(row[field]) : row[field]))).digest("hex");
+  const values = fields.map((field) => row[field] == null ? null : numbers.has(field) ? Number(row[field]) : row[field]);
+  // Retain legacy hashes, while a manual discount edit protects the row from sync.
+  if (row.diskon_jenis != null || row.diskon_persen != null) values.push(row.diskon_jenis ?? null, Number(row.diskon_persen));
+  return createHash("sha256").update(JSON.stringify(values)).digest("hex");
 }
 type SyncMeta = { version: number; fingerprint: string; rows: { id: string; fingerprint: string }[] };
 

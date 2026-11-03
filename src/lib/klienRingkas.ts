@@ -11,6 +11,7 @@
 // ---------------------------------------------------------------------------
 
 import type { Prisma } from "@prisma/client";
+import { ringkasDiskon } from "@/lib/preferensiDiskon";
 
 /* Seluruh nilai `kategori_properti_enum`, tidak kurang satu pun. Versi pertama
    memuat VILLA/HOTEL/KANTOR yang TIDAK ADA di enum, sementara TOKO dan
@@ -75,6 +76,8 @@ export function rupiahPendek(n: number): string {
 }
 
 export type PrefRingkas = {
+  diskon_jenis?: string | null;
+  diskon_persen?: number | null;
   /** null = semua tipe. */
   tipe_properti: string | null;
   legalitas?: string | null;
@@ -122,6 +125,8 @@ export function ringkasKriteria(p: PrefRingkas): string {
   const lok = lokasiRingkas(p);
   if (lok) bagian.push(lok);
   if (p.legalitas) bagian.push(p.legalitas);
+  const diskon = ringkasDiskon(p);
+  if (diskon) bagian.push(diskon);
   if (p.dekat_nilai) bagian.push(`dekat ${labelTempat(p.dekat_nilai)}`);
   else if (p.alamat_teks) bagian.push(`alamat "${p.alamat_teks}"`);
 
@@ -153,6 +158,8 @@ export function ringkasKriteria(p: PrefRingkas): string {
  *  Tipe & lokasi sengaja dikeluarkan — justru merekalah yang dikalikan jadi
  *  banyak baris oleh formulir. */
 export function kunciGrup(p: {
+  diskon_jenis?: string | null;
+  diskon_persen?: number | null;
   jenis_transaksi?: string | null;
   budget_min?: Prisma.Decimal | number | null;
   budget_max?: Prisma.Decimal | number | null;
@@ -165,6 +172,7 @@ export function kunciGrup(p: {
     v === null || v === undefined ? "" : String(Number(v));
   return JSON.stringify([
     p.jenis_transaksi ?? "",
+    p.diskon_jenis ?? "", n(p.diskon_persen),
     n(p.budget_min), n(p.budget_max), n(p.luas_min), n(p.luas_max),
     p.tujuan_beli ?? "", p.catatan ?? "",
   ]);
@@ -213,6 +221,8 @@ export function ringkasGrup(rows: PrefRingkas[], opsi: { lengkap?: boolean } = {
      satu-satunya angka yang membedakan satu kriteria dari yang lain — tanpa
      ditulis, dua pill bisa terbaca persis sama. */
   if (rows[0].legalitas) bagian.push(String(rows[0].legalitas));
+  const diskon = ringkasDiskon(rows[0]);
+  if (diskon) bagian.push(diskon);
   if (rows[0].dekat_nilai) bagian.push(`dekat ${labelTempat(rows[0].dekat_nilai)}`);
   else if (rows[0].alamat_teks) bagian.push(`alamat "${rows[0].alamat_teks}"`);
 
@@ -252,6 +262,7 @@ export function bagiSlot(tersedia: number[], limit: number): number[] {
   const urut = tersedia.map((n, i) => ({ n, i })).sort((a, b) => a.n - b.n);
 
   urut.forEach(({ n, i }, ke) => {
+    if (sisaSlot <= 0 || n === 0) return;
     const sisaGrup = urut.length - ke;
     const bagian = Math.min(n, Math.max(1, Math.floor(sisaSlot / sisaGrup)));
     jatah[i] = bagian;

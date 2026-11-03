@@ -1,13 +1,15 @@
 // src/app/dashboard/components/list-menu.tsx
+import type { IconifyIcon } from "@iconify/react";
+import { marketingMenuIcon } from "./marketing-menu-icon";
 
 export interface MenuItem {
     label: string;
-    icon: string;
+    icon: string | IconifyIcon;
     href?: string;
   }
   
   /* URUTAN MENU — satu tulang punggung untuk semua jabatan:
-     Dashboard → Tugas → Client → Listings → Transaksi → Project.
+     Dashboard → Pemasaran (OWNER) → Tugas → Client → Listings → Transaksi → Project.
      Urutannya mengikuti alur kerja harian agent, bukan abjad atau kebetulan:
      buka dashboard, lihat tugas hari ini, urus klien, baru cari/urus aset,
      lalu transaksi yang berjalan, dan project di belakang karena bukan
@@ -16,6 +18,7 @@ export interface MenuItem {
      tidak pernah bergeser saat agent naik jabatan. */
   export const homepageMenu: MenuItem[] = [
     { label: "Dashboard", icon: "solar:widget-5-linear", href: "/dashboard" },
+    { label: "Pemasaran", icon: marketingMenuIcon, href: "/dashboard/pemasaran" },
     {
       label: "Tugas",
       icon: "solar:clipboard-check-linear",
@@ -82,7 +85,7 @@ export interface MenuItem {
 
   /**
    * Menu sidebar sesuai jabatan agent.
-   * - OWNER          : lihat semuanya (homepage + apps lengkap)
+   * - OWNER          : homepage + Jadwal & Acara, Scrape, Investor
    * - PRINCIPAL      : + menu Agents (dibatasi kantor sendiri di halaman HRM)
    * - AGENT/STOKER/ADMIN/TEAMLEADER : tanpa menu Agents
    */
@@ -141,38 +144,8 @@ export interface MenuItem {
       href: "/dashboard/scrape"
     },
     {
-      label: "E-commerce",
-      icon: "solar:bag-4-linear",
-      href: "/dashboard/e-commerce"
-    },
-    { 
-      label: "Invoice", 
-      icon: "solar:bill-list-linear",
-      href: "/dashboard/invoice"
-    },
-    { 
-      label: "E-mail", 
-      icon: "solar:letter-linear",
-      href: "/dashboard/email"
-    },
-    { 
-      label: "Kanban", 
-      icon: "solar:rows-3-linear",
-      href: "/dashboard/kanban"
-    },
-    { 
-      label: "Hiring", 
-      icon: "solar:briefcase-linear",
-      href: "/dashboard/hiring"
-    },
-    { 
-      label: "Chat", 
-      icon: "solar:chat-round-dots-linear",
-      href: "/dashboard/chat"
-    },
-    { 
-      label: "Social", 
-      icon: "solar:share-circle-linear",
-      href: "/dashboard/social"
+      label: "Investor",
+      icon: "solar:chart-square-linear",
+      href: "/dashboard/investor"
     },
   ];

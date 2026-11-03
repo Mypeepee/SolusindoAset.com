@@ -61,6 +61,7 @@ export function searchReply(context, now = Date.now()) {
   const alternative = buyer.backup_for ? ` Saya cari pilihan di luar aset kode ${plain(buyer.backup_for)}.` : '';
   if (buyer.stage === 'qualifying' && buyer.missing?.length) {
     if (buyer.missing.includes('nearby_radius')) return 'Radius pencarian bisa antara 1 meter sampai 20 km. Mau gunakan radius berapa dari tempat tersebut? Kriteria lainnya tetap saya simpan.';
+    if (buyer.budget_error === 'unclear') return 'Batas budget yang ingin dipakai sampai berapa? Ada nominal yang ditolak atau beberapa angka yang belum jelas pilihannya. Boleh sebutkan satu batas maksimal atau rentang minimal–maksimal; kriteria sebelumnya tetap saya simpan.';
     if (buyer.budget_error) return buyer.budget_error === 'ambiguous'
       ? 'Budget tadi dalam juta atau miliar rupiah, ya? Cukup sebutkan satuannya; angka dan kriteria sebelumnya tetap saya simpan.'
       : 'Rentang budgetnya perlu dicek lagi: nominal harus positif dan batas bawah tidak boleh melebihi batas atas. Mau pakai rentang berapa? Kriteria lainnya tetap saya simpan.';
@@ -120,6 +121,9 @@ export function searchReply(context, now = Date.now()) {
     return renderRecommendations(`Ada ${candidates.length} pilihan ${description}${buyer.excluded_ids?.length ? ' lainnya' : ''}${scope} yang cocok:\n\n${candidates.map((asset) => `[[PROPERTY:${asset.id}]]`).join('\n')}\n\n${selectionQuestion}`, candidates, context.selection, now, introduction);
   }
   if (context.status === 'not_found') {
+    if (context.diagnostics?.reason === 'auction_schedule_unverified') {
+      return `Ada listing ${description}${scope}${budget}${land}${details} yang masih tayang di situs, tetapi jadwal lelangnya sudah lewat lebih dari satu bulan atau belum tercatat. Status dan jadwal ulangnya perlu dikonfirmasi; listing tersebut belum masuk rekomendasi dengan jadwal terkini.${verification ? ` ${verification}` : ''}\n\nMau cek detail aset dari situs, perluas area, atau sesuaikan budget? Untuk cek aset tertentu, kirim kode atau tautannya.`;
+    }
     if (buyer.continuation?.notification_search && buyer.excluded_ids?.length && !buyer.dialogue?.note) {
       return `Untuk kriteria ${description}${scope}${budget}${land}, saat ini belum ada pilihan lain yang belum saya tawarkan.\n\nKalau Bapak/Ibu ingin memperluas pencarian, bagian mana yang masih fleksibel: area, budget, atau luas tanah? Kriteria tetap saya pegang sampai Bapak/Ibu menentukan perubahannya.`;
     }

@@ -1,7 +1,7 @@
 import { assetFacts } from './catalog.js';
 import { parsePropertyInquiry } from './property_inquiry.js';
-import { buyerContext, explicitAsset } from './buyer_profile.js';
-import { needsAuctionCheck, auctionCheckExplained, auctionCheckReply, isAuctionScheduleQuestion, auctionScheduleReply, requestAuctionCheck, unsupportedAuctionCheckClaim } from './auction_check.js';
+import { buyerContext, explicitAsset, hasSearchIntent } from './buyer_profile.js';
+import { needsAuctionCheck, auctionCheckExplained, auctionCheckReply, upcomingAuctionReply, contradictsUpcomingAuction, AUCTION_COST_QUESTION, isAuctionScheduleQuestion, auctionScheduleReply, requestAuctionCheck, unsupportedAuctionCheckClaim } from './auction_check.js';
 import { recommendationIds, recommendationMessages } from './recommendations.js';
 import { selectedRecommendation, isRecommendationList, AMBIGUOUS_SELECTION_REPLY, INVALID_SELECTION_REPLY, MISSING_SELECTION_REPLY } from './property_selection.js';
 import { purchaseCostReply, isPurchaseCostQuestion } from './property_costs.js';
@@ -101,10 +101,11 @@ export async function resolvePropertyContext(catalog, text, previousId, history 
   const memory = retainedSearchHistory(publicConversationHistory(history));
   const continuation = explicitAsset(text, history.findLast((item) => item.role === 'assistant')) && memory.sourceId ? null : preferenceState;
   let buyer = buyerContext(memory.history, text, previousId, { continuation, forceSearch });
+  const selectedCostQuestion = previousId && isPurchaseCostQuestion(text) && !hasSearchIntent(text) && !explicitAsset(text);
   // Local rules extract known expressions first. The LLM receives every retained
   // turn plus the structured memory, and can only propose a validated delta.
   let parsed = null;
-  if (shouldParseSmartSearch(text, buyer) && typeof ai?.parseSearch === 'function') {
+  if (!selectedCostQuestion && shouldParseSmartSearch(text, buyer) && typeof ai?.parseSearch === 'function') {
     try { parsed = await ai.parseSearch({ text, history: publicConversationHistory(history), buyer, signal }); }
     catch (error) { if (signal?.aborted) throw error; }
   }
@@ -146,6 +147,9 @@ export async function resolvePropertyContext(catalog, text, previousId, history 
       // availability; assistant text never supplies trusted prices/specs.
       if (!selection.id) return { asset: null, catalog: [], status: selection.kind === 'ambiguous' ? 'ambiguous_selection' : selection.kind === 'missing' ? 'missing_selection' : 'invalid_selection', source: 'buyer_preferences', buyer };
       return { ...await lookup(`Kode ${selection.id}`, null), buyer, selected_recommendation: selection };
+    }
+    if (selectedCostQuestion) {
+      return { ...await lookup(`Kode ${previousId}`, null), buyer: { ...buyer, searching: false, stage: 'consultation' } };
     }
     if (previousId && !explicitAsset(text, history.findLast((item) => item.role === 'assistant')) &&
         !requestsClosingExit(text) && (detectClosingIntent(text, { selectedAssetId: previousId, history }) || conversion?.mode === CLOSING_STATE)) {
@@ -269,9 +273,21 @@ async function propertyContextReply({ context, ai, text, history, qualification 
   const costs = context.buyer.searching ? null : purchaseCostReply(context.asset, text, { now });
   if (costs) return { reply: costs, qualification: {}, asset: context.asset,
     knowledge: { status: knowledge.status, source: knowledge.source } };
-  if (!context.buyer.searching && (context.selected_recommendation || requestsPropertyDetails(text))) {
-    const details = propertyDetailsReply(context.asset, { now });
-    if (details) return rules(details);
+  // The first listing response owns the date, countdown and cost CTA. A model
+  // and an earlier assistant message cannot turn an upcoming auction into an
+  // expired one. Explicit detail/cost/schedule questions keep their own paths.
+  const listingLinkOnly = /^\s*https:\/\/[^\s]+\/(?:Lelang|Jual|Sewa)\/[^\s]+\s*$/i.test(text);
+  const pointerOnly = hasPropertyReference(text) && /^\s*(?:(?:kode|id|aset|properti)\s*[:#-]?\s*|#)?[A-Z0-9-]{3,40}\s*$/i.test(text.replace(/\*/g, ''));
+  const availability = /\b(?:masih\s+(?:ada|tersedia)|ketersediaan(?:nya)?|stok(?:nya)?|sudah\s+terjual)\b/i.test(text);
+  if (!context.buyer.searching && (context.selected_recommendation || listingLinkOnly || pointerOnly || parsePropertyInquiry(text) || availability) && !requestsPropertyDetails(text)) {
+    if (expired && !context.selected_recommendation) return rules(auctionCheckReply(context.asset, check));
+    const upcoming = upcomingAuctionReply(context.asset, now);
+    if (upcoming) return rules(upcoming);
+  }
+  if (!context.buyer.searching && (context.selected_recommendation || requestsPropertyDetails(text) || listingLinkOnly && !expired)) {
+    const auctionSelection = context.selected_recommendation && context.asset?.transaction_type === 'LELANG';
+    const details = propertyDetailsReply(context.asset, { now, includeCta: !auctionSelection });
+    if (details) return rules(auctionSelection ? `${details}\n\n${AUCTION_COST_QUESTION}` : details);
   }
   if (shouldInterpretBuyer(context.buyer, text) && typeof ai?.interpretBuyer === 'function') {
     try {
@@ -308,7 +324,8 @@ async function propertyContextReply({ context, ai, text, history, qualification 
     ? { reply: auctionCheckReply(context.asset, check), qualification: {} }
     : await ai.generate({ history: relevantHistory, facts: assetFacts(context.asset, now), catalog: context.catalog,
       qualification, userText: text, now, knowledge, signal });
-  if (checkAsset && unsupportedAuctionCheckClaim(result.reply, check)) result = { ...result, reply: auctionCheckReply(checkAsset, check, { offerBackup: !auctionCheckExplained(history, checkAsset.id) }) };
+  if (contradictsUpcomingAuction(result.reply, context.asset, now)) result = { ...result, reply: upcomingAuctionReply(context.asset, now), generation: { mode: 'rules' } };
+  if (checkAsset && unsupportedAuctionCheckClaim(result.reply, check)) result = { ...result, reply: auctionCheckReply(checkAsset, check, { offerCosts: !auctionCheckExplained(history, checkAsset.id) }) };
   return { ...result, asset: context.asset, knowledge: { status: knowledge.status, source: knowledge.source } };
 }
 

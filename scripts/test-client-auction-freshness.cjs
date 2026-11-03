@@ -23,7 +23,7 @@ function loader(overrides = {}) {
 const NOW = Date.parse('2026-10-21T09:00:00+07:00');
 const preference = { maksud:'BELI',tipe_properti:'RUMAH',jenis_transaksi:'LELANG',loc_kota:'Kota Surabaya',loc_provinsi:null,loc_kecamatan:null,loc_kelurahan:null,budget_min:null,budget_max:300000000,luas_min:null,luas_max:null };
 const listing = (id,date,type='LELANG') => ({ id_property:BigInt(id),slug:'rumah-contoh',judul:`Rumah ${id}`,jenis_transaksi:type,kategori:'RUMAH',status_tayang:'TERSEDIA',bukan_properti:false,ada_bangunan:true,legalitas:'SHM',
-  tanggal_lelang:date?new Date(date):null,tanggal_dibuat:new Date(NOW),tanggal_diupdate:new Date(NOW),harga:195000000,harga_efektif:195000000,harga_promo:null,kota:'Kota Surabaya',alamat_lengkap:`Jalan ${['Anggrek','Bougenvil','Cempaka','Dahlia','Edelweis','Flamboyan'][id-1]}`,gambar:null,luas_tanah:110+id,luas_bangunan:80 });
+  tanggal_lelang:date?new Date(date):null,tanggal_dibuat:new Date(NOW),tanggal_diupdate:new Date(NOW),harga:195000000,nilai_limit_lelang:null,harga_efektif:195000000,harga_promo:null,kota:'Kota Surabaya',alamat_lengkap:`Jalan ${['Anggrek','Bougenvil','Cempaka','Dahlia','Edelweis','Flamboyan'][id-1]}`,gambar:null,luas_tanah:110+id,luas_bangunan:80 });
 function matches(row,where) {
   return Object.entries(where).every(([key,c])=>{
     if(key==='AND')return (Array.isArray(c)?c:[c]).every(w=>matches(row,w));

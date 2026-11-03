@@ -118,6 +118,31 @@ test('echo balasan bot yang tiba sebelum sendMessage selesai tidak dianggap Owne
   await f.client.stop();
 });
 
+test('automatic recommendation metadata becomes a native picture link preview while keeping one text message', async () => {
+  const descriptor = { url: 'https://solusindoaset.com/Lelang/rumah-rungkut-121037/AG108', title: 'Rumah Rungkut',
+    description: 'Harga limit lelang', image_url: 'https://solusindoaset.com/api/og/lelang/121037' };
+  const native = { 'matched-text': descriptor.url, title: descriptor.title, jpegThumbnail: Buffer.from('test-thumbnail') };
+  let preparations = 0;
+  const f = fixture({ prepareLinkPreview: async value => { preparations++; assert.deepEqual(value, descriptor); return native; } });
+  const socket = f.sockets[0]; await f.client.updateConnection(socket, { connection: 'open' });
+  assert.equal(socket.socketConfig.generateHighQualityLinkPreview, true);
+  const text = `Pilihan pertama:\n${descriptor.url}`;
+  await f.client.sendText(PHONE, text, undefined, { linkPreview: descriptor });
+  assert.equal(preparations, 1); assert.equal(f.sent.length, 1);
+  assert.equal(f.sent[0].message.text, text); assert.equal(f.sent[0].message.linkPreview, native);
+  await assert.rejects(f.client.sendText(PHONE, text, undefined, { linkPreview: { ...descriptor, image_url: 'https://other.invalid/image' } }), { code: 'INVALID_OUTBOUND_MESSAGE' });
+  assert.equal(f.sent.length, 1); await f.client.stop();
+});
+
+test('loading the URL preview reader cannot cause arbitrary chat links to be fetched', async () => {
+  const f = fixture(); await f.client.updateConnection(f.sockets[0], { connection: 'open' });
+  await f.client.sendText(PHONE, 'Patokan lokasi: https://example.com/private');
+  assert.equal(f.sent[0].message.linkPreview, null);
+  await f.client.sendText(PHONE, 'Detail: https://solusindoaset.com/Lelang/rumah-rungkut-121037/AG108');
+  assert.equal(f.sent[1].message.linkPreview, undefined);
+  await f.client.stop();
+});
+
 test('LID tidak diperlakukan sebagai nomor telepon dan identitas tetap sama saat nomor diketahui', async () => {
   const f = fixture();
   const socket = f.sockets[0];

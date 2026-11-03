@@ -94,15 +94,18 @@ test('choosing a numbered option re-fetches its public facts instead of trusting
   assert.equal(invalid.status, 'invalid_selection'); assert.equal(calls.length, 1);
 });
 
-test('recommendation query enforces available-only, max three, physical properties and bounded purchase price', async () => {
-  let query;
-  const db = { listing: { async findMany(input) { query = input; return []; } } };
+test('recommendation and empty-result diagnostic queries enforce public properties and the purchase price ceiling', async () => {
+  const queries = [];
+  const db = { listing: { async findMany(input) { queries.push(input); return []; } } };
   const criteria = { location: 'Citraland', category: 'RUMAH', max_price: 1500000000, purpose: 'live' };
   await getPropertyKnowledge(db, { text: 'Budget 1,5M untuk dihuni sendiri', criteria });
-  assert.equal(query.where.status_tayang, 'TERSEDIA'); assert.equal(query.where.bukan_properti, false); assert.equal(query.take, 5);
-  const filters = query.where.AND.find(group => group.OR?.some(filter => filter.nilai_limit_lelang || filter.harga_efektif || filter.harga)).OR;
-  assert.ok(filters.every((filter) => (filter.nilai_limit_lelang || filter.harga_efektif || filter.harga).lte === 1500000000));
-  assert.ok(JSON.stringify(query).includes('alamat_lengkap'));
+  for (const query of queries) {
+    assert.equal(query.where.status_tayang, 'TERSEDIA'); assert.equal(query.where.bukan_properti, false);
+    assert.ok(query.take > 0 && query.take <= 5);
+    const filters = query.where.AND.find(group => group.OR?.some(filter => filter.nilai_limit_lelang || filter.harga_efektif || filter.harga)).OR;
+    assert.ok(filters.every((filter) => (filter.nilai_limit_lelang || filter.harga_efektif || filter.harga).lte === 1500000000));
+    assert.ok(JSON.stringify(query).includes('alamat_lengkap'));
+  }
   assert.equal(isBuyerCriteria({ ...criteria, max_price: "1500000000 OR 1=1" }), false);
   assert.equal(isBuyerCriteria({ ...criteria, min_price: 2000000000 }), false);
   assert.equal(isBuyerCriteria({ ...criteria, select: ['kata_sandi'] }), false);

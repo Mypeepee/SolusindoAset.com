@@ -1,11 +1,13 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { cariCocok, lolosSemuaGerbang, hargaEfektif, buangKembar, type KriteriaMatch } from "../klienMatch";
+import { siapkanDiskon, kunciDiskon } from "../klienMatch";
 import { siapkanDekat, dekatUntuk } from "../klienDekat";
-import { pesanRekomendasi } from "../klienPesan";
+import { pesanRekomendasi, urlListing, rupiah } from "../klienPesan";
+import { lelangOgImageUrl } from "../site";
 import { isBuyerCriteria, publicText } from "./property-knowledge";
 import { preferenceFingerprint } from "./client-preferences";
-import { RECOMMENDATION_BATCH_SIZE, SEARCH_CRITERIA_FIELDS } from "../../../backend/whatsapp/services/recommendation_policy.js";
+import { RECOMMENDATION_BATCH_SIZE, SEARCH_CRITERIA_FIELDS, compareNewestListings, listingCreatedAt } from "../../../backend/whatsapp/services/recommendation_policy.js";
 import type { BuyerCriteria } from "./property-knowledge";
 import { isFreshAuction } from "../../../backend/whatsapp/services/auction_freshness.js";
 
@@ -21,7 +23,11 @@ export const NEW_PROPERTY_SELECT = {
   tempatDekat: { select: { id_tempat: true, jarak_meter: true, presisi: true, tempat: { select: { kelas: true } } } },
 } satisfies Prisma.ListingSelect;
 type Stock = Prisma.ListingGetPayload<{ select: typeof NEW_PROPERTY_SELECT }>;
-type Match = { client_id: string; property_id: string; preference_id: string; search_criteria: BuyerCriteria | null };
+type Match = { client_id: string; property_id: string; listed_at: string | null; preference_id: string; search_criteria: BuyerCriteria | null };
+const listedAt = (listing: Stock) => {
+  const time = listingCreatedAt(listing.tanggal_dibuat);
+  return time == null ? null : new Date(time).toISOString();
+};
 const id = (v: unknown) => typeof v === "string" && /^[1-9]\d{0,17}$/.test(v);
 export function validRecommendationRequest(v: any): boolean {
   if (!v || typeof v !== "object" || Array.isArray(v) || !/^AG\d{1,18}$/.test(v.agent_id)) return false;
@@ -95,16 +101,17 @@ async function matches(db: PrismaClient, agentId: string, stock: Stock[], client
       db.rekomendasiDisingkirkan.findMany({ where: { id_klien: { in: clients }, id_property: { in: stock.map(l => l.id_property) } }, select: { id_klien: true, id_property: true } }),
       siapkanDekat(prefs),
     ]);
+    const discount = await siapkanDiskon(prefs);
     const excluded = new Set([...sent, ...dismissed].map(r => `${r.id_klien}:${r.id_property}`));
     for (const p of prefs) for (const l of stock) {
       const key = `${p.id_klien}:${l.id_property}`;
       if (excluded.has(key) || p.klien.id_properti_asal === l.id_property || result.has(key) ||
         !eligibleProperty(l, now)) continue;
-      const k: KriteriaMatch = { ...p, dekat: dekatUntuk(p, nearby) };
+      const k: KriteriaMatch = { ...p, dekat: dekatUntuk(p, nearby), diskon_ids: discount.get(kunciDiskon(p)) };
       // Never broadcast without a saved area and a positive spending ceiling.
       if (!eligiblePreference(p)) continue;
       if (!lolosSemuaGerbang(l, k, { now }) || !extraGate(p, l)) continue;
-      result.set(key, { client_id: p.id_klien, property_id: String(l.id_property), preference_id: String(p.id_preferensi), search_criteria: preferenceSearch(p, l, k.dekat) });
+      result.set(key, { client_id: p.id_klien, property_id: String(l.id_property), listed_at: listedAt(l), preference_id: String(p.id_preferensi), search_criteria: preferenceSearch(p, l, k.dekat) });
     }
     after = prefs[prefs.length - 1].id_preferensi;
     if (prefs.length < 500) break;
@@ -127,7 +134,8 @@ async function dailyMatches(db: PrismaClient, agentId: string, afterClient: stri
     db.kirimanRekomendasi.findMany({ where: { id_klien: { in: ids } }, select: { id_klien: true, id_property: true } }),
     db.rekomendasiDisingkirkan.findMany({ where: { id_klien: { in: ids } }, select: { id_klien: true, id_property: true } }),
   ]);
-  const nearby = await siapkanDekat(prefs), candidates: { client_id: string; property_id: string }[] = [];
+  const nearby = await siapkanDekat(prefs), candidates: { client_id: string; property_id: string; listed_at: string | null }[] = [];
+  const discount = await siapkanDiskon(prefs);
   let matched = 0;
   for (const client of clients) {
     const excluded = [...sent, ...dismissed].filter(r => r.id_klien === client.id_klien).map(r => r.id_property);
@@ -135,17 +143,16 @@ async function dailyMatches(db: PrismaClient, agentId: string, afterClient: stri
     const selected = new Map<string, Stock>();
     for (const raw of prefs.filter(p => p.id_klien === client.id_klien)) {
       if (!eligiblePreference(raw)) continue;
-      const p = { ...raw, klien: client }, k = { ...raw, dekat: dekatUntuk(raw, nearby) };
-      const stock = await cariCocok<Stock>(db, k, { select: NEW_PROPERTY_SELECT, kecuali: excluded, maks: 200, now });
+      const p = { ...raw, klien: client }, k = { ...raw, dekat: dekatUntuk(raw, nearby), diskon_ids: discount.get(kunciDiskon(raw)) };
+      const stock = await cariCocok<Stock>(db, k, { select: NEW_PROPERTY_SELECT, kecuali: excluded, maks: 200, now, urut: "terbaru" });
       for (const l of stock) {
         if (excluded.some(id => id === l.id_property) || !eligibleProperty(l, now) || !lolosSemuaGerbang(l, k, { now }) || !extraGate(p, l)) continue;
         selected.set(String(l.id_property), l);
       }
-      if (buangKembar([...selected.values()]).length >= RECOMMENDATION_BATCH_SIZE) break;
     }
-    const properties = buangKembar([...selected.values()]).slice(0, RECOMMENDATION_BATCH_SIZE);
+    const properties = buangKembar([...selected.values()]).sort(compareNewestListings).slice(0, RECOMMENDATION_BATCH_SIZE);
     if (properties.length) matched++;
-    candidates.push(...properties.map(l => ({ client_id: client.id_klien, property_id: String(l.id_property) })));
+    candidates.push(...properties.map(l => ({ client_id: client.id_klien, property_id: String(l.id_property), listed_at: listedAt(l) })));
   }
   return { after_client: clients.at(-1)!.id_klien, more: clients.length === DAILY_CLIENT_PAGE_SIZE, candidates, checked: clients.length, matched };
 }
@@ -182,7 +189,7 @@ export async function newPropertyRecommendations(db: PrismaClient, input: any, s
     // cursor. The SQLite transaction commits matches and cursor together.
     const stock = await db.listing.findMany({ where: { id_property: { gt: BigInt(input.cursor) } }, orderBy: { id_property: "asc" }, take: RECOMMENDATION_PAGE_SIZE, select: NEW_PROPERTY_SELECT });
     return { cursor: String(stock.at(-1)?.id_property || input.cursor), more: stock.length === RECOMMENDATION_PAGE_SIZE,
-      candidates: (await matches(db, input.agent_id, stock, undefined, now)).map(({ client_id, property_id, preference_id }) => ({ client_id, property_id, preference_id })) };
+      candidates: (await matches(db, input.agent_id, stock, undefined, now)).map(({ client_id, property_id, listed_at, preference_id }) => ({ client_id, property_id, listed_at, preference_id })) };
   }
   if (input.action === "prepare") {
     const client = await db.klien.findFirst({ where: { id_klien: input.client_id, id_agent: input.agent_id, status: { notIn: ["closing", "lost_iseng"] } }, select: { nama: true, nomor_whatsapp: true } });
@@ -190,7 +197,7 @@ export async function newPropertyRecommendations(db: PrismaClient, input: any, s
     if (!client || !phone || !/^[1-9]\d{6,14}$/.test(phone)) return { skipped: true };
     const stock = await db.listing.findMany({ where: { id_property: { in: input.property_ids.map((v: string) => BigInt(v)) } }, select: NEW_PROPERTY_SELECT });
     const found = await matches(db, input.agent_id, stock, input.client_id, now);
-    const allValid = buangKembar(stock.filter(l => found.some(m => m.property_id === String(l.id_property))));
+    const allValid = buangKembar(stock.filter(l => found.some(m => m.property_id === String(l.id_property)))).sort(compareNewestListings);
     const valid = allValid.filter(l => (l.jenis_transaksi === "SEWA") === (allValid[0]?.jenis_transaksi === "SEWA"));
     if (!valid.length) return { skipped: true };
     const aset = valid.map(l => ({ id_property: String(l.id_property), slug: /^[a-z0-9-]+$/i.test(l.slug) ? l.slug : "properti",
@@ -198,10 +205,15 @@ export async function newPropertyRecommendations(db: PrismaClient, input: any, s
       harga: Math.round(hargaEfektif(l)), tanggal_lelang: l.tanggal_lelang, kota: clean(l.kota).slice(0, 80), kecamatan: clean(l.kecamatan).slice(0, 80), luas_tanah: Number(l.luas_tanah) || null, luas_bangunan: Number(l.luas_bangunan) || null }));
     const text = pesanRekomendasi({ namaKlien: /^Kontak(?: WhatsApp)?(?:\s|$)/i.test(client.nama) ? "Bapak/Ibu" : clean(client.nama, "Bapak/Ibu"),
       namaAgent: clean(agent.pengguna.nama_lengkap), idAgent: input.agent_id, aset, maksud: aset[0].jenis_transaksi === "SEWA" ? "SEWA" : "BELI", otomatis: true, now });
+    const first = aset[0];
+    const link_preview = { url: urlListing(first, input.agent_id), title: `${first.judul} - ${rupiah(first.harga)}`,
+      description: [first.jenis_transaksi === "LELANG" ? "Harga limit lelang" : first.jenis_transaksi === "SEWA" ? "Properti sewa" : "Properti dijual",
+        first.luas_tanah ? `LT ${first.luas_tanah} m²` : null, first.kecamatan, first.kota].filter(Boolean).join(" · ").slice(0, 300),
+      ...(valid[0].gambar?.trim() ? { image_url: lelangOgImageUrl(first.id_property) } : {}) };
     const receipt = sign({ agent_id: input.agent_id, client_id: input.client_id, at: now, assets: aset.map(l => ({ id: l.id_property,
       preference: found.find(m => m.property_id === l.id_property)!.preference_id, price: l.harga, status: "TERSEDIA" })) }, secret);
     const previous = await db.kirimanRekomendasi.findMany({ where: { id_klien: input.client_id }, select: { id_property: true }, orderBy: { terakhir_dikirim: "desc" }, take: 64 });
-    return { phone, text, receipt, property_ids: aset.map(l => l.id_property), name: clean(client.nama, "Bapak/Ibu"),
+    return { phone, text, receipt, link_preview, property_ids: aset.map(l => l.id_property), name: clean(client.nama, "Bapak/Ibu"),
       search_criteria: found.find(m => m.property_id === aset[0].id_property)?.search_criteria || null,
       previous_property_ids: previous.map(p => String(p.id_property)) };
   }

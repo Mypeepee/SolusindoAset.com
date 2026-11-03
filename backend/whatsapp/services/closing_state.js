@@ -13,6 +13,7 @@ export const CANCELLATION_TERMS_SUMMARY = 'Pasal 9 mengatur larangan pengunduran
 export const EXPLANATION_TOPICS = ['dp', 'account', 'deposit', 'bidding', 'won', 'possession', 'refund'];
 export const closingStage = (topic) => ({ stock: 0, stock_sold: 0, clarify: 0, mou: 1, dp: 1, purchase_preparation: 1, schedule: 2, account: 3, deposit: 3, bidding: 4, won: 5, possession: 5, refund: 6, readiness: 0 })[topic];
 const normalize = (text = '') => text.normalize('NFKC').toLowerCase()
+  .replace(/\byg\b/g, 'yang')
   .replace(/\b(mou|dp|jadwal|tanggal|akun|bidding|bidder|penawaran|jaminan)(?:nya|kah)\b/g, '$1')
   .replace(/\s+/g, ' ').trim();
 const refusal = /\b(?:tidak|nggak|enggak|gak|ga|belum|jangan|batal)\b/;

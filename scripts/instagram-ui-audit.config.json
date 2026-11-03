@@ -1,0 +1,24 @@
+{
+  "profile": "product-admin",
+  "sourceRoots": [
+    "src/app/dashboard/pemasaran",
+    "src/app/api/dashboard/pemasaran/instagram/content",
+    "src/lib/marketing"
+  ],
+  "canonicalMap": "docs/pemasaran-ux.md",
+  "locale": "id-ID",
+  "requiredCapabilities": [
+    "Form",
+    "Scrollbar",
+    "Toast",
+    "CRUD"
+  ],
+  "ownership": {
+    "Select/Listbox": "authored",
+    "Date": "typed"
+  },
+  "evidence": {
+    "crudFullFlow": "scripts/verify-instagram-content-browser.mjs",
+    "failurePaths": "scripts/test-instagram-content.cjs"
+  }
+}

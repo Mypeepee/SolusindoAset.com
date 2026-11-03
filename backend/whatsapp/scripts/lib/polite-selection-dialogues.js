@@ -73,8 +73,10 @@ export async function simulatePoliteSelection({ format = 'html', memory = 'full'
       assert.match(sent.at(-1).replace(/\*/g, ''), /HARGA LIMIT\nRp 133\.000\.000/); assert.equal(session.asset_id, '113175');
       await send('wow... saya tertarik pak'); assert.equal(session.conversion.mode, 'Closing_State');
       assert.equal(session.conversion.asset_id, '113175'); assert.equal(session.conversion.topic, 'purchase_preparation');
-      await send('boleh'); assert.equal(session.conversion.topic, 'purchase_preparation');
-      assert.match(sent.at(-1), /Komitmen tanda jadinya Rp 13\.300\.000/);
+      await send('boleh'); assert.equal(session.conversion.topic, 'clarify');
+      assert.ok(session.conversion.purchase_intake);
+      assert.match(sent.at(-1), /Bagian mana yang ingin ditanyakan/);
+      assert.doesNotMatch(sent.at(-1), /Komitmen tanda jadi|Rp 13\.300\.000/);
       assert.equal(session.conversion.stock_status, 'pending'); assert.equal(checks.list().items.length, 1);
       assert.equal(catalog.calls.filter((item) => item.criteria).length, 1, 'Follow-ups never restart inventory search');
     }

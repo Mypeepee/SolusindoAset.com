@@ -33,6 +33,8 @@ function spokenNumber(raw) {
 // Small, explicit aliases only: no fuzzy correction of place names or amounts.
 export function normalizeBuyerLanguage(text) {
   return text.normalize('NFKC').replace(/\b(?:rmh|rmah)\b/gi, 'rumah')
+    // Spaced passive verbs are actions, not a "di <place>" location cue.
+    .replace(/\bdi\s+(hitung(?:kan)?|itung(?:kan|in)?|kalkulasi(?:kan)?|tempati|huni|bayar(?:kan)?|lunasi)\b/gi, 'di$1')
     .replace(/\b(?:nyari|nyarik|carinya)\b/gi, 'cari').replace(/\b(?:cariin|carik(?:an|in))\b/gi, 'carikan').replace(/\basset\b/gi, 'aset')
     .replace(/\b(?:pengen|pingin|pgn)\b/gi, 'ingin')
     .replace(/\b(?:property|properties|proeprty)\b/gi, 'properti')
@@ -59,7 +61,10 @@ export function correctedQuantityText(text) {
 
 export function normalizeBuyerQuantities(text) {
   let clean = normalizeBuyerLanguage(text).replace(/\bsem(?:iliar|ilyar)\b/gi, '1 miliar').replace(/\bsejuta\b/gi, '1 juta')
-    .replace(/\bmilyard?\b/gi, 'miliar');
+    .replace(/\bmilyard?\b/gi, 'miliar')
+    .replace(/\bIDR(?=\s*\d)/gi, 'Rp')
+    .replace(/(\d)\s*(million|billion|thousand)s?\b/gi, (_, digit, unit) =>
+      `${digit} ${{ million: 'juta', billion: 'miliar', thousand: 'ribu' }[unit.toLowerCase()]}`);
   clean = clean.replace(new RegExp(`\\b(${numberWords}(?:\\s+${numberWords})*)\\s*(${QUANTITY_RANGE_SEPARATOR}|dan)\\s*(${numberWords}(?:\\s+${numberWords})*)\\s+(miliar|juta|jt|ribu|rb|hektar|ha|are|meter(?:\\s+(?:persegi|kuadrat))?|m[²2])(?![\\p{L}\\p{N}])`, 'giu'), (all, first, separator, last, unit) => {
     const low = spokenNumber(first), high = spokenNumber(last);
     return low != null && high != null && low > 0 && high > 0 ? `${low} ${separator} ${high} ${unit}` : all;
@@ -71,6 +76,17 @@ export function normalizeBuyerQuantities(text) {
 
 export const assistantQuestions = (text = '') => text.match(/[^.!?\n]*\?/g) || [];
 export const isBudgetQuestion = (text = '') => assistantQuestions(text).some((part) => /\b(?:budget|bujet|anggaran|batas harga)\b/i.test(part));
+
+// A full rupiah amount sent directly after search cards refines the budget.
+// Small numbers remain card choices; a labelled code/link remains explicit.
+export function isSearchBudgetAnswer(text, preceding = '') {
+  if (isBudgetQuestion(preceding)) return true;
+  if (!/\bAda \d+ pilihan\b/i.test(preceding) || !preceding.includes('Lihat detail:')) return false;
+  const match = /^\s*(coba\s+|(?:naik|turun)?\s*(?:jadi|menjadi)\s+)?(?:rp\.?\s*)?(\d+(?:[.,]\d+)*)\s*(juta|jt|miliar|ribu|rb|rupiah|m)?(?:\s+(?:pak|bu|ya|aja|saja))*\s*$/i.exec(normalizeBuyerQuantities(text));
+  if (!match) return false;
+  const amount = Number(match[2].replace(/[.,]/g, ''));
+  return !!match[3] || /\brp/i.test(match[0]) || Number.isSafeInteger(amount) && (amount >= 1e6 || !!match[1] && amount >= 100);
+}
 
 // A complete answer to a pending preference, not a keyword anywhere in prose.
 // Collective answers can cover both displayed optional questions; a bare

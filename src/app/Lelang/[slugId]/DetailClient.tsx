@@ -416,6 +416,7 @@ export default function DetailClient({
               stokerPhone={stokerPhone}
               canEdit={canEdit}
               selfAgent={selfAgent}
+              riwayatLelang={riwayatLelang}
               onShareOpen={canShare ? () => setShareOpen(true) : undefined}
             />
           ) : (

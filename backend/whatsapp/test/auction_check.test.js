@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import express from 'express';
 import { AssetCheckStore } from '../state/asset_checks.js';
 import { MemoryStore } from '../state/memory_store.js';
-import { needsAuctionCheck, auctionCheckReply, unsupportedAuctionCheckClaim } from '../services/auction_check.js';
+import { needsAuctionCheck, auctionCheckReply, unsupportedAuctionCheckClaim, AUCTION_COST_QUESTION } from '../services/auction_check.js';
 import { assetFacts } from '../services/catalog.js';
 import { generatePropertyReply, resolvePropertyContext } from '../services/property_reply.js';
 import { MessageProcessor } from '../services/message_processor.js';
@@ -61,7 +61,7 @@ test('live expired response queues a real follow-up, explains both outcomes, and
   assert.doesNotMatch(reply, /tidak siap|sudah menghubungi|sedang mengecek|undervalue|siap dilelang/i);
   assert.match(reply, /DETAIL ASET.*121820/); assert.match(reply, /Harga limit: Rp 417\.128\.521/);
   assert.ok(reply.indexOf('DETAIL ASET') < reply.indexOf('jadwal lelang pada'));
-  assert.ok(reply.endsWith(BACKUP_AREA_QUESTION));
+  assert.ok(reply.endsWith(AUCTION_COST_QUESTION));
   assert.equal((reply.match(/\?/g) || []).length, 1);
   assert.equal(checks.list().total, 1); assert.equal(f.store.get(contact).is_bot_active, true);
   assert.equal(f.store.get(contact).asset_id, asset.id);
@@ -91,15 +91,15 @@ test('queue capacity or write failure cannot become a false promise that checkin
   assert.equal(database.forTenant('AG1').list().total, 0); assert.equal(f.store.get(contact).is_bot_active, true);
 });
 
-test('sandbox expiry keeps simulation in UI metadata and asks one area question without pretending to have requested a check', async () => {
+test('sandbox expiry keeps simulation in UI metadata and offers costs without pretending to have requested a check', async () => {
   const result = await generatePropertyReply({ text: 'Kode 121820', history: [user('Kode 121820')], catalog: { async resolve() { return matched(); } },
     ai: { async generate() { throw new Error('no LLM needed'); } }, now });
   assert.equal(result.knowledge.status, 'auction_check_needed'); assert.match(result.reply, /perlu dikonfirmasi/);
-  assert.ok(result.reply.endsWith(BACKUP_AREA_QUESTION));
+  assert.ok(result.reply.endsWith(AUCTION_COST_QUESTION));
   assert.doesNotMatch(result.reply, /sudah saya catat|sudah menghubungi|mode pengujian|disimulasikan/);
 });
 
-test('reported website inquiry shows fresh property details before stock confirmation and a single backup question', async (t) => {
+test('reported website inquiry shows fresh property details before stock confirmation and a single cost question', async (t) => {
   const database = new AssetCheckStore(':memory:', { now: () => now }); t.after(() => database.close());
   const checks = database.forTenant('AG1'), f = fixture(checks, undefined, detailedAsset);
   f.accept('reported-inquiry', reportedInquiry); await f.processor.drain();
@@ -109,7 +109,7 @@ test('reported website inquiry shows fresh property details before stock confirm
     /Luas bangunan: 80 m²/, /Kamar tidur: 2/, /Legalitas tercatat: SHM/, /Daya listrik: 1\.300 watt/,
     /3 Juli 2026/, /permintaan cross-check sudah saya catat/i]) assert.match(reply, pattern);
   assert.ok(reply.indexOf('SPESIFIKASI') < reply.indexOf('jadwal lelang pada'));
-  assert.ok(reply.includes(detailedAsset.detail_url)); assert.ok(reply.endsWith(BACKUP_AREA_QUESTION));
+  assert.ok(reply.includes(detailedAsset.detail_url)); assert.ok(reply.endsWith(AUCTION_COST_QUESTION));
   assert.equal((reply.match(/\?/g) || []).length, 1); assert.ok(reply.length <= 4000);
   assert.doesNotMatch(reply, /lantai|sudah.*menghubungi|sudah saya kirim|rincian biaya pembelian atau kondisi aset/i);
   assert.equal(checks.list().total, 1); assert.equal(f.store.get(contact).is_bot_active, true);
@@ -134,7 +134,7 @@ test('Playground renders the reported template and a direct property link withou
     assert.doesNotMatch(result.reply, /sudah saya catat|sudah saya kirim|sudah menghubungi/);
     assert.equal(result.generation.mode, 'rules'); assert.equal(result.session.asset_id, asset.id);
     assert.equal(result.knowledge.status, 'auction_check_needed'); assert.equal(result.session.is_bot_active, true);
-    assert.ok(result.reply.endsWith(BACKUP_AREA_QUESTION)); assert.equal((result.reply.match(/\?/g) || []).length, 1);
+    assert.ok(result.reply.endsWith(AUCTION_COST_QUESTION)); assert.equal((result.reply.match(/\?/g) || []).length, 1);
   }
 });
 
@@ -145,7 +145,7 @@ test('advertised price and specifications cannot fill missing public data or ove
     ai: { async generate() { assert.fail('No model is needed for missing listing fields'); } } });
   assert.match(result.reply, /Harga limit: Rp 418\.000\.001/); assert.match(result.reply, /Luas tanah: belum tercatat/);
   assert.match(result.reply, /Luas bangunan: belum tercatat/); assert.doesNotMatch(result.reply, /999|Rp 1\.000\.000|Kamar tidur:|Legalitas tercatat:/);
-  const withoutBackup = auctionCheckReply(detailedAsset, { status: 'pending', notification_status: 'sent' }, { offerBackup: false });
+  const withoutBackup = auctionCheckReply(detailedAsset, { status: 'pending', notification_status: 'sent' }, { offerCosts: false });
   assert.match(withoutBackup, /Luas tanah: 101 m²/); assert.match(withoutBackup, /sudah saya kirim ke bagian stoker/);
   assert.equal((withoutBackup.match(/\?/g) || []).length, 0);
 });
@@ -153,7 +153,7 @@ test('advertised price and specifications cannot fill missing public data or ove
 test('backup budget reply uses original city and excludes expired lot while allowing ranked fallback without assuming ready funds', async () => {
   const calls = [];
   const catalog = { async resolve(...args) { calls.push(args); return args[2] ? { asset: null, catalog: [], status: 'not_found', source: 'database_listing_publik' } : matched(); } };
-  const history = [user('Kode 121820'), assistant(auctionCheckReply(asset, { status: 'pending' })), user('Cari lelang alternatif aset, budget 700 juta untuk investasi, kelurahan bebas, luas tanah bebas')];
+  const history = [user('Kode 121820'), assistant(auctionCheckReply(asset, { status: 'pending' }, { offerBackup: true })), user('Cari lelang alternatif aset, budget 700 juta untuk investasi, kelurahan bebas, luas tanah bebas')];
   const context = await resolvePropertyContext(catalog, history.at(-1).content, asset.id, history, now);
   assert.equal(context.buyer.stage, 'recommendations'); assert.equal(context.buyer.backup_for, asset.id);
   assert.equal(calls[1][2].location, 'Waru'); assert.equal(calls[1][2].city, 'Sidoarjo'); assert.equal(calls[1][2].max_price, 700000000);
@@ -181,7 +181,7 @@ test('backup query enforces future auction date, excludes old code, and retains 
 test('fresh sold status never revives expired property facts from conversation history', async () => {
   let calls = 0;
   const context = await resolvePropertyContext({ async resolve() { calls++; return matched(null); } }, 'Budget 500 juta untuk investasi', asset.id,
-    [user('Kode 121820'), assistant(auctionCheckReply(asset, { status: 'pending' }))], now);
+    [user('Kode 121820'), assistant(auctionCheckReply(asset, { status: 'pending' }, { offerBackup: true }))], now);
   assert.equal(context.asset, null); assert.equal(context.status, 'not_found'); assert.equal(calls, 1);
 });
 
@@ -231,7 +231,7 @@ test('dashboard queue DTO strips unknown fields and rejects malformed rows', () 
 });
 
 test('backup follow-ups explain missing alternatives without fictional progress or a model dependency', async () => {
-  const history = [user('Kode 121820'), assistant(auctionCheckReply(asset, { status: 'simulated' })), user('Budget 700 juta untuk investasi, kelurahan bebas, luas tanah bebas')];
+  const history = [user('Kode 121820'), assistant(auctionCheckReply(asset, { status: 'simulated' }, { offerBackup: true })), user('Budget 700 juta untuk investasi, kelurahan bebas, luas tanah bebas')];
   const result = await generatePropertyReply({ text: history.at(-1).content, previousId: asset.id, history, now,
     catalog: { async resolve(text, previousId, criteria) { return criteria ? { asset: null, catalog: [], status: 'not_found', source: 'database_listing_publik' } : matched(); } },
     ai: { async generate() { assert.fail('No model needed for a missing search result'); } } });
@@ -243,13 +243,13 @@ test('backup follow-ups explain missing alternatives without fictional progress 
 
 test('asking for alternatives without a location keeps the original city and still qualifies missing budget', async () => {
   const context = await resolvePropertyContext({ async resolve() { return matched(); } }, 'Ada alternatif?', asset.id,
-    [user('Kode 121820'), assistant(auctionCheckReply(asset, { status: 'pending' }))], now);
+    [user('Kode 121820'), assistant(auctionCheckReply(asset, { status: 'pending' }, { offerBackup: true }))], now);
   assert.equal(context.buyer.profile.location, 'Waru'); assert.equal(context.buyer.profile.city, 'Sidoarjo'); assert.equal(context.status, 'qualifying');
   assert.deepEqual(context.buyer.missing, ['max_price', 'land_area']);
 });
 
 test('bare area reply to expired-lot invitation qualifies then searches with the user budget and purpose', async () => {
-  const calls = [], inputs = [], history = [user('Kode 121820'), assistant(auctionCheckReply(asset, { status: 'simulated' }))];
+  const calls = [], inputs = [], history = [user('Kode 121820'), assistant(auctionCheckReply(asset, { status: 'simulated' }, { offerBackup: true }))];
   const catalog = { async resolve(...args) { calls.push(args); return args[2] ? { asset: null, catalog: [], status: 'not_found', source: 'database_listing_publik' } : matched(); } };
   const ai = { async generate(input) { inputs.push(input); return { reply: 'Berapa budget yang Bapak/Ibu siapkan? Untuk dihuni sendiri atau investasi?', qualification: {} }; } };
   history.push(user('Manukan'));
@@ -273,7 +273,7 @@ test('bare area reply to expired-lot invitation qualifies then searches with the
 });
 
 test('expired backup exception accepts a combined location/budget reply but keeps detail questions and refusals on the original asset', async () => {
-  const history = [user('Kode 121820'), assistant(auctionCheckReply(asset, { status: 'pending' }))];
+  const history = [user('Kode 121820'), assistant(auctionCheckReply(asset, { status: 'pending' }, { offerBackup: true }))];
   const catalog = { async resolve(text, previousId, criteria) { assert.equal(criteria, undefined); return matched(); } };
   const combined = await resolvePropertyContext(catalog, 'Manukan, budget 500 juta', asset.id, history, now);
   assert.equal(combined.buyer.profile.location, 'Manukan'); assert.equal(combined.buyer.profile.max_price, 500000000);
@@ -287,7 +287,7 @@ test('expired backup exception accepts a combined location/budget reply but keep
 });
 
 test('backup invitation cannot unlock a fresh or sold lot, a newly selected property, or a conversation without that invitation', async () => {
-  const history = [user('Kode 121820'), assistant(auctionCheckReply(asset, { status: 'pending' })), user('Manukan')];
+  const history = [user('Kode 121820'), assistant(auctionCheckReply(asset, { status: 'pending' }, { offerBackup: true })), user('Manukan')];
   const fresh = { ...asset, auction_at: '2027-01-01T00:00:00Z' };
   const catalog = (item) => ({ async resolve(text, previousId, criteria) { assert.equal(criteria, undefined); return matched(item); } });
   assert.equal((await resolvePropertyContext(catalog(fresh), 'Manukan', asset.id, history, now)).buyer.searching, false);

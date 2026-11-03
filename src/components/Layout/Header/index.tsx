@@ -176,7 +176,11 @@ const MobileNav: React.FC<MobileNavProps> = ({
         )}
 
         {/* LOGO */}
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none">
+        <Link
+          href="/"
+          aria-label="Solusindo Aset - ke halaman utama"
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex min-h-11 items-center gap-2 cursor-pointer rounded-md transition-opacity hover:opacity-80 active:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-300"
+        >
           <div className="relative w-8 h-8">
             <Image
               src="/images/logo/LogoSolusindoPremier.png"
@@ -190,7 +194,7 @@ const MobileNav: React.FC<MobileNavProps> = ({
             <span className="text-white">Solusindo</span>
             <span className="text-[#86efac] ml-1">Aset</span>
           </span>
-        </div>
+        </Link>
 
         {/* AVATAR + BURGER */}
         <button

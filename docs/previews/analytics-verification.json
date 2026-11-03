@@ -1,0 +1,19 @@
+{
+  "passed": true,
+  "checks": [
+    "authenticated/private read, unauthenticated rejection, invalid month rejection",
+    "sort keyboard navigation, popup width, URL restoration; chart keyboard date selection",
+    "search/no-results/clear, pagination",
+    "expand details, saved/share metrics, comments dialog, Escape",
+    "refresh failure preserves data and retry recovers",
+    "isolated WhatsApp observed metrics and insufficient forecast",
+    "audience dimensions and segment-to-post filtering",
+    "filtered CSV content and filename with spreadsheet formula protection",
+    "1512/1024/768/390/320 layouts without analytics horizontal overflow; narrow popup/Escape/focus restoration",
+    "honest empty state and reduced motion",
+    "rapid month changes abort superseded analytics reads"
+  ],
+  "actualEndpointPosts": 0,
+  "analyticsReads": 6,
+  "errors": []
+}

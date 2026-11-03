@@ -1,4 +1,4 @@
-import { preferenceAnswerText, QUANTITY_RANGE_SEPARATOR } from './buyer_language.js';
+import { preferenceAnswerText, QUANTITY_RANGE_SEPARATOR, correctedQuantityText, normalizeBuyerQuantities } from './buyer_language.js';
 
 const N = '(\\d+(?:[.,]\\d+)*)';
 const U = '(miliar|milyar|milyard|juta|jt|ribu|rb|rupiah|m)';
@@ -8,8 +8,9 @@ const maximum = '(?:maksimal|maksimum|maks|max|mentok|paling banyak|di\\s*bawah|
 const endpoint = `(?:rp\\.?\\s*)?${N}\\s*${U}?(?![\\p{L}\\p{N}])`;
 
 function scalar(value) {
-  const grouped = /^\d{1,3}(?:[.,]\d{3})+$/.test(value);
-  return Number(grouped ? value.replace(/[.,]/g, '') : value.replace(',', '.'));
+  if (/^\d{1,3}(?:\.\d{3})+(?:,\d+)?$/.test(value)) return Number(value.replace(/\./g, '').replace(',', '.'));
+  if (/^\d{1,3}(?:,\d{3})+(?:\.\d+)?$/.test(value)) return Number(value.replace(/,/g, ''));
+  return /^\d+(?:[.,]\d+)?$/.test(value) ? Number(value.replace(',', '.')) : NaN;
 }
 function amount(value, unit) {
   const n = scalar(value) * (FACTORS[unit?.toLowerCase()] || 1);
@@ -42,16 +43,31 @@ function bounds(first, firstUnit, last, lastUnit, { implicitUnit, defaultUnit, e
 // A malformed range must not fall through to a single endpoint's price.
 export function parseBudgetAmounts(text, { implicitUnit = null, defaultUnit = null } = {}) {
   if (/\b(?:per|tiap|setiap)\s*(?:m\s*[²2]|meter|hektar|ha)\b/iu.test(text)) return null;
+  text = correctedQuantityText(normalizeBuyerQuantities(text));
+  if (/\b(?:tambah(?:kan)?|naik(?:kan|in)?|turun(?:kan|in)?|kurang(?:i|in)?)\s+(?:(?:budget|bujet|anggaran)(?:nya)?\s+)?(?:rp\.?\s*)?\d/i.test(text)) return { error: 'unclear' };
   if (/(?:^|\b(?:budget|anggaran|harga|minimal|minimum|maksimal|maksimum|mentok))\s*(?:rp\.?\s*)?-\s*\d/i.test(text)) return { error: 'invalid' };
+  // A rejected/cancelled amount never authorizes a new ceiling. A subsequent
+  // positive correction may replace it; rejection alone needs clarification.
+  let rejected = false;
+  text = text.replace(new RegExp(`\\b(?:bukan(?:nya)?|jangan|tidak|nggak|ngga|enggak|gak|ga|batal)\\s+(?:(?:jadi|pakai|gunakan|pilih|yang|di|angka)\\s+)*${endpoint}`, 'giu'), () => {
+    rejected = true; return ' ';
+  });
   const range = new RegExp(`(?<![\\p{L}\\p{N}.,])${endpoint}\\s*(?:${QUANTITY_RANGE_SEPARATOR}${/\bantara\b/i.test(text) ? '|dan' : ''})\\s*${endpoint}`, 'iu').exec(text);
-  if (range) return bounds(range[1], range[2], range[3], range[4], { implicitUnit, defaultUnit, explicitRupiah: /\brp\.?\s*\d/i.test(range[0]) });
+  const amountPattern = new RegExp(`(?<![\\p{L}\\p{N}])${endpoint}`, 'giu');
+  if (range) {
+    const remainder = text.slice(0, range.index) + text.slice(range.index + range[0].length);
+    if ([...remainder.matchAll(amountPattern)].length) return { error: 'unclear' };
+    return bounds(range[1], range[2], range[3], range[4], { implicitUnit, defaultUnit, explicitRupiah: /\brp\.?\s*\d/i.test(range[0]) });
+  }
   if (new RegExp(`${endpoint}\\s*(?:${QUANTITY_RANGE_SEPARATOR})(?![\\p{L}\\p{N}])`, 'iu').test(text)) return { error: 'ambiguous' };
   const low = new RegExp(`\\b${minimum}\\s*(?:nya|[.:=])?\\s*${endpoint}`, 'iu').exec(text);
   const high = new RegExp(`\\b${maximum}\\s*(?:nya|[.:=])?\\s*${endpoint}`, 'iu').exec(text);
   if (low && high) return bounds(low[1], low[2], high[1], high[2], { implicitUnit, defaultUnit, explicitRupiah: /\brp\.?\s*\d/i.test(low[0] + high[0]) });
-  const amounts = [...text.matchAll(new RegExp(endpoint, 'giu'))];
+  const amounts = [...text.matchAll(amountPattern)];
+  if (amounts.length > 1) return { error: 'unclear' };
   const match = low || high || amounts.find((item) => item[2]) || amounts.find((item) => /^rp/i.test(item[0])) || amounts[0];
-  if (!match) return null;
+  if (!match) return rejected ? { error: 'unclear' } : /\d/.test(text) ? { error: 'invalid' } : null;
+  if (!Number.isFinite(scalar(match[1])) || scalar(match[1]) <= 0) return { error: 'invalid' };
   // Only the caller's confirmed purchase context can enable shorthand.
   const rupiah = /\brp\.?\s*\d/i.test(match[0]);
   const unit = match[2] || (rupiah ? null : defaultUnit || implicitPurchaseUnit(match[1], implicitUnit));

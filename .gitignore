@@ -59,3 +59,13 @@ backend/keys/
 .runtime/
 .local-backups/
 .service-logs/
+
+# Owner-uploaded portfolio media is runtime data, not source code.
+/public/uploads/success-stories/
+/uploads/marketing/
+/.next-marketing*/
+/.next-instagram-content-qa/
+
+# Isolated campaign verification output
+/.next-campaign*/
+/.next-fresh-*/

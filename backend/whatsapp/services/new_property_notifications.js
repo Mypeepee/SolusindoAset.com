@@ -1,7 +1,8 @@
 import { postJson, ServiceError, logFailure } from '../lib/http.js';
 import { validPhone } from '../lib/security.js';
 import { CLOSING_STATE } from './closing_state.js';
-import { RECOMMENDATION_BATCH_SIZE, offeredPropertyIds, validRecommendationSearch, savedRecommendationSearch } from './recommendation_policy.js';
+import { RECOMMENDATION_BATCH_SIZE, offeredPropertyIds, validRecommendationSearch, savedRecommendationSearch, listingCreatedAt } from './recommendation_policy.js';
+import { validRecommendationPreview } from './recommendation_preview.js';
 
 export function recommendationHours(now) {
   const hour = new Date(now + 7 * 3600000).getUTCHours();
@@ -21,6 +22,7 @@ export function recommendationPreference(text = '') {
 }
 const validId = v => typeof v === 'string' && /^[1-9]\d{0,17}$/.test(v);
 const validCursor = v => typeof v === 'string' && /^(?:0|[1-9]\d{0,17})$/.test(v);
+const validListedAt = v => v == null || typeof v === 'string' && v.length <= 30 && listingCreatedAt(v) != null;
 export class NewPropertyNotifications {
   constructor({ queue, connection, entries, now = Date.now, fetchImpl = fetch, logger = console }) {
     Object.assign(this, { queue, connection, entries, now, fetchImpl, logger });
@@ -68,7 +70,7 @@ export class NewPropertyNotifications {
       const cursor = this.queue.agent(agent).cursor;
       const r = await this.call(agent, 'scan', { cursor });
       if (!validCursor(r.cursor) || BigInt(r.cursor) < BigInt(cursor) || !Array.isArray(r.candidates) ||
-        r.candidates.some(c => !/^KL\d{1,18}$/.test(c.client_id) || !validId(c.property_id) || BigInt(c.property_id) <= BigInt(cursor) || BigInt(c.property_id) > BigInt(r.cursor)) ||
+        r.candidates.some(c => !/^KL\d{1,18}$/.test(c.client_id) || !validId(c.property_id) || !validListedAt(c.listed_at) || BigInt(c.property_id) <= BigInt(cursor) || BigInt(c.property_id) > BigInt(r.cursor)) ||
         typeof r.more !== 'boolean' || r.more && r.cursor === cursor) throw new ServiceError('INVALID_RECOMMENDATION_PAGE', 502);
       this.queue.page(agent, cursor, r.cursor, r.candidates);
       if (!r.more) break;
@@ -82,7 +84,7 @@ export class NewPropertyNotifications {
       if (typeof r.after_client !== 'string' || !/^(?:|KL\d{1,18})$/.test(r.after_client) || r.after_client < daily.daily_after_client ||
         typeof r.more !== 'boolean' || r.more && r.after_client === daily.daily_after_client ||
         !Number.isSafeInteger(r.checked) || r.checked < 0 || r.checked > 10 || !Number.isSafeInteger(r.matched) || r.matched < 0 || r.matched > r.checked ||
-        !Array.isArray(r.candidates) || r.candidates.length > r.matched * RECOMMENDATION_BATCH_SIZE || r.candidates.some(c => !/^KL\d{1,18}$/.test(c.client_id) || !validId(c.property_id))) throw new ServiceError('INVALID_DAILY_RECOMMENDATION_PAGE', 502);
+        !Array.isArray(r.candidates) || r.candidates.length > r.matched * RECOMMENDATION_BATCH_SIZE || r.candidates.some(c => !/^KL\d{1,18}$/.test(c.client_id) || !validId(c.property_id) || !validListedAt(c.listed_at))) throw new ServiceError('INVALID_DAILY_RECOMMENDATION_PAGE', 502);
       this.queue.dailyPage(agent, day, daily.daily_after_client, r);
       if (!r.more) break;
     }
@@ -96,7 +98,8 @@ export class NewPropertyNotifications {
       if (!validPhone(draft.phone) || typeof draft.text !== 'string' || !draft.text.trim() || draft.text.length > 4096 ||
         typeof draft.receipt !== 'string' || draft.receipt.length > 5000 || !Array.isArray(draft.property_ids) || !draft.property_ids.length || draft.property_ids.length > RECOMMENDATION_BATCH_SIZE ||
         draft.search_criteria != null && !validRecommendationSearch(draft.search_criteria) ||
-        draft.property_ids.some(id => !validId(id) || !group.properties.includes(id))) throw new ServiceError('INVALID_RECOMMENDATION_DRAFT', 502);
+        draft.property_ids.some(id => !validId(id) || !group.properties.includes(id)) ||
+        draft.link_preview != null && !validRecommendationPreview(draft.link_preview, draft.text, draft.property_ids)) throw new ServiceError('INVALID_RECOMMENDATION_DRAFT', 502);
       this.queue.skip(agent, group.client, group.properties.filter(id => !draft.property_ids.includes(id)));
       const previouslyDelivered = this.queue.alreadyDelivered(agent, draft.phone, draft.property_ids);
       if (previouslyDelivered.length) { this.queue.skip(agent, group.client, previouslyDelivered); continue; }
@@ -113,7 +116,7 @@ export class NewPropertyNotifications {
         const batch = this.queue.begin(agent, group.client, draft);
         if (!batch) return;
         try {
-          const messageId = await entry.whatsapp.sendText(draft.phone, draft.text);
+          const messageId = await entry.whatsapp.sendText(draft.phone, draft.text, undefined, { linkPreview: draft.link_preview || true });
           this.queue.sent(batch, messageId);
         } catch (error) {
           this.queue.uncertain(batch);

@@ -1,5 +1,8 @@
 # Database properti untuk chatbot
 
+Perbaikan koreksi budget dan penjelasan listing dengan jadwal lama dicatat di
+[koreksi budget dan hasil kosong](budget-search-recovery.md).
+
 WhatsApp Baileys dan AI Bot Playground sekarang menggunakan sumber data properti
 yang sama dengan website. Data dibaca per pertanyaan; perubahan listing langsung
 tersedia tanpa melatih ulang model atau menyalin seluruh database ke penyedia AI.
@@ -137,6 +140,17 @@ Persona adalah asisten virtual Bapak Jason dengan gaya konsultatif dan responsif
 Setelah aset dipilih, jawaban dikunci pada aset itu. Alur pencarian berikut hanya
 berlaku jika pelanggan secara eksplisit meminta pencarian atau alternatif:
 
+Permintaan menghitung biaya untuk aset pilihan membaca ulang kode aset tersebut
+dan langsung menyajikan rincian balik nama, pengosongan, fee agen dan estimasi
+modal. Budget/luas tidak ditanyakan ulang. Ejaan pasif terpisah seperti “di
+hitungkan” atau “di tempati” tidak menjadi nama lokasi; tanda `/` pada rincian
+biaya juga tidak membuka pencarian alternatif. Jawaban “boleh” mengikuti tawaran
+biaya yang benar-benar berada pada pertanyaan terakhir, bukan penjelasan lama.
+Tautan listing yang dibuka langsung merender tanggal dari data listing dan jam
+server; tanggal mendatang tidak boleh disebut sudah lewat. Pengujian percakapan
+Bandung Barat ada di `test/selected_asset_costs.test.js`, termasuk konteks setelah
+restart dan perubahan harga/status aset.
+
 1. Permintaan lokasi luas: konfirmasi kota, kawasan dan kelurahan, lalu lengkapi
    jenis properti, budget dan batas luas tanah yang belum diketahui,
    maksimal dua pertanyaan. Backend merender respons ini tanpa LLM dan menunda
@@ -248,12 +262,12 @@ ditampilkan. Penghitungan menggunakan timestamp dan tampilan tanggal WIB.
 - Pada WhatsApp live, backend mencatat tugas pengecekan sebelum mengatakan
   permintaan sudah dicatat. Respons awal tidak memerlukan LLM. Jika pencatatan
   gagal/penuh, respons menjelaskan bahwa permintaan belum tercatat otomatis.
-- Respons awal ditutup dengan satu pertanyaan area pencarian sebagai persiapan
-  opsi cadangan. Jawaban singkat seperti `Manukan` dikenali sebagai lokasi;
-  bot kemudian melengkapi jenis, budget dan luas yang belum diketahui sebelum mencari.
-  Penolakan alternatif dan pertanyaan detail tetap membahas aset awal. Pencarian
-  hanya terbuka dari jawaban atas pertanyaan ini atau permintaan eksplisit klien,
-  dengan status/tanggal aset yang divalidasi ulang. Memilih aset baru mengunci
+- Respons awal ditutup dengan tawaran menghitung rincian estimasi biaya
+  pembelian. Jawaban “boleh” langsung menghitung aset tersebut, tanpa meminta
+  budget/luas atau mencari pengganti. Pencarian alternatif terbuka jika klien
+  memintanya secara eksplisit; status/tanggal aset tetap divalidasi ulang.
+  Riwayat lama yang sudah memiliki pertanyaan opsi cadangan tetap dipahami
+  agar sesi sebelum perubahan SOP dapat dilanjutkan. Memilih aset baru mengunci
   konteks kembali; undangan dari aset lama tidak berlaku pada aset baru.
 - Opsi cadangan dibatasi lima, tetap `TERSEDIA`, mengikuti batas harga, tidak
   mengulang aset lama, dan mengutamakan jadwal tercatat mendatang. Jika tidak ada,
