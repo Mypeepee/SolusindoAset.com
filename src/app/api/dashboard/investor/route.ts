@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
       view = params.get("view") || "grid";
     const page = Number(params.get("page") || 1);
     if (
-      !["score", "spread", "drop", "price"].includes(sort) ||
+      !["score", "spread", "drop", "price", "auctionDate"].includes(sort) ||
       !["grid", "table", "map"].includes(view) ||
       !Number.isSafeInteger(page) ||
       page < 1

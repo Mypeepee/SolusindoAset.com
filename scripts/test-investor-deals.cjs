@@ -340,6 +340,41 @@ async function main() {
     ).length,
     0,
   );
+  const auctionSchedule = [
+    listing({ id: "past", auctionDate: "2026-11-01T03:00:00.000Z" }),
+    listing({ id: "later", auctionDate: "2026-11-19T03:00:00.000Z" }),
+    listing({ id: "soon", auctionDate: "2026-11-06T03:00:00.000Z" }),
+    listing({ id: "unknown", auctionDate: null }),
+  ];
+  assert.deepEqual(
+    quant
+      .selectDeals(
+        auctionSchedule,
+        { ...filters, dataState: "all", sort: "auctionDate" },
+        [],
+        new Date("2026-11-05T05:00:00.000Z"),
+      )
+      .map((item) => item.id),
+    ["soon", "later", "past", "unknown"],
+    "Upcoming auction dates sort nearest-first, with past and missing schedules afterward",
+  );
+  assert.deepEqual(
+    quant
+      .selectDeals(
+        auctionSchedule,
+        {
+          ...filters,
+          dataState: "all",
+          sort: "auctionDate",
+          upcomingOnly: true,
+        },
+        [],
+        new Date("2026-11-05T05:00:00.000Z"),
+      )
+      .map((item) => item.id),
+    ["soon", "later"],
+    "Upcoming-only filter returns only the next scheduled auction per current asset",
+  );
   assert.equal(
     quant.jakartaDayStart(new Date("2026-10-22T18:30:00Z")),
     Date.parse("2026-10-22T17:00:00Z"),
@@ -459,6 +494,89 @@ async function main() {
     (await (await GET(request("?city=all"))).json()).filters.city,
     "",
   );
+  const soldIds = [12n, 20n, 29n, 46n, 60n];
+  const soldState = new Map(soldIds.map((id) => [id, "TERSEDIA"]));
+  const auditRows = [];
+  let invalidations = 0;
+  const soldPrisma = {
+    $transaction: async (callback) =>
+      callback({
+        $queryRaw: async () => soldIds.map((id_property) => ({ id_property })),
+        listing: {
+          findUnique: async ({ where }) => ({
+            id_property: where.id_property,
+            id_agent: "AG1",
+            jenis_transaksi: "LELANG",
+            status_tayang: soldState.get(where.id_property),
+            slug: `aset-${where.id_property}`,
+            kota: "Kota Surabaya",
+            kelurahan: "Banyuurip",
+            kecamatan: "Sawahan",
+            legalitas: "SHM",
+            nomor_legalitas: "000123",
+          }),
+          findMany: async () =>
+            soldIds.map((id_property) => ({
+              id_property,
+              id_agent: "AG1",
+              jenis_transaksi: "LELANG",
+              status_tayang: soldState.get(id_property),
+              slug: `aset-${id_property}`,
+            })),
+          updateMany: async ({ where, data }) => {
+            for (const id of where.id_property.in)
+              if (soldState.get(id) !== "TERJUAL")
+                soldState.set(id, data.status_tayang);
+            return { count: where.id_property.in.length };
+          },
+        },
+        riwayatStatusListing: {
+          createMany: async ({ data }) => auditRows.push(...data),
+        },
+      }),
+  };
+  const soldRoute = createLoader({
+    "@prisma/client": {
+      Prisma: {
+        sql: (strings, ...values) => ({ strings, values }),
+        join: (values) => values,
+      },
+    },
+    "next-auth": { getServerSession: async () => session },
+    "@/app/api/auth/[...nextauth]/authOptions": { authOptions: {} },
+    "@/lib/prisma": soldPrisma,
+    "@/lib/investor-owner.server": {
+      requireInvestorOwner: async () => null,
+      investorPrivateHeaders: { "Cache-Control": "private, no-store" },
+    },
+    "@/lib/auctionMatch": {
+      cariIdAsetSama: async () => soldIds.slice(0, -1),
+    },
+    "@/app/api/listings/_lib/status-guard": {
+      resolveStatusActor: async () => ({
+        ok: true,
+        actor: { idAgent: "AG1", jabatan: "OWNER", nama: "Owner" },
+      }),
+      buildRiwayatStatus: (entry) => entry,
+      pesanErrorStatus: () => "Gagal",
+      revalidateListingDetail: () => {},
+    },
+    "@/lib/investor-cma-legacy.server": {
+      invalidateInvestorCache: () => invalidations++,
+    },
+  });
+  const soldPatch = soldRoute(
+    "src/app/api/dashboard/investor/[id]/status/route.ts",
+  ).PATCH;
+  const soldResponse = await soldPatch(
+    request(),
+    { params: { id: "60" } },
+  );
+  assert.equal(soldResponse.status, 200);
+  assert.equal((await soldResponse.json()).changedCount, 5);
+  assert.deepEqual([...soldState.values()], Array(5).fill("TERJUAL"));
+  assert.equal(auditRows.length, 5);
+  assert.equal(invalidations, 1);
   const { getDashboardMenu } = load(
     "src/app/dashboard/components/list-menu.tsx",
   );

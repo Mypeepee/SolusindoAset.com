@@ -9,6 +9,8 @@ import fixtureFeed from "./fixtures/investor-feed.cjs";
 import roiHistory from "./fixtures/investor-roi-history.cjs";
 import verifyRoi from "./lib/verify-investor-roi.mjs";
 import verifyPerformance from "./lib/verify-investor-performance.mjs";
+import verifySold from "./lib/verify-investor-sold.mjs";
+import verifyAuctionDate from "./lib/verify-investor-auction-date.mjs";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 dotenv.config({ path: path.join(root, ".env"), quiet: true });
 const origin = process.env.INVESTOR_QA_ORIGIN || "http://127.0.0.1:3000";
@@ -42,6 +44,11 @@ let failProof = false,
 let roiState = {};
 let performanceGate = null;
 const performanceRequests = [];
+const soldRequests = [];
+const soldIds = new Set();
+let soldStatus = 200;
+let soldDelay = 0;
+let qaSessionCookie = "";
 const session = {
   user: {
     id: "investor-qa",
@@ -61,6 +68,22 @@ page.on("request", async (request) => {
       investorRequests++;
       performanceRequests.push(url.searchParams);
       const feed = JSON.parse(JSON.stringify(fixtureFeed(url.searchParams)));
+      if (process.env.INVESTOR_QA_AUCTION_DATE_ONLY === "1") {
+        const now = Date.now();
+        for (const [index, offset] of [5, -4, 0, null, 5, 5, null].entries()) {
+          const item = feed.items[index];
+          if (!item) continue;
+          item.listingCategory = index === 4 ? "PRIMARY" : "LELANG";
+          item.transactionType = index === 5 ? "SEWA" : "BELI";
+          item.auctionDate = index === 6 ? "invalid-date" : offset === null
+            ? null : new Date(now + offset * 86_400_000).toISOString();
+        }
+      }
+      if (soldIds.size) {
+        const count = feed.items.length;
+        feed.items = feed.items.filter((item) => !soldIds.has(item.id));
+        feed.total -= count - feed.items.length;
+      }
       // Isolated presentation boundary states; never imported by the app.
       if (process.env.INVESTOR_QA_CARDS_ONLY === "1" && feed.items[0]) {
         const first = feed.items[0];
@@ -139,6 +162,22 @@ page.on("request", async (request) => {
           ),
         });
       return;
+    }
+    const soldId = url.pathname.match(
+      /^\/api\/dashboard\/investor\/(\d+)\/status$/,
+    )?.[1];
+    if (url.origin === origin && soldId) {
+      soldRequests.push({ id: soldId, method: request.method(), body: request.postData() });
+      const status = soldStatus;
+      if (soldDelay) await new Promise((resolve) => setTimeout(resolve, soldDelay));
+      if (status === 200) soldIds.add(soldId);
+      return request.respond({
+        status,
+        contentType: "application/json",
+        body: JSON.stringify(status === 200
+          ? { success: true, message: "Aset berhasil ditandai terjual." }
+          : { error: "Status aset belum dapat disimpan." }),
+      });
     }
     const locationId = url.pathname.match(
       /^\/api\/dashboard\/investor\/(\d+)\/location$/,
@@ -291,7 +330,11 @@ page.on("request", async (request) => {
           notifications: [],
         }),
       });
-    return request.continue();
+    // Local NextAuth may retain a production HTTPS cookie name. Supply both
+    // signed QA names only to this local origin, never to remote image hosts.
+    return request.continue(url.origin === origin && qaSessionCookie
+      ? { headers: { ...request.headers(), cookie: qaSessionCookie } }
+      : undefined);
   } catch (error) {
     if (!request.isInterceptResolutionHandled())
       await request.abort().catch(() => {});
@@ -311,6 +354,7 @@ async function authenticate(jabatan = "OWNER") {
       _refreshedAt: Date.now(),
     },
   });
+  qaSessionCookie = `next-auth.session-token=${token}; __Secure-next-auth.session-token=${token}`;
   await browser.setCookie({
     name: "next-auth.session-token",
     value: token,
@@ -1959,6 +2003,24 @@ try {
   });
   await waitForCards(9);
   await waitForIdle();
+  if (process.env.INVESTOR_QA_AUCTION_DATE_ONLY === "1") {
+    await verifyAuctionDate({ page, errors });
+    await browser.close();
+    process.exit(0);
+  }
+  if (process.env.INVESTOR_QA_SOLD_ONLY === "1") {
+    await verifySold({
+      page,
+      errors,
+      requests: soldRequests,
+      setResponse: (status, delay = 0) => {
+        soldStatus = status;
+        soldDelay = delay;
+      },
+    });
+    await browser.close();
+    process.exit(0);
+  }
   if (process.env.INVESTOR_QA_DETAIL_ONLY === "1") {
     await verifyDetailLink();
     assert.deepEqual(errors, []);

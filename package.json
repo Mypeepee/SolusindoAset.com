@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "db:investor-alerts": "node scripts/install-investor-owner-alerts.cjs --apply",
+    "test:investor-alerts": "node --test scripts/test-investor-owner-alerts.cjs",
     "db:marketing": "node scripts/install-marketing.cjs --apply",
     "test:marketing": "node --test scripts/test-marketing.cjs scripts/test-marketing-analytics.cjs scripts/test-instagram-webhook.cjs scripts/test-instagram-facebook.cjs scripts/test-instagram-content.cjs scripts/test-instagram-request-id.cjs scripts/test-marketing-campaigns.cjs scripts/test-campaign-queue.cjs scripts/test-campaign-reminders.cjs",
     "diagnose:instagram": "node scripts/diagnose-instagram-test-token.cjs",

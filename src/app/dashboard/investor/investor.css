@@ -1226,6 +1226,38 @@
   background: #152a23e6;
   border: 1px solid var(--investor-border);
 }
+.investor-card-auction-date {
+  position: absolute;
+  z-index: 1;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #151b20f2;
+  color: var(--investor-auction);
+  box-shadow: inset 0 1px 0 #ffffff12, inset 0 0 0 1px #ffffff18;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.investor-card-auction-date svg {
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+}
+.investor-card-auction-date.is-today {
+  background: #b6eccd;
+  color: #123323;
+}
+.investor-card-auction-date.is-past {
+  color: #cbd5e1;
+}
 .investor-card-photo-meta {
   position: absolute;
   z-index: 1;
@@ -1605,6 +1637,292 @@
 }
 .investor-card-actions .investor-bookmark:active {
   transform: scale(0.92);
+}
+/* Status is a separate full-width action, preserving the three card controls. */
+.investor-sold-action {
+  --sold-motion: cubic-bezier(0.22, 1, 0.36, 1);
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 34px;
+  align-items: center;
+  min-width: 0;
+  min-height: 46px;
+  padding: 5px;
+  border: 0;
+  border-radius: 999px;
+  background: #ffffff06;
+  color: #b6eccd;
+  box-shadow: inset 0 1px 0 #ffffff0d, inset 0 0 0 1px #ffffff09;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: transform 350ms var(--sold-motion);
+}
+.investor-card-actions > .investor-sold-action {
+  grid-column: 1 / -1;
+  margin-top: 2px;
+}
+.investor-sold-action::before,
+.investor-sold-action::after {
+  position: absolute;
+  z-index: -1;
+  inset: 3px;
+  border-radius: inherit;
+  content: "";
+  pointer-events: none;
+}
+.investor-sold-action::before {
+  background: #16271e;
+  box-shadow: inset 0 1px 0 #ffffff08;
+}
+.investor-sold-action::after {
+  background: #213d2d;
+  opacity: 0;
+  transform: scale(0.97);
+  transition: opacity 250ms var(--sold-motion), transform 350ms var(--sold-motion);
+}
+.investor-sold-label {
+  grid-column: 2;
+  grid-row: 1;
+  text-align: center;
+}
+.investor-sold-icon {
+  display: grid;
+  grid-column: 3;
+  grid-row: 1;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #b6eccd;
+  color: #123323;
+  box-shadow: inset 0 1px 0 #ffffff50;
+  transition: transform 350ms var(--sold-motion);
+}
+.investor-sold-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.investor-sold-action:is(:hover, :focus-visible):not(:disabled)::after {
+  opacity: 1;
+  transform: scale(1);
+}
+.investor-sold-action:is(:hover, :focus-visible):not(:disabled) .investor-sold-icon {
+  transform: translateX(-2px) scale(1.06);
+}
+.investor-sold-action:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.investor-surface .investor-sold-action:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+.investor-sold-spinner {
+  animation: investor-sold-saving 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes investor-sold-saving {
+  to { transform: rotate(360deg); }
+}
+.investor-sold-dialog {
+  position: fixed;
+  z-index: 10001;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  width: min(480px, calc(100% - 40px));
+  max-height: calc(100dvh - 40px);
+  padding: 5px;
+  border-radius: 28px;
+  background: #1b211f;
+  box-shadow: inset 0 1px 0 #ffffff18, 0 24px 80px -24px #04130d66;
+  outline: none;
+  transform: translate(-50%, -50%);
+  animation: investor-sold-enter 480ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.investor-sold-dialog-core {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 23px;
+  background: var(--investor-card-surface);
+  box-shadow: inset 0 1px 0 #ffffff09;
+}
+.investor-sold-dialog-body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 28px 26px 20px;
+}
+.investor-sold-emblem {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 22px;
+  border-radius: 18px;
+  background: #b6eccd;
+  color: #123323;
+  box-shadow: 0 0 0 5px #b6eccd08, inset 0 1px 0 #ffffff80;
+}
+.investor-sold-emblem svg { width: 28px; height: 28px; }
+.investor-sold-eyebrow {
+  color: #b6eccd;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.investor-sold-dialog h2 {
+  margin-top: 7px;
+  color: var(--investor-text);
+  font-size: clamp(22px, 4.8vw, 27px);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.035em;
+}
+.investor-sold-intro {
+  margin-top: 8px;
+  color: #a9b6ae;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.investor-sold-asset-tray {
+  margin-top: 22px;
+  padding: 4px;
+  border-radius: 18px;
+  background: #ffffff05;
+  box-shadow: inset 0 0 0 1px #ffffff08;
+}
+.investor-sold-asset {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: #171b19;
+}
+.investor-sold-thumbnail {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 68px;
+  height: 80px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #ffffff08;
+  color: var(--investor-muted);
+}
+.investor-sold-thumbnail img { width: 100%; height: 100%; object-fit: cover; }
+.investor-sold-thumbnail svg { width: 24px; height: 24px; }
+.investor-sold-asset-copy { min-width: 0; overflow-wrap: anywhere; }
+.investor-sold-asset-copy > span {
+  display: block;
+  color: #a9b6ae;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.investor-sold-asset-copy .investor-sold-asset-id { color: #b6eccd; }
+.investor-sold-asset-copy p {
+  margin: 3px 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.investor-sold-asset-copy strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.investor-sold-consequence {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 16px;
+  color: #a9b6ae;
+  font-size: 12px;
+  line-height: 1.75;
+}
+.investor-sold-consequence > svg { flex-shrink: 0; margin-top: 3px; }
+.investor-sold-consequence strong { color: #d7e2db; font-weight: 500; }
+.investor-sold-error {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f8717110;
+  color: #fca5a5;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.investor-sold-dialog-footer {
+  display: grid;
+  flex-shrink: 0;
+  grid-template-columns: minmax(80px, 0.65fr) minmax(0, 1fr);
+  gap: 10px;
+  padding: 16px 26px 24px;
+  box-shadow: 0 -1px 0 #ffffff09;
+}
+.investor-sold-cancel {
+  min-height: 46px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: #ffffff06;
+  color: #d7e2db;
+  box-shadow: inset 0 0 0 1px #ffffff12;
+  font-size: 12px;
+  font-weight: 500;
+}
+.investor-sold-cancel:hover:not(:disabled) { background: #ffffff0d; }
+.investor-sold-cancel:active:not(:disabled) { transform: scale(0.98); }
+.investor-sold-confirm { color: #102c1c; }
+.investor-sold-confirm::before { background: #b6eccd; }
+.investor-sold-confirm::after { background: #d0f5df; }
+.investor-sold-confirm .investor-sold-icon { background: #102c1c0d; }
+@keyframes investor-sold-enter {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 14px)) scale(0.985); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@media (max-width: 639px) {
+  .investor-sold-dialog {
+    top: auto;
+    bottom: max(6px, env(safe-area-inset-bottom));
+    width: calc(100% - 12px);
+    max-height: calc(100dvh - 20px - env(safe-area-inset-bottom));
+    border-radius: 24px;
+    transform: translateX(-50%);
+    animation-name: investor-sold-enter-mobile;
+  }
+  .investor-sold-dialog-core { border-radius: 19px; }
+  .investor-sold-dialog-body { padding: 22px 18px 18px; }
+  .investor-sold-dialog-footer { padding: 14px 18px 18px; }
+  .investor-sold-emblem { margin-bottom: 18px; }
+  .investor-sold-asset { padding: 10px; gap: 10px; }
+  .investor-sold-thumbnail { width: 54px; height: 72px; }
+  .investor-sold-dialog-footer .investor-sold-action {
+    grid-template-columns: 28px minmax(0, 1fr) 28px;
+  }
+  .investor-sold-confirm .investor-sold-icon { width: 28px; height: 28px; }
+  @keyframes investor-sold-enter-mobile {
+    from { opacity: 0; transform: translate(-50%, 18px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .investor-sold-dialog { animation: none; }
+  .investor-sold-action:active:not(:disabled),
+  .investor-sold-action:is(:hover, :focus-visible):not(:disabled) .investor-sold-icon {
+    transform: none;
+  }
+}
+@media (forced-colors: active) {
+  .investor-sold-action,
+  .investor-sold-cancel,
+  .investor-sold-dialog { outline: 1px solid ButtonText; }
 }
 .investor-pagination {
   display: flex;

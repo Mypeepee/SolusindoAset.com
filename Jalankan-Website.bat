@@ -42,11 +42,14 @@ REM ============================================================
 set "HEAD_COMMIT="
 for /f "delims=" %%i in ('git rev-parse HEAD 2^>nul') do set "HEAD_COMMIT=%%i"
 
+set "BUILD_DIR=.next"
+for /f "delims=" %%i in ('node -e "try { process.stdout.write(JSON.parse(require('fs').readFileSync('.runtime/production-build.json','utf8')).directory) } catch {}"') do set "BUILD_DIR=%%i"
+
 set "BUILT_COMMIT="
-if exist ".next\.built-from-commit" set /p BUILT_COMMIT=<".next\.built-from-commit"
+if exist "%BUILD_DIR%\.built-from-commit" set /p BUILT_COMMIT=<"%BUILD_DIR%\.built-from-commit"
 
 set "PERLU_BUILD="
-if not exist ".next\BUILD_ID" set "PERLU_BUILD=1"
+if not exist "%BUILD_DIR%\BUILD_ID" set "PERLU_BUILD=1"
 if not "%HEAD_COMMIT%"=="%BUILT_COMMIT%" set "PERLU_BUILD=1"
 
 if not defined PERLU_BUILD goto :jalankan
@@ -99,7 +102,9 @@ if errorlevel 1 (
 )
 
 REM --- Catat commit yang dipakai build ini ---
-> ".next\.built-from-commit" echo %HEAD_COMMIT%
+set "BUILD_DIR=.next"
+for /f "delims=" %%i in ('node -e "try { process.stdout.write(JSON.parse(require('fs').readFileSync('.runtime/production-build.json','utf8')).directory) } catch {}"') do set "BUILD_DIR=%%i"
+> "%BUILD_DIR%\.built-from-commit" echo %HEAD_COMMIT%
 echo [OK] Build selesai untuk commit %HEAD_COMMIT%
 echo.
 

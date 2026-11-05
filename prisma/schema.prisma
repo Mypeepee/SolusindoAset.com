@@ -92,6 +92,7 @@ model Agent {
   disingkirkan            RekomendasiDisingkirkan[]
   ProspekDiabaikan        ProspekDiabaikan[]
   email_asisten           EmailAsisten[]
+  investorAlerts          InvestorOwnerAlert[]
 
   @@index([jabatan], map: "idx_agent_jabatan")
   @@index([nama_kantor], map: "idx_agent_kantor")
@@ -2719,6 +2720,33 @@ model MarketingCampaign {
   jobs MarketingJob[]
   reminders MarketingCampaignReminder[]
   @@map("marketing_campaigns")
+}
+
+/// One durable alert per owner and stable parcel identity, across source listing IDs.
+model InvestorOwnerAlert {
+  id String @id @default(uuid())
+  ownerId String @map("owner_id") @db.VarChar(20)
+  owner Agent @relation(fields: [ownerId], references: [id_agent], onDelete: Cascade)
+  assetKey String @map("asset_key")
+  listingId BigInt @map("listing_id")
+  recipient String
+  initialPrice Decimal @map("initial_price") @db.Decimal(24, 2)
+  currentPrice Decimal @map("current_price") @db.Decimal(24, 2)
+  dropPct Decimal @map("drop_pct") @db.Decimal(12, 8)
+  state String @default("retry")
+  attempts Int @default(0)
+  deliveryId String? @map("delivery_id")
+  claimedAt DateTime? @map("claimed_at") @db.Timestamptz(6)
+  lastAttemptAt DateTime? @map("last_attempt_at") @db.Timestamptz(6)
+  nextAttemptAt DateTime? @map("next_attempt_at") @db.Timestamptz(6)
+  messageId String? @map("message_id")
+  errorCode String? @map("error_code")
+  sentAt DateTime? @map("sent_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  @@unique([ownerId, assetKey])
+  @@index([ownerId, state])
+  @@map("investor_owner_alerts")
 }
 
 model MarketingCampaignReminder {

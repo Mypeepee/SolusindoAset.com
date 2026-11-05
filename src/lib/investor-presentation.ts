@@ -1,3 +1,24 @@
+import { jakartaDayStart } from "./investor-deals";
+
+/** Compare calendar dates in WIB, so today's auctions never become yesterday by hour. */
+export function investorAuctionCountdown(
+  value: string | null,
+  now = new Date(),
+) {
+  if (!value || !Number.isFinite(now.getTime())) return null;
+  const date = new Date(value.length === 10 ? `${value}T00:00:00+07:00` : value);
+  if (!Number.isFinite(date.getTime())) return null;
+  const days = Math.round(
+    (jakartaDayStart(date) - jakartaDayStart(now)) / 86_400_000,
+  );
+  return {
+    label: days === 0
+      ? "Hari ini"
+      : `${Math.abs(days).toLocaleString("id-ID")} hari ${days > 0 ? "lagi" : "lalu"}`,
+    state: days === 0 ? "today" : days > 0 ? "upcoming" : "past",
+  };
+}
+
 /** Discount colour describes savings only. Negative values are never a great deal. */
 export function investorDiscountTone(value: number | null) {
   if (value === null || !Number.isFinite(value)) return "unknown";

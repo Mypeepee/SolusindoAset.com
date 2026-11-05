@@ -293,5 +293,6 @@ app.prepare().then(() => {
     startPindaiSekitarScheduler(port)
     startBeritaScheduler(port)
     startMarketingScheduler(port)
+    require('./scripts/lib/investor-owner-alert-scheduler.cjs').startInvestorOwnerAlertScheduler(port)
   })
 })

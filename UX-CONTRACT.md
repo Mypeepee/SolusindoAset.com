@@ -136,6 +136,24 @@ bookmark centred and detail right, each with a 44px target. Lihat detail is a na
 existing detail dialog and restore focus. LocationStatus retains its warning and
 existing owner correction action.
 
+Auction cards expose their actual schedule in a single-line pill at the top-right
+of the photo. Compare calendar days in Asia/Jakarta: 10 November on 5 November is
+“5 hari lagi”; 1 November is “4 hari lalu”; any time today is “Hari ini”. Keep the
+source date in semantic time markup and its full localized accessible name/tooltip.
+The existing 60-second/visibility feed refresh keeps labels current. Do not invent
+a schedule for missing/invalid dates or expose auction labels on other transactions.
+
+Tandai terjual occupies a separate full-width card-footer row. Opening it never
+writes: the Investor DialogFrame confirmation identifies the selected source asset
+and explains that all matching historical listings are marked sold and leave the
+Investor feed. Focus Batal initially; cancel/Escape restore the invoking control.
+During the existing owner-only status PATCH, prevent duplicate submission and
+dismissal, retain button dimensions, and announce pending state. Failure keeps the
+asset and inline error available for retry; success closes the dialog, acknowledges
+the server response through Sonner, and refreshes the current feed. The confirmation
+uses the same status endpoint and matching scope; it introduces no new lifecycle
+transition or authorization rule. Browser verification intercepts every status write.
+
 The same exact numeric colour scale applies to both positive discounts: 0 white,
 0–30 exclusive muted, 30–50 inclusive orange, >50 red (excellent saving). Unknown
 is a grey dash; negative values are grey with Di atas/Naik text and must never

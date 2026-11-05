@@ -111,6 +111,18 @@ export async function sendCampaignReminderEmail(
     return { state: "unconfigured", errorCode: "SMTP_NOT_CONFIGURED" };
   const email = campaignReminderEmail(input);
   const messageId = `<campaign-reminder-${deliveryId}@solusindoaset.com>`;
+  return sendTrackedEmail(to, email, messageId);
+}
+
+/** Shared SMTP outcome handling for durable automatic notifications. */
+async function sendTrackedEmail(
+  to: string,
+  email: { subject: string; text: string; html: string },
+  messageId: string,
+  attachments?: nodemailer.SendMailOptions["attachments"],
+): Promise<CampaignReminderDelivery> {
+  if (!isMailConfigured())
+    return { state: "unconfigured", errorCode: "SMTP_NOT_CONFIGURED" };
   try {
     const result = await getTransport().sendMail({
       from: `"${BRAND}" <${GMAIL_USER}>`,
@@ -119,6 +131,7 @@ export async function sendCampaignReminderEmail(
       subject: email.subject,
       text: email.text,
       html: email.html,
+      attachments,
     });
     return result.accepted?.includes(to)
       ? { state: "sent", messageId: result.messageId || messageId }
@@ -1448,6 +1461,56 @@ export function rekomendasiPropertiEmailHtml(o: RekomendasiPropertiEmailOpts) {
         : `${total} properti yang cocok dengan kriteria Anda${o.ringkasKriteria ? ` — ${o.ringkasKriteria}` : ""}.`,
     content,
   });
+}
+
+export type InvestorOwnerEmailOpts = {
+  ownerName: string;
+  aset: RekomendasiPropertiItem[];
+  investorUrl: string;
+  lampiran?: { cid: string; content: Buffer }[];
+};
+
+/** Same photo/price/detail cards and shell as the client property email. */
+export function investorOwnerEmail(opts: InvestorOwnerEmailOpts) {
+  const name = esc(opts.ownerName.trim().split(/\s+/)[0] || "Owner");
+  const subject = `${opts.aset.length} aset lelang turun lebih dari 60% · ${BRAND}`;
+  const content = `
+    <tr><td bgcolor="${E.card}" style="padding:24px 28px 0;background-color:${E.card};">
+      <span style="display:inline-block;padding:7px 13px;border-radius:999px;background-color:${E.panel};color:${E.mint};font-size:10px;font-weight:800;letter-spacing:1.4px;">INVESTOR · NOTIFIKASI OWNER</span>
+      <h1 class="em-ink" style="margin:16px 0 0;font-size:25px;line-height:1.3;font-weight:800;color:${E.ink};">${opts.aset.length} aset lelang,<br>turun lebih dari 60%.</h1>
+      <p class="em-soft" style="margin:12px 0 0;font-size:13px;line-height:1.7;color:${E.inkSoft};">Halo ${name}, berikut aset yang memenuhi ambang turun lelang Anda. Penurunan dihitung dari harga lelang awal yang tercatat, bukan diskon kelurahan.</p>
+    </td></tr>
+    <tr><td bgcolor="${E.card}" style="padding:20px 28px 0;background-color:${E.card};">
+      ${opts.aset.map(propertyCard).join("")}
+    </td></tr>
+    <tr><td bgcolor="${E.card}" style="padding:8px 28px 4px;background-color:${E.card};">
+      <a href="${esc(opts.investorUrl)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background-color:${E.mint};color:${E.btnText};padding:12px 22px;border-radius:999px;font-size:13px;font-weight:800;text-decoration:none;">Buka Investor &nbsp;&rarr;</a>
+      <p class="em-mute" style="margin:12px 0 0;font-size:11px;line-height:1.65;color:${E.inkMute};">Aset yang sama hanya diberitahukan satu kali kepada setiap owner. Masuk ke akun owner untuk membuka halaman Investor.</p>
+    </td></tr>`;
+  return {
+    subject,
+    html: renderEmailShell({ title: subject, preheader: `${opts.aset.length} aset dengan penurunan lelang lebih dari 60%. Lihat harga awal, limit saat ini dan jadwalnya.`, content }),
+    text: [subject, "", `Halo ${opts.ownerName},`, "Penurunan dibandingkan harga lelang awal yang tercatat, bukan diskon kelurahan.", "",
+      ...opts.aset.map((item) => `${item.judul}\n${item.lokasi}\n${item.spesifikasi}\n${item.hargaSebelumnya}\nLimit saat ini: ${item.hargaTampil}\n${item.frasaTurun}\n${item.url}\n`),
+      `Buka Investor: ${opts.investorUrl}`, "Aset yang sama hanya diberitahukan satu kali kepada setiap owner.", BRAND,
+    ].join("\n"),
+  };
+}
+
+export async function sendInvestorOwnerEmail(
+  to: string,
+  opts: InvestorOwnerEmailOpts,
+  deliveryId: string,
+): Promise<CampaignReminderDelivery> {
+  return sendTrackedEmail(
+    to,
+    investorOwnerEmail(opts),
+    `<investor-alert-${deliveryId}@solusindoaset.com>`,
+    (opts.lampiran || []).map((photo) => ({
+      filename: `${photo.cid}.jpg`, content: photo.content, cid: photo.cid,
+      contentType: "image/jpeg", contentDisposition: "inline" as const,
+    })),
+  );
 }
 
 export async function sendRekomendasiPropertiEmail(

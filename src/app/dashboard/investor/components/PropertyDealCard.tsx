@@ -1,14 +1,25 @@
-import { ArrowRight, Bookmark, Calculator, MapPin, Ruler } from "lucide-react";
+import {
+  ArrowRight,
+  Bookmark,
+  Calculator,
+  MapPin,
+  Ruler,
+} from "lucide-react";
+import { CalendarIcon, CheckCircledIcon, UpdateIcon } from "@radix-ui/react-icons";
 import { Icon } from "@iconify/react";
 import { investorCardIcons } from "./investor-card-icons";
 import { PropertyCardFrame } from "@/components/property/PropertyCardFrame";
 import {
+  formatAuctionDate,
   formatRupiah,
   rentalPeriodLabel,
   type InvestorListing,
   type DealMetrics as Metrics,
 } from "@/lib/investor-deals";
-import { investorCertificateLabel } from "@/lib/investor-presentation";
+import {
+  investorAuctionCountdown,
+  investorCertificateLabel,
+} from "@/lib/investor-presentation";
 import InvestorPhotoGallery from "./InvestorPhotoGallery";
 import LocationStatus from "./LocationStatus";
 import { CompactDealMetrics } from "./DealMetrics";
@@ -17,6 +28,8 @@ export interface DealActions {
   onAnalyze: (listing: InvestorListing) => void;
   onView: (listing: InvestorListing) => void;
   onBookmark: (id: string) => void;
+  onMarkSold: (listing: InvestorListing) => void;
+  markingSold: boolean;
   onCorrectLocation?: (listing: InvestorListing) => void;
 }
 
@@ -53,6 +66,7 @@ export default function PropertyDealCard({
   listing,
   metrics,
   saved,
+  markingSold,
   ...actions
 }: {
   listing: InvestorListing;
@@ -63,10 +77,12 @@ export default function PropertyDealCard({
   const rent = listing.transactionType === "SEWA";
   const auction =
     !rent && (!listing.listingCategory || listing.listingCategory === "LELANG");
+  const countdown = auction ? investorAuctionCountdown(listing.auctionDate) : null;
   const address = fullListingAddress(listing);
   const certificate = investorCertificateLabel(listing.certificateType);
   const assetIcon =
-    investorCardIcons[listing.propertyType] || investorCardIcons.RUMAH;
+    investorCardIcons[listing.propertyType as keyof typeof investorCardIcons] ||
+    investorCardIcons.RUMAH;
   const categoryIcon = auction
     ? investorCardIcons.auction
     : rent
@@ -113,6 +129,17 @@ export default function PropertyDealCard({
             />
             {rent ? "SEWA" : listing.listingCategory || "LELANG"}
           </span>
+          {countdown && (
+            <time
+              className={`investor-card-auction-date is-${countdown.state}`}
+              dateTime={listing.auctionDate!}
+              title={`Lelang ${formatAuctionDate(listing.auctionDate)} · ${countdown.label}`}
+              aria-label={`Lelang ${formatAuctionDate(listing.auctionDate)}, ${countdown.label}`}
+            >
+              <CalendarIcon aria-hidden="true" />
+              <span>{countdown.label}</span>
+            </time>
+          )}
           <div className="investor-card-photo-meta">
             <span className="investor-card-type">
               <Icon
@@ -230,6 +257,26 @@ export default function PropertyDealCard({
                 <ArrowRight size={14} aria-hidden="true" />
               </span>
             </a>
+            <button
+              type="button"
+              className="investor-sold-action"
+              disabled={markingSold}
+              aria-busy={markingSold}
+              aria-haspopup="dialog"
+              aria-label={`Tandai terjual: ${address}`}
+              onClick={() => actions.onMarkSold(listing)}
+            >
+              <span className="investor-sold-label">
+                {markingSold ? "Menyimpan…" : "Tandai terjual"}
+              </span>
+              <span className="investor-sold-icon" aria-hidden="true">
+                {markingSold ? (
+                  <UpdateIcon className="investor-sold-spinner" />
+                ) : (
+                  <CheckCircledIcon />
+                )}
+              </span>
+            </button>
           </div>
         </div>
       </div>

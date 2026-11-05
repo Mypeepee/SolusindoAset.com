@@ -195,7 +195,7 @@ export interface DealMetrics {
   primaryType: InvestorListing["primaryDealType"];
   benchmark: KelurahanBenchmark | null;
 }
-export type DealSort = "score" | "spread" | "drop" | "price";
+export type DealSort = "score" | "spread" | "drop" | "price" | "auctionDate";
 export type DealView = "grid" | "table" | "map";
 export type DealDiscountMode = "either" | "market" | "auction";
 export interface DealFilters {
@@ -225,7 +225,10 @@ export function isolateTransactionFilters(filters: DealFilters): DealFilters {
         ...filters,
         listingCategory: "ALL",
         upcomingOnly: false,
-        sort: filters.sort === "drop" ? "score" : filters.sort,
+        sort:
+          filters.sort === "drop" || filters.sort === "auctionDate"
+            ? "score"
+            : filters.sort,
       }
     : filters;
 }
@@ -375,7 +378,7 @@ export function selectDeals(
   const words = normalize(query).split(/\s+/).filter(Boolean);
   const numericQuery = /^\d+$/.test(query);
   const saved = filters.savedOnly ? new Set(savedIds) : null;
-  const dayStart = filters.upcomingOnly ? jakartaDayStart(now) : 0;
+  const dayStart = jakartaDayStart(now);
   const matchesText = (listing: InvestorListing) => {
     if (!query) return true;
     if (numericQuery) return listing.id === query;
@@ -398,6 +401,10 @@ export function selectDeals(
         ? item.metricMarketSpreadPct
         : filters.sort === "price"
           ? item.pricePerSqm
+          : filters.sort === "auctionDate"
+            ? item.auctionDate && Date.parse(item.auctionDate) >= dayStart
+              ? Date.parse(item.auctionDate)
+              : null
           : item.primaryDealScore;
   return listings
     .filter((listing) => {
@@ -433,7 +440,7 @@ export function selectDeals(
       if (bv === null && av !== null) return -1;
       return (
         (av !== null && bv !== null
-          ? filters.sort === "price"
+          ? filters.sort === "price" || filters.sort === "auctionDate"
             ? av - bv
             : bv - av
           : 0) ||

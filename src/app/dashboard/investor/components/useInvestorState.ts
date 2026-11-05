@@ -33,7 +33,9 @@ function readState(params: URLSearchParams) {
       query: (params.get("q") || "").slice(0, 150),
       minSpread: percent(params.get("spread")),
       minDrop: percent(params.get("drop")),
-      sort: ["spread", "drop", "price"].includes(sort || "") ? sort : "score",
+      sort: ["spread", "drop", "price", "auctionDate"].includes(sort || "")
+        ? sort
+        : "score",
       savedOnly: params.get("saved") === "1",
       upcomingOnly: params.get("upcoming") === "1",
     } as DealFilters),

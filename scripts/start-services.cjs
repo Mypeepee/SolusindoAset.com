@@ -68,7 +68,8 @@ async function main() {
   if (await portOpen('127.0.0.1', websitePort)) {
     throw new Error(`Port ${websitePort} sudah dipakai. Hentikan proses website lama sebelum menjalankan npm start lagi.`);
   }
-  await require('./production-build.cjs').ensureProductionBuild();
+  const productionBuild = await require('./production-build.cjs').ensureProductionBuild();
+  process.env.NEXT_BUILD_DIR = path.basename(productionBuild.location);
 
   const botFile = path.join(root, 'backend', 'whatsapp', '.env');
   if (fs.existsSync(botFile) && !process.argv.includes('--website-only')) {

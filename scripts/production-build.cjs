@@ -16,7 +16,19 @@ function buildPath(root, directory) {
   return resolved;
 }
 
-function productionBuildStatus(root = workspace, directory = process.env.NEXT_BUILD_DIR || '.next') {
+function activeBuildDirectory(root) {
+  const pointer = path.join(root, '.runtime', 'production-build.json');
+  try {
+    const directory = JSON.parse(fs.readFileSync(pointer, 'utf8')).directory;
+    if (typeof directory === 'string' && /^\.next-release-[a-zA-Z0-9._-]+$/.test(directory)) {
+      return fs.existsSync(buildPath(root, directory)) ? directory : '.next';
+    }
+  } catch {}
+  return '.next';
+}
+
+function productionBuildStatus(root = workspace, directory) {
+  directory = directory || process.env.NEXT_BUILD_DIR || activeBuildDirectory(root);
   const location = buildPath(root, directory);
   const missing = [];
   try { if (!fs.readFileSync(path.join(location, 'BUILD_ID'), 'utf8').trim()) missing.push('BUILD_ID'); }
@@ -62,8 +74,9 @@ function compile(root, directory) {
   });
 }
 
-async function ensureProductionBuild({ root = workspace, directory = process.env.NEXT_BUILD_DIR || '.next',
+async function ensureProductionBuild({ root = workspace, directory,
   force = false, build = compile } = {}) {
+  directory = process.env.NEXT_BUILD_DIR || directory || activeBuildDirectory(root);
   const current = productionBuildStatus(root, directory);
   if (current.ok && !force) return current;
   const port = Number(process.env.PORT || process.env.port || 3000);
@@ -89,22 +102,36 @@ async function ensureProductionBuild({ root = workspace, directory = process.env
     await build(root, stage);
     const ready = productionBuildStatus(root, stage);
     if (!ready.ok) throw new Error(`Hasil build belum lengkap: ${ready.missing.join(', ')}`);
+    const revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', windowsHide: true });
+    if (revision.status === 0) fs.writeFileSync(path.join(stagePath, '.built-from-commit'), revision.stdout.trim() + '\n');
     // Keep the old directory until the replacement has passed validation.
     const backup = path.resolve(root, '.local-backups', `build-${Date.now()}-${process.pid}`, 'previous-next');
     if (!backup.startsWith(path.resolve(root, '.local-backups') + path.sep)) throw new Error('Lokasi backup tidak aman.');
     let archived = false;
     if (fs.existsSync(current.location)) {
       fs.mkdirSync(path.dirname(backup), { recursive: true });
-      fs.renameSync(current.location, backup);
-      archived = true;
+      try {
+        fs.renameSync(current.location, backup);
+        archived = true;
+      } catch (error) {
+        if (!['EPERM', 'EACCES', 'EBUSY'].includes(error.code)) throw error;
+        const release = `.next-release-${Date.now()}-${process.pid}`;
+        const releasePath = buildPath(root, release);
+        fs.renameSync(stagePath, releasePath);
+        fs.writeFileSync(path.join(runtime, 'production-build.json'), JSON.stringify({ directory: release }) + '\n');
+        console.warn(`[build] Windows mengunci build lama; memakai build berversi ${release} tanpa memindahkan .next.`);
+        return productionBuildStatus(root, release);
+      }
     }
     try { fs.renameSync(stagePath, current.location); }
     catch (error) {
       if (archived && !fs.existsSync(current.location)) fs.renameSync(backup, current.location);
       throw error;
     }
-    const revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', windowsHide: true });
-    if (revision.status === 0) fs.writeFileSync(path.join(current.location, '.built-from-commit'), revision.stdout.trim() + '\n');
+    if (directory === '.next') {
+      try { fs.unlinkSync(path.join(runtime, 'production-build.json')); }
+      catch (error) { if (error.code !== 'ENOENT') throw error; }
+    }
     console.log('[build] Build produksi lengkap dan siap dijalankan.');
     return productionBuildStatus(root, directory);
   } finally {
@@ -125,7 +152,7 @@ async function ensureProductionBuild({ root = workspace, directory = process.env
   }
 }
 
-module.exports = { ensureProductionBuild, productionBuildStatus, buildPath };
+module.exports = { ensureProductionBuild, productionBuildStatus, buildPath, activeBuildDirectory };
 if (require.main === module) {
   process.env.NODE_ENV = 'production';
   require('@next/env').loadEnvConfig(workspace, false);

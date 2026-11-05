@@ -24,6 +24,7 @@ const SORTS: { value: DealSort; label: string; shortLabel?: string }[] = [
     shortLabel: "Turun lelang",
   },
   { value: "price", label: "Harga/m² terendah" },
+  { value: "auctionDate", label: "Jadwal lelang terdekat" },
 ];
 
 /** Scope, status and sorting share one compact row with the Filter trigger. */
@@ -104,7 +105,8 @@ export default function InvestorResultControls({
           onChange={(value) => updateFilters({ sort: value as DealSort })}
           options={SORTS.filter(
             (item) =>
-              filters.transactionType !== "SEWA" || item.value !== "drop",
+              filters.transactionType !== "SEWA" ||
+              (item.value !== "drop" && item.value !== "auctionDate"),
           ).map((item) => ({ ...item, id: `investor-sort-${item.value}` }))}
         />
       </div>

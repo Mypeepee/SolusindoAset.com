@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const net = require('node:net');
 const { pathToFileURL } = require('node:url');
-const { ensureProductionBuild, productionBuildStatus, buildPath } = require('./production-build.cjs');
+const { ensureProductionBuild, productionBuildStatus, buildPath, activeBuildDirectory } = require('./production-build.cjs');
 const temporaryRoot = path.resolve(__dirname, '../.runtime');
 fs.mkdirSync(temporaryRoot, { recursive: true });
 
@@ -72,6 +72,29 @@ test('a successful replacement archives the previous build', async (t) => {
   const archive = fs.readdirSync(path.join(root, '.local-backups'))[0];
   assert.equal(fs.readFileSync(path.join(root, '.local-backups', archive, 'previous-next/BUILD_ID'), 'utf8'), 'previous-build');
   assert.equal(fs.readFileSync(path.join(root, '.next/BUILD_ID'), 'utf8'), 'new-build');
+});
+
+test('a Windows-locked old build activates the validated versioned build instead', async (t) => {
+  const root = fixture(t); build(root, '.next', 'locked-build');
+  const rename = fs.renameSync;
+  fs.renameSync = (source, destination) => {
+    if (source === path.join(root, '.next') && destination.endsWith(path.join('previous-next'))) {
+      const error = new Error('simulated Windows directory lock');
+      error.code = 'EPERM';
+      throw error;
+    }
+    return rename(source, destination);
+  };
+  try {
+    const ready = await ensureProductionBuild({ root, force: true, build: async (dir, stage) => build(dir, stage, 'versioned-build') });
+    assert.equal(ready.ok, true);
+    assert.match(path.basename(ready.location), /^\.next-release-/);
+    assert.equal(activeBuildDirectory(root), path.basename(ready.location));
+    assert.equal(productionBuildStatus(root).ok, true);
+    assert.equal(fs.readFileSync(path.join(root, '.next/BUILD_ID'), 'utf8'), 'locked-build');
+  } finally {
+    fs.renameSync = rename;
+  }
 });
 
 test('a live build lock prevents two compilers from changing production simultaneously', async (t) => {

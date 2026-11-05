@@ -1,13 +1,13 @@
 // src/lib/auctionMatch.ts
 //
-// ⚠️ Modul ini HANYA dipakai jalur tulis "tandai TERJUAL" di
-// /api/closing/listing/[id]/save. Pencocokannya sengaja jauh lebih sempit
-// daripada mesin riwayat, karena salah cocok di sini berarti listing orang
-// lain ikut ditandai terjual dan hilang dari etalase.
+// Modul ini dipakai oleh jalur closing dan aksi tandai-terjual Investor.
+// Pencocokannya sengaja jauh lebih sempit daripada mesin riwayat, karena salah
+// cocok di sini berarti listing aset lain ikut ditandai terjual dan hilang.
 //
 // Untuk MENAMPILKAN riwayat lelang, pakai @/lib/auctionHistory: pencocokannya
 // mentoleransi kelurahan kosong/typo, cakupan bidang yang berbeda, dan
-// menggabungkan listing kembar. Jangan tambahkan pemakai baru di modul ini.
+// menggabungkan listing kembar. Pemakai tulis wajib memakai matcher ketat ini,
+// bukan matcher riwayat yang lebih longgar.
 //
 // BEDANYA DENGAN VERSI LAMA
 // Dulu nomor sertifikat dibandingkan sebagai STRING MENTAH

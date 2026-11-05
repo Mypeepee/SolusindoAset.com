@@ -7,6 +7,7 @@ import {
   Search,
   TriangleAlert,
 } from "lucide-react";
+import { toast } from "sonner";
 import {
   calculateDealMetrics,
   DEFAULT_DEAL_THRESHOLD,
@@ -20,6 +21,7 @@ import PropertyDealCard from "./PropertyDealCard";
 import DealDialogs, { type DealDialogState } from "./DealDialogs";
 import InvestorFilters from "./InvestorFilters";
 import LocationCorrectionDialog from "./LocationCorrectionDialog";
+import MarkSoldDialog from "./MarkSoldDialog";
 import InvestorSummary from "./InvestorSummary";
 import { useInvestorState } from "./useInvestorState";
 import { useInvestorFeed } from "./useInvestorFeed";
@@ -54,6 +56,10 @@ export default function InvestorDashboard({
   );
   const resultsRef = useRef<HTMLElement>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [markingSoldId, setMarkingSoldId] = useState<string | null>(null);
+  const [soldTarget, setSoldTarget] = useState<InvestorListing | null>(null);
+  const [soldError, setSoldError] = useState<string | null>(null);
+  const savingSoldRef = useRef(false);
   const [recoveredSearch, setRecoveredSearch] = useState<string | null>(null);
   const searchKey = JSON.stringify({ ...filters, dataState: undefined });
   const scopeRecovered =
@@ -79,10 +85,51 @@ export default function InvestorDashboard({
     onView: (listing: InvestorListing) =>
       setDialog({ kind: "listing", listing }),
     onBookmark: toggleBookmark,
+    onMarkSold: (listing: InvestorListing) => {
+      if (savingSoldRef.current) return;
+      setSoldError(null);
+      setSoldTarget(listing);
+    },
     onCorrectLocation: (listing: InvestorListing) => {
       setDialog(null);
       setLocationTarget(listing);
     },
+  };
+  const confirmSold = async () => {
+    if (!soldTarget || savingSoldRef.current) return;
+    const listing = soldTarget;
+    savingSoldRef.current = true;
+    setSoldError(null);
+    setMarkingSoldId(listing.id);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 30000);
+    try {
+      const response = await fetch(
+        `/api/dashboard/investor/${encodeURIComponent(listing.id)}/status`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "TERJUAL" }),
+          signal: controller.signal,
+        },
+      );
+      const result = await response.json();
+      if (!response.ok)
+        throw new Error(result.error || "Gagal menandai aset terjual.");
+      toast.success(result.message || "Aset berhasil ditandai terjual.");
+      setSoldTarget(null);
+      refresh();
+    } catch (error) {
+      setSoldError(
+        error instanceof Error && error.name !== "AbortError"
+          ? error.message
+          : "Permintaan melewati batas waktu. Muat ulang untuk memeriksa status aset.",
+      );
+    } finally {
+      window.clearTimeout(timeout);
+      savingSoldRef.current = false;
+      setMarkingSoldId(null);
+    }
   };
   const changeTransaction = (transactionType: TransactionType) => {
     setDialog(null);
@@ -139,7 +186,7 @@ export default function InvestorDashboard({
     });
   return (
     <main className="investor-surface investor-dashboard mx-auto max-w-[1600px] py-6 sm:py-8">
-      <h1 className="sr-only" id="investor-heading">
+      <h1 className="sr-only" id="investor-heading" tabIndex={-1}>
         Investor Deals
       </h1>
       <InvestorSummary
@@ -150,7 +197,7 @@ export default function InvestorDashboard({
         paused={
           loading ||
           Boolean(error) ||
-          Boolean(dialog || locationTarget) ||
+          Boolean(dialog || locationTarget || soldTarget) ||
           advancedOpen
         }
       />
@@ -296,6 +343,7 @@ export default function InvestorDashboard({
                 metrics={metrics}
                 rank={(data.page - 1) * data.pageSize + index + 1}
                 saved={savedIds.includes(listing.id)}
+                markingSold={markingSoldId === listing.id}
                 {...actions}
               />
             ))}
@@ -358,6 +406,18 @@ export default function InvestorDashboard({
           per akun di browser ini.
         </p>
       </footer>
+      {soldTarget && (
+        <MarkSoldDialog
+          key={soldTarget.id}
+          listing={soldTarget}
+          saving={markingSoldId !== null}
+          error={soldError}
+          onConfirm={confirmSold}
+          onClose={() => {
+            if (!savingSoldRef.current) setSoldTarget(null);
+          }}
+        />
+      )}
       <LocationCorrectionDialog
         listing={locationTarget}
         onClose={() => setLocationTarget(null)}

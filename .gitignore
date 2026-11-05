@@ -54,6 +54,7 @@ backend/keys/
 /.next-staging/
 /.next-dev/
 /.next-build-*/
+/.next-release-*/
 
 # Local runtime, database backups and service logs
 .runtime/

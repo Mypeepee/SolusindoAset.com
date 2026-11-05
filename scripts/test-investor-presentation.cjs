@@ -3,9 +3,29 @@ const assert = require("node:assert/strict");
 const { NextRequest } = require("next/server");
 const createLoader = require("./lib/investor-test-loader.cjs");
 const load = createLoader();
-const { investorDiscountTone, investorCertificateLabel, compactInvestorPages } =
+const { investorDiscountTone, investorCertificateLabel, compactInvestorPages, investorAuctionCountdown } =
   load("src/lib/investor-presentation.ts");
 const { investorPhotoUrls } = load("src/lib/investor-deals-row.server.ts");
+const todayWib = new Date("2026-11-05T23:59:59+07:00");
+for (const [date, label, state] of [
+  ["2026-11-10", "5 hari lagi", "upcoming"],
+  ["2026-11-01", "4 hari lalu", "past"],
+  ["2026-11-05T00:01:00+07:00", "Hari ini", "today"],
+  ["2026-11-05T17:00:00Z", "1 hari lagi", "upcoming"],
+  ["2026-11-04T17:00:00Z", "Hari ini", "today"],
+  ["2026-11-04T16:59:59Z", "1 hari lalu", "past"],
+]) {
+  const actual = investorAuctionCountdown(date, todayWib);
+  assert.equal(actual.label, label);
+  assert.equal(actual.state, state);
+}
+assert.equal(investorAuctionCountdown(null, todayWib), null);
+assert.equal(investorAuctionCountdown("invalid-date", todayWib), null);
+assert.equal(investorAuctionCountdown("2026-11-10", new Date("invalid")), null);
+assert.equal(
+  investorAuctionCountdown("2027-01-01", new Date("2026-12-31T23:59:59+07:00")).label,
+  "1 hari lagi",
+);
 for (const [value, expected] of [
   [null, "unknown"],
   [NaN, "unknown"],
