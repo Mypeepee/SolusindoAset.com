@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleDriveService } from '@/lib/services/google-drive.service';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions';
+import { DriveUploadError } from '@/lib/server/googleDrivePool.mjs';
+
+export const runtime = 'nodejs';
+export const maxDuration = 120;
 
 export async function POST(request: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) return NextResponse.json({ error: 'Silakan masuk untuk mengunggah foto.' }, { status: 401 });
+  if (!session.user.agentId) return NextResponse.json({ error: 'Upload foto properti hanya tersedia untuk agent.' }, { status: 403 });
   try {
     const formData = await request.formData();
     
@@ -66,10 +75,10 @@ export async function POST(request: NextRequest) {
     if (error instanceof Error) {
       return NextResponse.json(
         { 
-          error: 'Failed to upload images',
-          details: error.message 
+          error: error instanceof DriveUploadError ? error.message : 'Gagal mengunggah gambar. Silakan coba lagi.',
+          details: error instanceof DriveUploadError ? error.message : undefined,
         },
-        { status: 500 }
+        { status: error instanceof DriveUploadError ? error.status : 500 }
       );
     }
     

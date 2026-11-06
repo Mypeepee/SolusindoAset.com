@@ -5,10 +5,10 @@ export { requestsMouDocument } from './closing_state.js';
 export const MAX_PDF_BYTES = 4 * 1024 * 1024;
 export const MOU_CAPTION = 'Saya lampirkan draf MOU aset pilihan Anda. Mulai dari Pasal 3 untuk biaya pendampingan, Pasal 4 untuk tanda jadi dan jaminan lelang, Pasal 9 untuk pembatalan, lalu Pasal 11 untuk pengembalian dana jika kalah. Data yang belum lengkap ditandai di dokumen; ketentuannya bisa dibahas bersama tim sebelum disetujui.';
 
-export function shouldSendMouDocument({ asset, conversion, history = [], text = '', selectedAssetId = null }) {
+export function shouldSendMouDocument({ asset, conversion, history = [], text = '', selectedAssetId = null, budgetFitAccepted = false }) {
   if (!asset || conversion?.mode !== CLOSING_STATE || conversion.asset_id !== asset.id ||
       conversion.stock_status === 'sold' || conversion.outcome || requestsClosingExit(text) ||
-      /\b(?:jangan|tidak|gak|nggak|belum)\b/i.test(text)) return false;
+      !budgetFitAccepted && /\b(?:jangan|tidak|gak|nggak|belum)\b/i.test(text)) return false;
   const requested = requestsMouDocument(text);
   if (conversion.draft_document?.asset_id === asset.id && !requested) return false;
   // This is a reading copy, not the signing/handoff state. Explicit requests

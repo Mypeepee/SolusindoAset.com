@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import { ocrKTP } from "@/lib/ocrKtp";
 import type { SuratTemplate } from "./data";
+import { downloadSurat } from "@/lib/suratDownload";
+import { toast } from "sonner";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -208,7 +210,10 @@ export function TandaTerimaModal({ open, template, onClose }: Props) {
     setPropFetching(true);
     try {
       const res = await fetch("/api/surat/transaksi-list");
-      if (res.ok) setProps((await res.json()) as PropertyItem[]);
+      if (!res.ok) throw new Error("Daftar properti gagal dimuat. Anda tetap bisa mengisi alamat secara manual.");
+      setProps((await res.json()) as PropertyItem[]);
+    } catch (cause) {
+      setErrorMsg(cause instanceof Error ? cause.message : "Gagal memuat properti. Isi alamat secara manual atau coba lagi.");
     } finally { setPropFetching(false); }
   }, []);
 
@@ -217,7 +222,7 @@ export function TandaTerimaModal({ open, template, onClose }: Props) {
   // OCR
   const runOcr = async (file?: File) => {
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { alert("Ukuran file maksimal 10 MB."); return; }
+    if (file.size > 10 * 1024 * 1024) { setErrorMsg("Ukuran file maksimal 10 MB."); return; }
     if (ktpImg) URL.revokeObjectURL(ktpImg);
     setKtpImg(URL.createObjectURL(file));
     setKtpFilename(file.name);
@@ -272,25 +277,11 @@ export function TandaTerimaModal({ open, template, onClose }: Props) {
     if (!canGenerate || isGenerating) return;
     setIsGenerating(true); setErrorMsg("");
     try {
-      const res = await fetch("/api/surat/generate-tanda-terima", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(values),
-      });
-      if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as { detail?: string };
-        setErrorMsg(err.detail ?? "Gagal generate tanda terima. Coba lagi.");
-        return;
-      }
-      const disp = res.headers.get("Content-Disposition") ?? "";
-      const filename = disp.match(/filename="([^"]+)"/)?.[1] ?? "TandaTerima.pdf";
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = filename; a.click();
-      URL.revokeObjectURL(url);
+      await downloadSurat("/api/surat/generate-tanda-terima", values, "TandaTerima.pdf");
+      toast.success("Dokumen berhasil dibuat. Unduhan PDF dimulai.");
       onClose();
-    } catch (e) {
-      console.error(e);
-      setErrorMsg("Gagal menghubungi server. Coba lagi.");
+    } catch (cause) {
+      setErrorMsg(cause instanceof Error ? cause.message : "Gagal membuat dokumen. Coba lagi.");
     } finally { setIsGenerating(false); }
   };
 

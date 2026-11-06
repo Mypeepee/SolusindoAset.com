@@ -7,6 +7,7 @@ import { SURABAYA_REGIONS, nearbyQueryParts } from "../../../backend/whatsapp/se
 import { normalNama, kelasDariKata, tebakKelasDariNama, KELAS_TEMPAT, RADIUS_JANGKAUAN } from "../tempat/normalisasi.ts";
 import { nearbyNameWhere } from "../nearbyNameWhere.ts";
 import { auctionFreshnessCutoff, freshAuctionWhere, isFreshAuction } from "../../../backend/whatsapp/services/auction_freshness.js";
+import { auctionCostEstimate, saleCostEstimate } from "../../../backend/whatsapp/services/property_costs.js";
 
 // This is the entire database surface available to the chatbot. Never use
 // include: true, SELECT *, an LLM-generated query, or a user-selected column.
@@ -33,7 +34,7 @@ export type BuyerCriteria = { location: string; city?: string | null; province?:
   transaction_type?: PublicRow["jenis_transaksi"] | null; min_price?: number | null;
   transaction_types?: NonNullable<PublicRow["jenis_transaksi"]>[];
   rental_period?: "HARIAN" | "MINGGUAN" | "BULANAN" | "TAHUNAN";
-  max_price?: number | null; purpose?: "live" | "investment" | "both" | null;
+  max_price?: number | null; min_total_budget?: number | null; max_total_budget?: number | null; purpose?: "live" | "investment" | "both" | null;
   sort_by?: "price_asc";
   min_land_area_m2?: number | null; max_land_area_m2?: number | null;
   upcoming_auction_only?: boolean; exclude_ids?: string[] };
@@ -86,7 +87,7 @@ function fullAddress(address: { street: string | null; village: string | null; d
 export function isBuyerCriteria(value: unknown): value is BuyerCriteria {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const c = value as Record<string, unknown>;
-  if (Object.keys(c).some((key) => !["location", "locations", "cities", "route_landmarks", "certificate_types", "legal_requirements", "special_requirements", "city", "province", "district", "village", "region_group", "nearby", "category", "categories", "transaction_type", "transaction_types", "rental_period", "min_price", "max_price", "purpose", "sort_by", "min_land_area_m2", "max_land_area_m2", "upcoming_auction_only", "exclude_ids"].includes(key)) ||
+  if (Object.keys(c).some((key) => !["location", "locations", "cities", "route_landmarks", "certificate_types", "legal_requirements", "special_requirements", "city", "province", "district", "village", "region_group", "nearby", "category", "categories", "transaction_type", "transaction_types", "rental_period", "min_price", "max_price", "min_total_budget", "max_total_budget", "purpose", "sort_by", "min_land_area_m2", "max_land_area_m2", "upcoming_auction_only", "exclude_ids"].includes(key)) ||
     typeof c.location !== "string" || !c.location.trim() || c.location.length > 100 || !publicText(c.location)) return false;
   const categories = ["RUMAH", "APARTEMEN", "RUKO", "TANAH", "GUDANG", "HOTEL_DAN_VILLA", "TOKO", "PABRIK", "KOS"];
   for (const field of ["locations", "cities", "route_landmarks", "legal_requirements"]) {
@@ -121,9 +122,10 @@ export function isBuyerCriteria(value: unknown): value is BuyerCriteria {
   for (const field of ["city", "province", "district", "village"]) if (c[field] != null && (typeof c[field] !== "string" || !(c[field] as string).trim() || (c[field] as string).length > 100 || !publicText(c[field]))) return false;
   if (c.upcoming_auction_only != null && (typeof c.upcoming_auction_only !== "boolean" || (c.upcoming_auction_only && c.transaction_type !== "LELANG"))) return false;
   if (c.exclude_ids != null && (!Array.isArray(c.exclude_ids) || c.exclude_ids.length > 64 || c.exclude_ids.some((id) => typeof id !== "string" || !ID.test(id)))) return false;
-  for (const key of ["min_price", "max_price"]) if (c[key] != null && (typeof c[key] !== "number" || !Number.isSafeInteger(c[key]) || Number(c[key]) <= 0 || Number(c[key]) > 1e15)) return false;
+  for (const key of ["min_price", "max_price", "min_total_budget", "max_total_budget"]) if (c[key] != null && (typeof c[key] !== "number" || !Number.isSafeInteger(c[key]) || Number(c[key]) <= 0 || Number(c[key]) > 1e15)) return false;
   for (const key of ["min_land_area_m2", "max_land_area_m2"]) if (c[key] != null && (typeof c[key] !== "number" || !Number.isFinite(c[key]) || Number(c[key]) <= 0 || Number(c[key]) > 1e9)) return false;
   return (c.min_price == null || c.max_price == null || Number(c.min_price) <= Number(c.max_price)) &&
+    (c.min_total_budget == null || c.max_total_budget == null || Number(c.min_total_budget) <= Number(c.max_total_budget)) &&
     (c.min_land_area_m2 == null || c.max_land_area_m2 == null || Number(c.min_land_area_m2) <= Number(c.max_land_area_m2));
 }
 
@@ -313,12 +315,22 @@ export async function getPropertyKnowledge(db: Database, input: { text: string; 
   const publicMatches = { ...where };
   if (!plan.ids.length) where.AND = [...(Array.isArray(where.AND) ? where.AND : []), freshAuctionWhere(now)];
   const rankAuctions = recommended && (criteria.transaction_types ? criteria.transaction_types.includes("LELANG") : !criteria.transaction_type || criteria.transaction_type === "LELANG");
-  const cheapestFirst = criteria?.sort_by === "price_asc";
+  const cheapestFirst = criteria?.sort_by === "price_asc" || !!criteria?.max_total_budget;
   let selection: { schedule_priority: "upcoming" | "needs_confirmation" | "standard"; sort_by?: "price_asc" } = { schedule_priority: "standard" };
   const preferredOrder = (order: Prisma.ListingOrderByWithRelationInput[]): Prisma.ListingOrderByWithRelationInput[] =>
     cheapestFirst ? [{ harga_efektif: "asc" }, ...order.filter((item) => !("harga_efektif" in item))] : order;
-  const query = (filter: Prisma.ListingWhereInput, orderBy: Prisma.ListingOrderByWithRelationInput[]) =>
-    db.listing.findMany({ where: filter, select: PUBLIC_PROPERTY_SELECT, take: 5, orderBy: preferredOrder(orderBy) });
+  const query = async (filter: Prisma.ListingWhereInput, orderBy: Prisma.ListingOrderByWithRelationInput[]) => {
+    const rows = await db.listing.findMany({ where: filter, select: PUBLIC_PROPERTY_SELECT,
+      take: criteria?.max_total_budget ? 64 : 5, orderBy: preferredOrder(orderBy) });
+    if (!criteria?.max_total_budget) return rows;
+    // Total affordability is evaluated from the same costs shown in chat,
+    // before selecting cards. A listing-price ceiling alone is insufficient.
+    return rows.filter(row => {
+      const asset = mapPublicProperty(row, now);
+      const total = asset.transaction_type === 'LELANG' ? auctionCostEstimate(asset)?.total_execution : saleCostEstimate(asset)?.total_max;
+      return total != null && total <= criteria.max_total_budget!;
+    }).slice(0, 5);
+  };
   let rows: PublicRow[];
   if (rankAuctions && !criteria.upcoming_auction_only) {
     // Apply the same budget/location/public filters to both passes. A cheap old
@@ -343,7 +355,7 @@ export async function getPropertyKnowledge(db: Database, input: { text: string; 
   // listings. Diagnose old/missing auction schedules with the SAME criteria;
   // keep those lots out of automatic recommendations and do not relax price.
   let diagnostics: { reason: "auction_schedule_unverified" } | undefined;
-  if (recommended && !properties.length && !criteria.upcoming_auction_only &&
+  if (recommended && !properties.length && !criteria.max_total_budget && !criteria.upcoming_auction_only &&
       (!criteria.transaction_type || criteria.transaction_type === "LELANG") &&
       (!criteria.transaction_types || criteria.transaction_types.includes("LELANG"))) {
     const cutoff = auctionFreshnessCutoff(now);

@@ -24,6 +24,8 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { auctionFreshnessCutoff, freshAuctionWhere, isFreshAuction } from "../../backend/whatsapp/services/auction_freshness.js";
 import { kunciDiskon, type LokasiDiskon, type MetrikDiskon } from "@/lib/preferensiDiskon";
+import { intiNamaKota, keluargaKota, regionValueVariants } from "@/lib/regionMatch";
+import { masalahIndukLokasi } from "@/lib/preferensiLokasi";
 export { kunciDiskon } from "@/lib/preferensiDiskon";
 import type {
   jenis_transaksi_enum,
@@ -150,10 +152,10 @@ const angka = (v: Prisma.Decimal | number | null | undefined): number | null =>
   v === null || v === undefined ? null : Number(v);
 
 /* ── Lokasi ────────────────────────────────────────────────────────────────
-   Preferensi menyimpan empat tingkat, dan yang mengikat adalah yang PALING
-   SPESIFIK yang terisi. Orang yang menulis "Kecamatan Driyorejo" sudah
-   menjawab pertanyaan kotanya; mencocokkan keduanya sekaligus cuma menambah
-   cara untuk gagal saat ejaan kota di listing berbeda tipis. */
+   Tingkat paling spesifik dipakai sebagai label/diagnosa. Seluruh induk yang
+   tersimpan tetap membatasi pencocokan: nama kecamatan/kelurahan tidak unik. */
+
+const KOLOM_LOKASI = ["provinsi", "kota", "kecamatan", "kelurahan"] as const;
 
 export type TingkatLokasi = "kelurahan" | "kecamatan" | "kota" | "provinsi" | "bebas";
 
@@ -251,6 +253,7 @@ export function bentukDiminta(tipe: kategori_properti_enum | null): boolean | nu
 export function normLok(s?: string | null): string {
   return (s ?? "")
     .toString()
+    .trim()
     .toLowerCase()
     .replace(/^(kota|kab\.?|kabupaten|kotamadya|kec\.?|kecamatan|kel\.?|kelurahan|desa)\s+/, "")
     .replace(/[^a-z0-9]/g, "")
@@ -263,6 +266,7 @@ export function normLok(s?: string | null): string {
 function teksCari(s?: string | null): string {
   return (s ?? "")
     .toString()
+    .trim()
     .toLowerCase()
     .replace(/^(kota|kab\.?|kabupaten|kotamadya|kec\.?|kecamatan|kel\.?|kelurahan|desa|prov\.?|provinsi)\s+/i, "")
     .replace(/[^a-z0-9\s]/g, "")
@@ -339,6 +343,7 @@ function susunWhere(k: KriteriaMatch, opsi: OpsiMatch, saringTanggal: boolean): 
      `where.OR` akan MENIMPA gerbang budget tanpa satu pun galat — plafon
      harga klien hilang diam-diam dan hasilnya terlihat "cuma agak longgar". */
   const dan: Prisma.ListingWhereInput[] = saringTanggal ? [freshAuctionWhere(opsi.now)] : [];
+  if (longgar !== "lokasi" && masalahIndukLokasi(k)) dan.push({ id_property: { in: [] } });
   // Apply before take: a discounted match must not disappear outside the pool.
   if (k.diskon_jenis) dan.push({ id_property: { in: [...(k.diskon_ids || [])].map(id => BigInt(id)) } });
 
@@ -465,23 +470,25 @@ function susunWhere(k: KriteriaMatch, opsi: OpsiMatch, saringTanggal: boolean): 
      di layar preferensi sementara pencarian biasa menemukan 23 — tanpa satu
      pun galat, karena secara teknis semuanya "berhasil".
 
-     Sekarang tingkat yang MENGIKAT itulah yang disaring, dengan teknik yang
-     sama persis yang sudah dipakai kota: `contains` atas inti namanya. Itu
+     Sekarang setiap tingkat tersimpan ikut disaring. Kota memakai varian
+     nama eksak; tingkat lain memakai `contains` atas inti namanya. Itu
      tetap superset yang aman — "Wiyung" ikut menarik "Wiyung Utara" — karena
      yang MEMUTUSKAN tetap `lolosKetat()` dengan perbandingan ternormalisasi
      di tahap kedua. Yang berubah cuma satu: kolamnya kini berisi kandidat
      yang relevan, bukan yang kebetulan terbaru. */
   if (longgar !== "lokasi") {
-    const lok = tingkatLokasi(k);
-    const inti = teksCari(lok.nilai);
-    /* Istilah sangat pendek dilewati: `contains` dua huruf menarik terlalu
-       banyak yang tidak relevan dan tidak menghemat apa pun. */
-    if (inti.length >= 3) {
-      const cocok = { contains: inti, mode: "insensitive" as const };
-      if (lok.tingkat === "kelurahan") where.kelurahan = cocok;
-      else if (lok.tingkat === "kecamatan") where.kecamatan = cocok;
-      else if (lok.tingkat === "kota") where.kota = cocok;
-      else if (lok.tingkat === "provinsi") where.provinsi = cocok;
+    for (const kolom of KOLOM_LOKASI) {
+      const nilai = k[`loc_${kolom}`];
+      if (kolom === "kota" && nilai) {
+        // Keep Kota/Kabupaten distinct before take, including spelling aliases.
+        where.kota = { in: regionValueVariants(nilai, "kota"), mode: "insensitive" };
+        continue;
+      }
+      const inti = teksCari(nilai);
+      // Filter parents before the candidate limit, so namesakes cannot fill it.
+      if (inti.length >= 3) {
+        where[kolom] = { contains: inti, mode: "insensitive" as const };
+      }
     }
   }
 
@@ -570,16 +577,20 @@ function lolosKriteria(l: Parameters<typeof lolosKetat>[0], k: KriteriaMatch, op
 
   if (k.diskon_jenis && !k.diskon_ids?.has(String(l.id_property))) return false;
 
-  // ── Lokasi: hanya tingkat TERDALAM yang diisi yang mengikat ──
+  // ── Lokasi: wilayah DAN seluruh induk yang diketahui harus cocok ──
   if (longgar !== "lokasi") {
-    const kel = normLok(k.loc_kelurahan);
-    const kec = normLok(k.loc_kecamatan);
-    const kot = normLok(k.loc_kota);
-    const prov = normLok(k.loc_provinsi);
-    if (kel) { if (normLok(l.kelurahan) !== kel) return false; }
-    else if (kec) { if (normLok(l.kecamatan) !== kec) return false; }
-    else if (kot) { if (normLok(l.kota) !== kot) return false; }
-    else if (prov) { if (normLok(l.provinsi) !== prov) return false; }
+    if (masalahIndukLokasi(k)) return false;
+    for (const kolom of KOLOM_LOKASI) {
+      const dipilih = k[`loc_${kolom}`];
+      if (!dipilih) continue;
+      const aktual = l[kolom];
+      if (kolom === "kota") {
+        const jenisDipilih = keluargaKota(dipilih);
+        const jenisAktual = keluargaKota(aktual || "");
+        if (jenisDipilih && jenisAktual && jenisDipilih !== jenisAktual) return false;
+        if (normLok(intiNamaKota(aktual || "")) !== normLok(intiNamaKota(dipilih))) return false;
+      } else if (normLok(aktual) !== normLok(dipilih)) return false;
+    }
   }
 
   // ── Budget ──

@@ -1,6 +1,8 @@
 import { normalizeText } from '../lib/security.js';
 import { hasDetailLink } from './recommendations.js';
 import { hitungBiayaLelang, formatPersen } from './auction_cost_policy.js';
+import { AUCTION_BUDGET_QUESTION } from './budget_response.js';
+export { AUCTION_BUDGET_QUESTION } from './budget_response.js';
 
 // Website, PDFs and chatbot share this service's business cost policy.
 const money = (value) => `Rp ${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(value)}`;
@@ -83,7 +85,7 @@ function auctionReply(asset, estimate, now) {
     '_Angka di atas estimasi, belum termasuk pajak & biaya lain di luar daftar. Tarif dan kebutuhan pengosongan perlu dikonfirmasi sesuai aset._',
     '_Nominal dibulatkan ke rupiah. Uang jaminan bagian pembayaran harga, bukan biaya tambahan. Harga menang dapat melebihi limit._');
   if (hasDetailLink(asset)) lines.push('', '🔗 Detail aset:', asset.detail_url);
-  lines.push('', 'Apakah Bapak/Ibu ingin saya jelaskan kondisi aset dan cara melihatnya dari luar?');
+  lines.push('', AUCTION_BUDGET_QUESTION);
   if (asset.is_demo) lines.unshift('*SIMULASI — bukan penawaran nyata.*', '');
   return lines.join('\n');
 }

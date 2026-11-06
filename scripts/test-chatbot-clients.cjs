@@ -44,6 +44,11 @@ test('client endpoint accepts multi-type, flexible land and compound landmarks',
   assert.equal(isClientCapture(capture()), true);
   assert.equal(isClientCapture({ ...capture(), name: null, criteria: { ...criteria, category: null, categories: ['RUMAH', 'RUKO'], min_land_area_m2: null, nearby: { query: 'sekolah dan pintu tol', radius_m: 1000 } } }), true);
 });
+test('client endpoint preserves a total-budget range and rejects an inverted range', () => {
+  const total = { ...criteria, min_price: null, min_total_budget: 400000000, max_total_budget: 500000000 };
+  assert.equal(isClientCapture({ ...capture(), criteria: total }), true);
+  assert.equal(isClientCapture({ ...capture(), criteria: { ...total, min_total_budget: 600000000 } }), false);
+});
 
 function authFixture(agent, session = { user: { id: 'owner-user', jabatan: 'OWNER' } }) {
   const load = loader({ 'next-auth': { getServerSession: async () => session },

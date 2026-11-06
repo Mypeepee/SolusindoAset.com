@@ -4,6 +4,9 @@ import { Suspense, useState, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Icon } from "@iconify/react";
+import { toast } from "sonner";
+import { downloadSurat } from "@/lib/suratDownload";
+import { SURAT_ENDPOINTS } from "@/lib/suratGeneration";
 import { suratTemplates, type SuratTemplate } from "./components/data";
 
 /**
@@ -693,30 +696,8 @@ function SuratContent() {
         template={selectedTemplate?.id === "invoice-solusindo" ? selectedTemplate : null}
         onClose={() => setSelectedTemplate(null)}
         onSubmit={async ({ values }) => {
-          const res = await fetch("/api/surat/generate-invoice", {
-            method:  "POST",
-            headers: { "Content-Type": "application/json" },
-            body:    JSON.stringify(values),
-          });
-
-          if (!res.ok) {
-            const err = (await res.json().catch(() => ({}))) as { detail?: string };
-            alert(err.detail ?? "Gagal generate invoice. Coba lagi.");
-            return;
-          }
-
-          const disposition = res.headers.get("Content-Disposition") ?? "";
-          const nameMatch   = disposition.match(/filename="([^"]+)"/);
-          const filename    = nameMatch?.[1] ?? "Invoice.docx";
-
-          const blob = await res.blob();
-          const url  = URL.createObjectURL(blob);
-          const a    = document.createElement("a");
-          a.href     = url;
-          a.download = filename;
-          a.click();
-          URL.revokeObjectURL(url);
-
+          await downloadSurat("/api/surat/generate-invoice", values, "Invoice.pdf");
+          toast.success("Invoice berhasil dibuat. Unduhan PDF dimulai.");
           setSelectedTemplate(null);
         }}
       />
@@ -748,44 +729,11 @@ function SuratContent() {
         template={!MODAL_KHUSUS.includes(selectedTemplate?.id ?? "") ? selectedTemplate : null}
         onClose={() => setSelectedTemplate(null)}
         onSubmit={async ({ template, values }) => {
-          // Saat ini hanya template Akte Grosse yang punya generate PDF
-          if (template.id !== "permohonan-akte-grosse") {
-            setSelectedTemplate(null);
-            return;
-          }
-
-          try {
-            const res = await fetch("/api/surat/generate-akta-grosse", {
-              method:  "POST",
-              headers: { "Content-Type": "application/json" },
-              body:    JSON.stringify(values),
-            });
-
-            if (!res.ok) {
-              const err = (await res.json().catch(() => ({}))) as { detail?: string };
-              alert(err.detail ?? "Gagal generate surat. Coba lagi.");
-              return;
-            }
-
-            // Ambil nama file dari Content-Disposition header
-            const disposition = res.headers.get("Content-Disposition") ?? "";
-            const nameMatch   = disposition.match(/filename="([^"]+)"/);
-            const filename    = nameMatch?.[1] ?? "Permohonan_AktaGrosse.pdf";
-
-            // Trigger download di browser
-            const blob = await res.blob();
-            const url  = URL.createObjectURL(blob);
-            const a    = document.createElement("a");
-            a.href     = url;
-            a.download = filename;
-            a.click();
-            URL.revokeObjectURL(url);
-
-            setSelectedTemplate(null);
-          } catch (e) {
-            console.error(e);
-            alert("Gagal menghubungi server. Pastikan dev server berjalan.");
-          }
+          const endpoint = SURAT_ENDPOINTS[template.id];
+          if (!endpoint) throw new Error("Jenis surat ini belum memiliki layanan pembuatan dokumen.");
+          await downloadSurat(endpoint, values, "Surat.pdf");
+          toast.success("Surat berhasil dibuat. Unduhan PDF dimulai.");
+          setSelectedTemplate(null);
         }}
       />
     </div>

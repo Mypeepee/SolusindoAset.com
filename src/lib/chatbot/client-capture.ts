@@ -36,7 +36,7 @@ export async function captureClientWithinTransaction(tx: Prisma.TransactionClien
     ...(existing && !existing.chatbot_nomor_whatsapp ? { nomor_whatsapp: phone } : {}),
     chatbot_nomor_whatsapp: phone, chatbot_lokasi: criteria.location, chatbot_kota: criteria.city,
     chatbot_wilayah: criteria.region_group || null,
-    chatbot_budget_min: criteria.min_price ?? null, chatbot_budget_max: criteria.max_price ?? null,
+    chatbot_budget_min: criteria.min_total_budget ?? criteria.min_price ?? null, chatbot_budget_max: criteria.max_total_budget ?? criteria.max_price ?? null,
     chatbot_jenis_aset: criteria.categories || (criteria.category ? [criteria.category] : []),
     chatbot_jenis_transaksi: criteria.transaction_types || (criteria.transaction_type ? [criteria.transaction_type] : []),
     chatbot_luas_tanah_min: criteria.min_land_area_m2 ?? null, chatbot_luas_tanah_max: criteria.max_land_area_m2 ?? null,

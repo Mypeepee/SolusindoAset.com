@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { MessageProcessor } from '../../services/message_processor.js';
 import { MemoryStore } from '../../state/memory_store.js';
 import { INTRODUCTION_MESSAGE } from '../../services/client_identity.js';
+import { nonBuyerHandoffReason, NON_BUYER_HANDOVER_MESSAGE } from '../../services/conversation_purpose.js';
 
 export const propertySearchSamples = [
   'Pak tolong carikan saya aset property',
@@ -135,6 +136,13 @@ export async function simulatePropertyScope() {
       if (phase === 'saat kualifikasi') await f.send('Cari rumah lelang di Benowo Surabaya budget 500 juta');
       const reads = f.reads.length, calls = f.calls.length;
       const previous = f.session() && structuredClone({ asset_id: f.session().asset_id, buyer: f.session().buyer_state, identity: f.session().client_identity });
+      if (nonBuyerHandoffReason(text)) {
+        assert.deepEqual(await f.send(text), [NON_BUYER_HANDOVER_MESSAGE]);
+        assert.equal(f.reads.length, reads); assert.equal(f.calls.length, calls);
+        assert.equal(f.session().is_bot_active, false);
+        assert.deepEqual(await f.send('425 juta'), []);
+        return;
+      }
       assert.deepEqual(await f.send(text), [], 'Urusan lain harus diabaikan tanpa balasan');
       assert.equal(f.reads.length, reads, 'Urusan lain tidak boleh membaca katalog');
       assert.equal(f.calls.length, calls, 'Urusan lain tidak boleh membuat jawaban AI');

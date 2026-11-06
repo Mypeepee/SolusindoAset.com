@@ -13,6 +13,64 @@ Jalankan `npm run simulate:consultation` untuk
 
 Backend sekarang memakai **Baileys** sebagai koneksi default. Pasangkan WhatsApp melalui QR atau kode pairing di halaman lokal. Pengaturan Meta Developers, webhook publik, dan ngrok tidak diperlukan. Pilihan OpenAI/Gemini, prompt konsultan lelang, kalkulasi ROI, konteks percakapan, dan handover CS tetap tersedia.
 
+## Pemicu awal WhatsApp
+
+Bot WhatsApp hanya memulai percakapan dari template website yang diawali
+`Halo <nama agen>` dan `Saya tertarik dengan properti lelang berikut, apakah masih tersedia?`,
+disertai link detail properti HTTPS di `solusindoaset.com` atau `www.solusindoaset.com`.
+Template jual dengan kalimat `properti berikut` juga didukung. Emoji boleh berbeda
+atau rusak; nama agen, judul, harga, dan kode tertentu tidak dikunci.
+Sapaan biasa, kode aset, link saja, permintaan pencarian, dan template tanpa link
+diabaikan sebagai pesan pembuka, tanpa balasan, pencarian database, atau panggilan AI.
+
+Pengecualian khusus: pesan kuasa hukum, pembelian kembali aset, urusan aset yang
+sudah dibeli, komunikasi pribadi ke Jason, serta tugas lain di luar properti
+mendapat satu pemberitahuan bahwa pengirim sedang berbicara dengan asisten virtual
+dan Jason akan menangani pesannya. Bot lalu dijeda sampai diaktifkan manual.
+Pengecualian ini tidak membuka izin pencarian tanpa template website. Pemeriksaan
+tujuan berlaku juga setelah pembuka sah atau pada sesi pencarian lama; kata
+“aset”, “beli”, atau “lelang” tidak cukup untuk menganggap pengirim calon pembeli.
+Lihat [tujuan percakapan dan pengalihan ke Jason](docs/conversation-purpose.md).
+
+ID aset dibaca dari link, lalu detail/statusnya diperiksa melalui katalog yang sama
+seperti sebelumnya. Link ke halaman selain detail listing atau domain tiruan
+tidak membuka layanan. Setelah template diterima, pertanyaan lanjutan tentang
+harga, biaya, kondisi, survei, alternatif, dan proses pembelian mengikuti alur lama.
+Status handover tetap dihormati. Izin percakapan dan aset pilihan tersimpan saat
+restart. Calon pembeli yang sudah masuk dari link dapat melanjutkan selama
+7 hari tanpa pesan klien (`PROPERTY_INQUIRY_IDLE_DAYS`, bisa 1–30 hari); sesudah
+batas tersebut, pembuka berisi link diperlukan kembali. Batas sesi umum 45 menit
+tetap berlaku pada sesi tanpa pembuka website, bukan memutus calon pembeli
+terverifikasi saat membalas esok pagi. Aturan ini berlaku untuk WhatsApp utama,
+WhatsApp setiap agen, dan webhook Cloud API melalui konfigurasi layanan.
+Playground dan simulasi alur internal tetap dapat menguji percakapan tanpa filter
+pembuka WhatsApp ini. Setelah mengubah kode, restart backend yang berjalan dengan
+`npm start` atau service agar kebijakan baru dimuat.
+
+Jenis pertanyaan terakhir yang benar-benar terkirim ikut disimpan, tanpa seluruh
+riwayat chat. “Ya” setelah detail aset dan tawaran biaya akan melanjutkan rincian
+biaya walaupun dibalas esok hari atau setelah restart. Jawaban lain yang terkirim
+sesudahnya membatalkan pertanyaan lama, sehingga “Ya” tidak menghidupkan kembali
+persetujuan lama. Harga/status tetap dibaca ulang dari listing. Jeda manusia tetap
+dihormati. Uji dengan `node --test test/overnight_followup.test.js` dari folder backend.
+
+Setelah rincian biaya lelang, bot menanyakan kecocokan estimasi total dengan
+anggaran klien. Jawaban “terlalu tinggi” membuka pertanyaan kisaran budget total;
+“oke cocok” langsung membuka alur draf MOU untuk dipelajari dan mengirim PDF
+satu kali. Variasi bahasa dibaca secara lokal, lalu memakai tafsiran AI
+terstruktur jika belum jelas; keraguan tetap meminta klarifikasi.
+Lihat [alur budget](docs/asset-consultation.md#pemahaman-jawaban-budget) dan
+jalankan `npm run simulate:budget` untuk simulasi offline tanpa kiriman nyata.
+
+Jika klien menyebut budget baru, bot merangkum daerah dan jenis properti dari link
+asal lalu meminta konfirmasi. “Iya” atau koreksi seperti “apartemen saja” langsung
+mencari dengan kriteria tersebut dan menyimpan klien di CRM. “Minim luasan 100”
+menambah batas **luas tanah** 100 m²; kriteria lain dipertahankan dan klien yang
+sama diperbarui. Kelurahan yang tidak tercantum tidak ditebak. Lihat
+[alur kriteria dari link](docs/asset-consultation.md#kriteria-dari-link-dan-koreksi-klien)
+dan jalankan `npm run simulate:linked-search`. Opsi `-- --database --property=31551`
+menguji katalog serta penyimpanan database nyata dengan rollback seluruh data uji.
+
 Modul [Conversion to Purchase](docs/conversion-to-purchase.md) menambahkan
 `Search_State` → `Closing_State`, penjelasan SOP satu tahap per balasan, prompt
 closing dengan few-shot, kalkulasi DP di backend, objection refund, penyimpanan
@@ -50,6 +108,10 @@ dipahami sebagai Rp400–600 juta atau batas Rp600 juta. Bot menyebut kembali
 nominal lengkap lalu menanyakan kriteria yang belum dijawab. Satuan eksplisit
 selalu diutamakan; angka luas tanah tidak menjadi budget. Konteks sewa,
 transaksi yang belum dipilih, serta angka seperti “1–2” tetap meminta satuan.
+Ukuran tanah seperti “7,5 x 15” atau “7,5 meter dikalikan 15 meter” dibaca sebagai
+112,5 m². Jika batas belum disebut, bot meminta penjelasan minimal/maksimal/persis
+dan menyimpan angkanya. Jawaban “batas minimal” memakai ukuran yang sudah disebut,
+termasuk setelah ukuran dikoreksi menjadi “+/- 120 meter persegi”.
 Jawaban “semua boleh” mengikuti kriteria yang sedang ditanyakan. Jika jenis dan
 luas ditanyakan bersama, keduanya menjadi bebas; lokasi, transaksi, dan budget
 yang sudah diketahui tetap disimpan. “Rumah kalau ada tanah gapapa” memilih
@@ -110,7 +172,8 @@ tetap dibedakan dari pilihan aset; dua pilihan meminta klarifikasi. Data aset
 dibaca ulang dari katalog sebelum ditampilkan. Jalankan `npm run simulate:selections`
 untuk [simulasi variasi bahasa dan perjalanan Menganti](docs/simulasi-pilihan-nomor.md).
 
-Sapaan awal mengundang klien menyebut nama dan cara disapa, misalnya Pak Budi,
+Dalam alur setelah pemicu WhatsApp atau pengujian Playground, sapaan mengundang
+klien menyebut nama dan cara disapa, misalnya Pak Budi,
 Bu Rina, Kak Alex, atau nama saja. Bot mengikuti pilihan eksplisit, tanpa
 menebak gender dari nama atau sapaan yang ditujukan kepada bot. Klien boleh
 melewati perkenalan dan langsung mencari properti. `client_identity` disimpan
@@ -175,19 +238,25 @@ ulang otomatis tanpa membuka koneksi WhatsApp. `WHATSAPP_BACKEND_URL` website ha
 layanan biasa beserta pemulihan sesi WhatsApp.
 
 `services/interaction_policy.js` memeriksa pesan **sebelum** pencarian database
-atau LLM. Sapaan awal mengundang perkenalan. Stiker/media tanpa konteks dan
-pesan di luar properti tidak menghasilkan kiriman, termasuk pesan pertamanya.
+atau LLM. Pada simulasi tanpa filter website, sapaan awal mengundang perkenalan.
+Pada WhatsApp utama, pembuka website tetap diperlukan untuk pencarian properti.
+Stiker/media tanpa konteks tidak menghasilkan kiriman. Pesan yang jelas meminta
+urusan lain menggunakan pemberitahuan pengalihan satu kali pada konfigurasi live.
 `services/property_scope.js` membedakan tugas properti dari invoice pekerjaan,
 rapat, lamaran, desain website, sewa kendaraan, serta topik lain walaupun menyebut
 rumah, nama kota, nominal uang, lokasi, atau jadwal. Pesan yang diabaikan tidak
-masuk konteks pencarian berikutnya, mengubah filter, atau memicu handoff. Dalam
+masuk konteks pencarian berikutnya atau mengubah filter. Dalam
 pesan campuran, hanya klausa properti yang dipakai untuk lokasi dan budget.
 Bahasa yang belum dikenali aturan lokal dapat diklasifikasikan oleh AI dengan
 bukti kutipan pesan, keluaran terstruktur, pembatalan, dan batas waktu 12 detik.
+Keluaran `human` membedakan urusan kuasa hukum/pihak lama dari calon pembeli baru.
+Pesan perwakilan yang ambigu diperiksa walaupun mengandung kata properti; jika
+penafsir tidak tersedia, bot mengalihkan ke Jason dan tidak menebak kebutuhan.
 Kegagalan klasifikasi mempertahankan keputusan lokal; tidak mengarang maksud baru.
 Lihat [simulasi pembatasan topik](docs/simulasi-scope-properti.md).
-Kode/template/link atau permintaan natural seperti “bisa tolong carikan saya
-aset di Manukan kah pak?” membuka layanan. Sapaan/partikel di akhir kalimat
+Setelah pemicu WhatsApp diterima, kode/link atau permintaan natural seperti
+“bisa tolong carikan saya aset di Manukan kah pak?” dapat melanjutkan layanan.
+Playground dapat menguji permintaan ini langsung. Sapaan/partikel di akhir kalimat
 tidak menjadi filter lokasi. Pernyataan “saya tertarik di Manukan” juga membuka
 pencarian: bot memastikan kota/kabupaten terlebih dahulu, tanpa menebak Surabaya.
 Jika klien baru menyebut “Kota Surabaya”, bot menanyakan kawasan/kecamatan dan

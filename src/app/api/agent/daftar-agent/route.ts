@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
+import { googleDrive } from "@/lib/server/googleDrive";
 import { status_agent_enum } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { notifyNewAgentRegistration } from "@/lib/notifications";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -66,190 +69,22 @@ async function compressImageIfPossible(
   }
 }
 
-/* ---------------- Google Drive helpers ---------------- */
-
-function assertDriveEnv() {
-  const miss: string[] = [];
-  if (!process.env.GOOGLE_DRIVE_CLIENT_ID) miss.push("GOOGLE_DRIVE_CLIENT_ID");
-  if (!process.env.GOOGLE_DRIVE_CLIENT_SECRET) miss.push("GOOGLE_DRIVE_CLIENT_SECRET");
-  if (!process.env.GOOGLE_DRIVE_REFRESH_TOKEN) miss.push("GOOGLE_DRIVE_REFRESH_TOKEN");
-  if (!process.env.GDRIVE_PARENT_FOLDER_ID) miss.push("GDRIVE_PARENT_FOLDER_ID");
-
-  if (miss.length) {
-    throw new Error(`ENV Google Drive belum lengkap. Kurang: ${miss.join(", ")}`);
-  }
-}
-
-async function sleep(ms: number) {
-  await new Promise((r) => setTimeout(r, ms));
-}
-
-async function getGoogleAccessToken() {
-  assertDriveEnv();
-
-  const client_id = process.env.GOOGLE_DRIVE_CLIENT_ID!;
-  const client_secret = process.env.GOOGLE_DRIVE_CLIENT_SECRET!;
-  const refresh_token = process.env.GOOGLE_DRIVE_REFRESH_TOKEN!;
-
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id,
-      client_secret,
-      refresh_token,
-      grant_type: "refresh_token",
-    }),
-  });
-
-  const data = await res.json().catch(() => ({} as any));
-  if (!res.ok || !data?.access_token) {
-    throw new Error(data?.error_description || "Gagal mendapatkan access_token Google.");
-  }
-  return data.access_token as string;
-}
-
-/**
- * fetch wrapper + retry untuk error 5xx Google Drive yang sering intermittent.
- */
-async function driveFetch(accessToken: string, url: string, init?: RequestInit) {
-  const maxRetry = 4;
-
-  for (let attempt = 0; attempt < maxRetry; attempt++) {
-    const res = await fetch(url, {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        ...(init?.headers || {}),
-      },
-    });
-
-    if (res.ok) return res;
-
-    const status = res.status;
-    const txt = await res.text().catch(() => "");
-
-    const isRetryable = status >= 500 && status <= 599;
-
-    if (!isRetryable || attempt === maxRetry - 1) {
-      throw new Error(`Google Drive error ${status}: ${txt.slice(0, 600)}`);
-    }
-
-    const backoff = 600 * Math.pow(2, attempt) + Math.floor(Math.random() * 250);
-    await sleep(backoff);
-  }
-
-  throw new Error("Google Drive error: retry exhausted");
-}
-
-async function findFolder(accessToken: string, parentId: string, name: string) {
-  const q = [
-    `mimeType='application/vnd.google-apps.folder'`,
-    `name='${name.replace(/'/g, "\\'")}'`,
-    `'${parentId}' in parents`,
-    `trashed=false`,
-  ].join(" and ");
-
-  const url = new URL("https://www.googleapis.com/drive/v3/files");
-  url.searchParams.set("q", q);
-  url.searchParams.set("fields", "files(id,name)");
-  url.searchParams.set("pageSize", "1");
-  url.searchParams.set("supportsAllDrives", "true");
-  url.searchParams.set("includeItemsFromAllDrives", "true");
-
-  const res = await driveFetch(accessToken, url.toString(), { method: "GET" });
-  const data = await res.json().catch(() => ({} as any));
-  return data?.files?.[0]?.id as string | undefined;
-}
-
-async function createFolder(accessToken: string, parentId: string, name: string) {
-  const url = new URL("https://www.googleapis.com/drive/v3/files");
-  url.searchParams.set("supportsAllDrives", "true");
-
-  const res = await driveFetch(accessToken, url.toString(), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name,
-      mimeType: "application/vnd.google-apps.folder",
-      parents: [parentId],
-    }),
-  });
-  const data = await res.json().catch(() => ({} as any));
-  return data.id as string;
-}
-
-async function getOrCreateFolder(accessToken: string, parentId: string, name: string) {
-  const found = await findFolder(accessToken, parentId, name);
-  if (found) return found;
-  return createFolder(accessToken, parentId, name);
-}
-
-async function uploadFileMultipart(params: {
-  accessToken: string;
-  parentFolderId: string;
-  filename: string;
-  mimeType: string;
-  buffer: Buffer;
-}) {
-  const boundary = "-------314159265358979323846";
-  const metadata = { name: params.filename, parents: [params.parentFolderId] };
-
-  const multipartBody = Buffer.concat([
-    Buffer.from(`--${boundary}\r\n`),
-    Buffer.from(`Content-Type: application/json; charset=UTF-8\r\n\r\n`),
-    Buffer.from(`${JSON.stringify(metadata)}\r\n`),
-
-    Buffer.from(`--${boundary}\r\n`),
-    Buffer.from(`Content-Type: ${params.mimeType}\r\n\r\n`),
-    params.buffer,
-    Buffer.from(`\r\n--${boundary}--`),
-  ]);
-
-  const uploadUrl = new URL("https://www.googleapis.com/upload/drive/v3/files");
-  uploadUrl.searchParams.set("uploadType", "multipart");
-  uploadUrl.searchParams.set("fields", "id");
-  uploadUrl.searchParams.set("supportsAllDrives", "true");
-
-  const res = await driveFetch(params.accessToken, uploadUrl.toString(), {
-    method: "POST",
-    headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
-    body: multipartBody as any,
-  });
-
-  const data = await res.json().catch(() => ({} as any));
-  return data.id as string; // ✅ FILE ID
-}
-
-async function makeFilePublic(accessToken: string, fileId: string) {
-  const permUrl = new URL(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`);
-  permUrl.searchParams.set("supportsAllDrives", "true");
-
-  await driveFetch(accessToken, permUrl.toString(), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ role: "reader", type: "anyone" }),
-  });
-}
-
+/* Drive selection, quota, OAuth refresh and folders live in the shared pool. */
 // ✅ untuk response/preview saja (DB tidak simpan url)
 function publicDriveUrlFromId(fileId: string) {
   return `https://drive.google.com/uc?id=${fileId}`;
 }
 
-async function deleteDriveFile(accessToken: string, fileId: string) {
-  const url = new URL(`https://www.googleapis.com/drive/v3/files/${fileId}`);
-  url.searchParams.set("supportsAllDrives", "true");
-  await driveFetch(accessToken, url.toString(), { method: "DELETE" });
-}
-
 /* ---------------- Route ---------------- */
 
 export async function POST(req: Request) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) return jsonError("Silakan masuk untuk mengunggah dokumen pendaftaran.", 401);
   try {
     const fd = await req.formData();
 
     const id_pengguna = String(fd.get("id_pengguna") || "").trim();
+    if (id_pengguna !== session.user.id) return jsonError("Dokumen hanya dapat diunggah untuk akun sendiri.", 403);
     const nama_lengkap = String(fd.get("nama_lengkap") || "").trim();
     const email = String(fd.get("email") || "").trim() || null;
 
@@ -334,21 +169,12 @@ export async function POST(req: Request) {
     // fileId dokumen lama yang akan dihapus dari Drive setelah upsert sukses
     // (hanya terisi kalau ada penggantian file)
     const oldFileIdsToDelete: string[] = [];
-    let driveAccessToken: string | null = null;
+
 
     const hasNewFiles = Boolean(foto_ktp || foto_npwp || foto_profil);
 
     if (hasNewFiles) {
-      // Upload to Google Drive
-      const parentFolderId = process.env.GDRIVE_PARENT_FOLDER_ID;
-      if (!parentFolderId) return jsonError("ENV GDRIVE_PARENT_FOLDER_ID belum di-set.", 500);
-
-      const accessToken = await getGoogleAccessToken();
-      driveAccessToken = accessToken;
-
-      // folder per user (biar rapi)
       const folderName = slugify(nama_lengkap) || `user_${id_pengguna}`;
-      const targetFolderId = await getOrCreateFolder(accessToken, parentFolderId, folderName);
 
       // ✅ upload helper: return fileId saja (yang disimpan ke DB)
       async function uploadOne(file: File, prefix: string, compressProfile = false) {
@@ -362,15 +188,8 @@ export async function POST(req: Request) {
 
         const filename = `${prefix}_${crypto.randomUUID()}.${ext}`;
 
-        const fileId = await uploadFileMultipart({
-          accessToken,
-          parentFolderId: targetFolderId,
-          filename,
-          mimeType: contentType,
-          buffer,
-        });
-
-        await makeFilePublic(accessToken, fileId);
+        const { fileId } = await googleDrive.upload({ buffer, name: filename, mimeType: contentType,
+          purpose: "agents", folders: [folderName], publicRead: true });
 
         return { fileId }; // ✅ hanya fileId
       }
@@ -441,11 +260,10 @@ export async function POST(req: Request) {
 
     // ✅ Bersihkan dokumen lama di Google Drive yang sudah diganti (best-effort,
     // tidak boleh sampai menggagalkan response karena data DB sudah tersimpan).
-    if (driveAccessToken && oldFileIdsToDelete.length) {
-      const token = driveAccessToken;
+    if (oldFileIdsToDelete.length) {
       await Promise.all(
         oldFileIdsToDelete.map((fileId) =>
-          deleteDriveFile(token, fileId).catch((e) =>
+          googleDrive.deleteFile(fileId).catch((e) =>
             console.warn(`Gagal menghapus file lama di Drive (${fileId}):`, e)
           )
         )

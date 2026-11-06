@@ -23,7 +23,7 @@ function formatTanggal(d: Date): string {
 }
 
 function composeNomor(idTransaksi: string, d: Date): string {
-  const seq = String(Number(idTransaksi) || 1).padStart(3, "0");
+  const seq = String(idTransaksi.match(/\d+/)?.[0] || "1").padStart(3, "0");
   return `${seq}/INV/SP-SBY/${BULAN_ID[d.getMonth()]}/${d.getFullYear()}`;
 }
 
@@ -58,11 +58,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ detail: "Field wajib belum lengkap." }, { status: 400 });
     }
 
-    const nilaiNum = parseInt(String(nilai).replace(/\D/g, ""), 10) || 0;
+    if (!/^\d+$/.test(nilai) || !Number.isSafeInteger(Number(nilai)) || Number(nilai) <= 0)
+      return NextResponse.json({ detail: "Nilai invoice harus berupa rupiah bulat positif." }, { status: 400 });
+    const nilaiNum = Number(nilai);
     const nilaiFormatted = `Rp ${nilaiNum.toLocaleString("id-ID")}`;
 
-    const now = new Date();
-    const nomor_invoice = composeNomor(id_transaksi, now);
+    const transaction = await prisma.transaksi.findUnique({
+      where: { id_transaksi }, select: { mou: { select: { id: true } } },
+    });
+    if (!transaction) return NextResponse.json({ detail: "Transaksi tidak ditemukan." }, { status: 404 });
+    let now = new Date();
+    const nomor_invoice = composeNomor(String(transaction.mou.id), now);
+    const existing = await prisma.invoice.findUnique({ where: { id_invoice: nomor_invoice } });
+    if (existing) {
+      if (existing.id_transaksi !== id_transaksi || existing.nominal !== BigInt(nilaiNum)
+        || existing.ditagihkan_ke !== nama_pembeli.trim() || existing.keterangan !== keterangan.trim())
+        return NextResponse.json({ detail: "Nomor invoice sudah tercatat dengan isian berbeda. Periksa invoice yang sudah ada." }, { status: 409 });
+      now = existing.tanggal_invoice;
+    }
     const tanggal = formatTanggal(now);
 
     const templatePath = path.join(
@@ -83,23 +96,21 @@ export async function POST(req: Request) {
 
     const pdfBuffer = await docxToPdf(docxBuffer);
 
-    await prisma.invoice.create({
+    if (!existing) await prisma.invoice.create({
       data: {
         id_invoice:      nomor_invoice,
-        id_transaksi:    BigInt(id_transaksi),
+        id_transaksi:    id_transaksi,
         ditagihkan_ke:   nama_pembeli.trim(),
         keterangan:      keterangan.trim(),
         nominal:         BigInt(nilaiNum),
         tanggal_invoice: now,
       },
-    }).catch((e) => {
-      console.warn("[generate-invoice] Gagal simpan ke DB:", e);
     });
 
     const safeNomor = nomor_invoice.replace(/[^a-zA-Z0-9]/g, "_");
     const filename = `Invoice_${safeNomor}.pdf`;
 
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(new Uint8Array(pdfBuffer), {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
@@ -107,6 +118,8 @@ export async function POST(req: Request) {
       },
     });
   } catch (e: unknown) {
+    if ((e as { code?: string })?.code === "P2002")
+      return NextResponse.json({ detail: "Nomor invoice untuk transaksi ini sudah ada. Pilih invoice yang sudah tercatat untuk membuat kuitansi." }, { status: 409 });
     console.error("[generate-invoice]", e);
     const msg = e instanceof Error ? e.message : "Gagal generate invoice.";
     return NextResponse.json({ detail: msg }, { status: 500 });

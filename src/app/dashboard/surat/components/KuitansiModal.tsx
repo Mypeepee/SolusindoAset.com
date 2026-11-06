@@ -14,6 +14,8 @@ import {
   X,
 } from "lucide-react";
 import type { SuratTemplate } from "./data";
+import { downloadSurat } from "@/lib/suratDownload";
+import { toast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -64,6 +66,7 @@ export function KuitansiModal({ open, template, onClose }: Props) {
   const [selectedInv, setSelectedInv] = useState<InvoiceItem | null>(null);
   const [search, setSearch]           = useState("");
   const [listOpen, setListOpen]       = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -78,6 +81,7 @@ export function KuitansiModal({ open, template, onClose }: Props) {
 
   useEffect(() => {
     if (!open) {
+      setErrorMsg("");
       setSelectedInv(null);
       setSearch("");
       setListOpen(false);
@@ -96,7 +100,10 @@ export function KuitansiModal({ open, template, onClose }: Props) {
     setIsFetching(true);
     try {
       const res = await fetch("/api/surat/invoice-list");
-      if (res.ok) setInvoiceList(await res.json() as InvoiceItem[]);
+      if (!res.ok) throw new Error("Daftar invoice gagal dimuat. Tutup dan buka kembali form untuk mencoba lagi.");
+      setInvoiceList(await res.json() as InvoiceItem[]);
+    } catch (cause) {
+      setErrorMsg(cause instanceof Error ? cause.message : "Gagal menghubungi server.");
     } finally {
       setIsFetching(false);
     }
@@ -110,36 +117,13 @@ export function KuitansiModal({ open, template, onClose }: Props) {
 
   const handleSubmit = async () => {
     if (!canSubmit || isGenerating || !selectedInv) return;
-    setIsGenerating(true);
+    setIsGenerating(true); setErrorMsg("");
     try {
-      const res = await fetch("/api/surat/generate-kuitansi", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ id_invoice: selectedInv.id_invoice }),
-      });
-
-      if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as { detail?: string };
-        alert(err.detail ?? "Gagal generate kuitansi. Coba lagi.");
-        return;
-      }
-
-      const disposition = res.headers.get("Content-Disposition") ?? "";
-      const nameMatch   = disposition.match(/filename="([^"]+)"/);
-      const filename    = nameMatch?.[1] ?? "Kuitansi.pdf";
-
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement("a");
-      a.href     = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
-
+      await downloadSurat("/api/surat/generate-kuitansi", { id_invoice: selectedInv.id_invoice }, "Kuitansi.pdf");
+      toast.success("Dokumen berhasil dibuat. Unduhan PDF dimulai.");
       onClose();
-    } catch (e) {
-      console.error(e);
-      alert("Gagal menghubungi server.");
+    } catch (cause) {
+      setErrorMsg(cause instanceof Error ? cause.message : "Gagal membuat dokumen. Coba lagi.");
     } finally {
       setIsGenerating(false);
     }
@@ -259,6 +243,7 @@ export function KuitansiModal({ open, template, onClose }: Props) {
           isGenerating && "pointer-events-none select-none",
         )}>
           <div className="space-y-3 px-6 pb-6 pt-5">
+            {errorMsg && <p role="alert" className="rounded-xl border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-rose-200">{errorMsg}</p>}
 
             {/* ── Step label ── */}
             <div className="flex items-center gap-3">

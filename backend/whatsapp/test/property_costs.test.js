@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import express from 'express';
-import { auctionCostEstimate, isPurchaseCostQuestion, propertyTransactionType, purchaseCostReply } from '../services/property_costs.js';
+import { auctionCostEstimate, isPurchaseCostQuestion, propertyTransactionType, purchaseCostReply, AUCTION_BUDGET_QUESTION } from '../services/property_costs.js';
 import { detectHandover, HANDOVER_MESSAGE, interactionDecision } from '../services/interaction_policy.js';
 import { generatePropertyReply } from '../services/property_reply.js';
 import { createAiController } from '../services/ai_controller.js';
@@ -124,9 +124,9 @@ test('full WhatsApp template preserves all sections and quotes only database pri
   const result = await generatePropertyReply({ catalog, ai: noAi, text, history: [user(text)], now: NOW });
   for (const section of ['ESTIMASI BIAYA PEMBELIAN LELANG', 'HARGA LIMIT', 'A. BIAYA BALIK NAMA', 'B. PENYELESAIAN PENGOSONGAN',
     'C. FEE AGENT', 'ESTIMASI MODAL — WORST CASE']) assert.ok(result.reply.includes(`*${section}*`), section);
-  for (const part of ['Jl. Mawar 12', '20 Oktober 2026', '*Rp 800.000.000*', '*Rp 1.102.800.000*', 'belum all-in', 'bukan biaya tambahan', 'dari luar']) assert.ok(result.reply.includes(part), part);
+  for (const part of ['Jl. Mawar 12', '20 Oktober 2026', '*Rp 800.000.000*', '*Rp 1.102.800.000*', 'belum all-in', 'bukan biaya tambahan']) assert.ok(result.reply.includes(part), part);
   assert.equal((result.reply.match(/━━━━━━━━━━━━━━/g) || []).length, 5);
-  assert.equal(result.reply.endsWith('?'), true);
+  assert.equal(result.reply.endsWith(AUCTION_BUDGET_QUESTION), true);
   assert.ok(result.reply.length <= 4000);
   assert.equal(result.asset.id, '123'); assert.deepEqual(result.qualification, {});
 });

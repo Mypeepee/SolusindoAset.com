@@ -70,6 +70,9 @@ export function loadConfig(env = process.env) {
     host: env.HOST || '127.0.0.1',
     port: integer('PORT', 3100, 1, 65535),
     transport, wa, propertyDatabase, clientDatabase, stokerPhone, testClientPhone, botControlPhone,
+    requirePropertyInquiry: true,
+    propertyInquiryIdleMs: integer('PROPERTY_INQUIRY_IDLE_DAYS', 7, 1, 30) * 86400000,
+    handoffNonBuyerMessages: true,
     surveyBooking: clientDatabase ? { url: new URL('../surveys', clientDatabase.url.replace(/\/$/, '') + '/').href,
       token: clientDatabase.token, timeoutMs: Math.max(20000, clientDatabase.timeoutMs) } : null,
     recommendations: clientDatabase && transport === 'baileys' && env.AUTO_RECOMMENDATIONS !== '0' ? {

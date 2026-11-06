@@ -30,6 +30,7 @@
 
 import { turunkanMaksud } from "@/lib/klienMatch";
 import { masalahDiskon, type JenisDiskon } from "@/lib/preferensiDiskon";
+import { masalahIndukLokasi } from "@/lib/preferensiLokasi";
 
 /** Rentang radius yang sama dengan CHECK di database. */
 const RADIUS_MIN = 1;
@@ -99,6 +100,8 @@ export function bacaPreferensi(body: any): HasilBaca {
   if (!loc_provinsi && !loc_kota && !loc_kecamatan && !loc_kelurahan) {
     return { ok: false, message: "Lokasi wajib diisi — minimal provinsi." };
   }
+  const masalahLokasi = masalahIndukLokasi({ loc_kota, loc_kecamatan, loc_kelurahan });
+  if (masalahLokasi) return { ok: false, message: masalahLokasi };
 
   const budget_min = angka(body?.budget_min);
   const budget_max = angka(body?.budget_max);
