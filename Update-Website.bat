@@ -1,4 +1,5 @@
 @echo off
+setlocal
 title Solusindo Aset - Build Ulang
 cd /d "D:\SolusindoAset.com"
 
@@ -6,6 +7,12 @@ echo ==================================================
 echo    SOLUSINDO ASET - Build Ulang (setelah ubah kode)
 echo ==================================================
 echo.
+
+call "%~dp0scripts\use-project-node.bat"
+if errorlevel 1 (
+    pause
+    exit /b 1
+)
 
 echo [INFO] Menghentikan server lama di port 3000 jika ada...
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr "LISTENING" ^| findstr ":3000"') do taskkill /F /PID %%a >nul 2>&1

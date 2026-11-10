@@ -94,7 +94,8 @@ async function ensureProductionBuild({ root = workspace, directory,
     fs.unlinkSync(lock);
   }
   fs.writeFileSync(lock, String(process.pid), { flag: 'wx' });
-  const stage = `.next-build-${process.pid}-${Date.now()}`;
+  // A validated build can be activated in place if Windows prevents a rename.
+  const stage = `.next-release-${process.pid}-${Date.now()}`;
   const stagePath = buildPath(root, stage);
   try {
     console.log(current.ok ? '[build] Membangun versi produksi baru...' :
@@ -115,17 +116,19 @@ async function ensureProductionBuild({ root = workspace, directory,
         archived = true;
       } catch (error) {
         if (!['EPERM', 'EACCES', 'EBUSY'].includes(error.code)) throw error;
-        const release = `.next-release-${Date.now()}-${process.pid}`;
-        const releasePath = buildPath(root, release);
-        fs.renameSync(stagePath, releasePath);
-        fs.writeFileSync(path.join(runtime, 'production-build.json'), JSON.stringify({ directory: release }) + '\n');
-        console.warn(`[build] Windows mengunci build lama; memakai build berversi ${release} tanpa memindahkan .next.`);
-        return productionBuildStatus(root, release);
+        fs.writeFileSync(path.join(runtime, 'production-build.json'), JSON.stringify({ directory: stage }) + '\n');
+        console.warn(`[build] Windows mengunci build lama; memakai build berversi ${stage} tanpa memindahkan .next.`);
+        return ready;
       }
     }
     try { fs.renameSync(stagePath, current.location); }
     catch (error) {
       if (archived && !fs.existsSync(current.location)) fs.renameSync(backup, current.location);
+      if (['EPERM', 'EACCES', 'EBUSY'].includes(error.code)) {
+        fs.writeFileSync(path.join(runtime, 'production-build.json'), JSON.stringify({ directory: stage }) + '\n');
+        console.warn(`[build] Windows mengunci pemindahan build baru; memakai ${stage} langsung dari lokasi yang sudah tervalidasi.`);
+        return ready;
+      }
       throw error;
     }
     if (directory === '.next') {

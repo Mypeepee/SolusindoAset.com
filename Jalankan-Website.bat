@@ -8,6 +8,12 @@ echo    SOLUSINDO ASET - Menjalankan Website
 echo ==================================================
 echo.
 
+call "%~dp0scripts\use-project-node.bat"
+if errorlevel 1 (
+    pause
+    exit /b 1
+)
+
 REM Development memakai port 3001 dan .next-dev, terpisah dari produksi.
 
 REM --- Kalau port 3000 masih dipakai, tawarkan restart ---
@@ -75,7 +81,16 @@ if defined BUILT_COMMIT (
     )
 )
 
-echo [INFO] Memasang dependency ^(npm install^)...
+REM npm install menjalankan prisma generate melalui postinstall.
+REM Server dev port 3001 juga dapat mengunci DLL yang sama di Windows.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\prepare-prisma-install.ps1"
+if errorlevel 1 (
+    echo [GAGAL] Prisma Client masih terkunci. Instalasi dibatalkan.
+    pause
+    exit /b 1
+)
+
+echo [INFO] Memasang dependency ^(npm install^) dan menyegarkan Prisma Client...
 call npm install
 if errorlevel 1 (
     echo.
@@ -83,9 +98,6 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-
-echo [INFO] Menyegarkan Prisma Client...
-call npx prisma generate
 
 REM Build baru divalidasi sebelum menggantikan build lama.
 
@@ -113,7 +125,7 @@ if not defined PERLU_BUILD echo [INFO] Build sudah sesuai kode terbaru. Lewati b
 
 REM --- 2) Jalankan SERVER PRODUKSI di jendela terpisah ---
 echo [INFO] Menjalankan server produksi...
-start "Website (Production)" powershell -NoExit -Command "cd 'D:\SolusindoAset.com'; npm run start"
+start "Website (Production)" powershell -NoProfile -NoExit -Command "cd 'D:\SolusindoAset.com'; npm run start"
 
 REM --- 3) Tunggu sampai server benar-benar siap di port 3000 ---
 echo [INFO] Menunggu server siap di http://localhost:3000 ...

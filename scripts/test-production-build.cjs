@@ -103,6 +103,30 @@ test('a live build lock prevents two compilers from changing production simultan
   await assert.rejects(ensureProductionBuild({ root, build() { assert.fail('Lock must prevent compilation.'); } }), /sedang berjalan/);
 });
 
+test('a Windows-locked new build activates in place and restores the previous build', async (t) => {
+  const root = fixture(t); build(root, '.next', 'previous-build');
+  const rename = fs.renameSync;
+  fs.renameSync = (source, destination) => {
+    if (path.basename(source).startsWith('.next-release-') && destination === path.join(root, '.next')) {
+      const error = new Error('simulated Windows lock on the newly compiled directory');
+      error.code = 'EPERM';
+      throw error;
+    }
+    return rename(source, destination);
+  };
+  try {
+    const ready = await ensureProductionBuild({ root, force: true, build: async (dir, stage) => build(dir, stage, 'new-build') });
+    assert.equal(ready.ok, true);
+    assert.match(path.basename(ready.location), /^\.next-release-/);
+    assert.equal(activeBuildDirectory(root), path.basename(ready.location));
+    assert.equal(productionBuildStatus(root).ok, true);
+    assert.equal(fs.readFileSync(path.join(ready.location, 'BUILD_ID'), 'utf8'), 'new-build');
+    assert.equal(fs.readFileSync(path.join(root, '.next/BUILD_ID'), 'utf8'), 'previous-build');
+  } finally {
+    fs.renameSync = rename;
+  }
+});
+
 test('an active website prevents replacing files underneath the running server', async (t) => {
   const root = fixture(t); build(root, '.next');
   const server = net.createServer();

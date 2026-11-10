@@ -6,11 +6,22 @@ Startup memeriksa BUILD_ID, manifest dan berkas server produksi. Jika build
 hilang atau tidak lengkap, `npm start` membangun ulang secara otomatis sebelum
 memulai layanan. `npm run build` menyiapkan hasil di direktori sementara, lalu
 mengganti `.next` sesudah validasi; build lama disimpan di `.local-backups`.
+Jika Windows mengunci pemindahan folder, build yang tervalidasi diaktifkan
+langsung lewat `.runtime/production-build.json` tanpa memindahkan folder baru.
 Hentikan proses website sebelum melakukan build ulang. Proses build yang gagal
 tidak menghapus build sebelumnya.
 
 `npm run dev` memakai port 3001 dan direktori `.next-dev`. Development tidak
 menimpa `.next` yang digunakan produksi pada port 3000.
+
+Launcher Windows memakai runtime di `.runtime/node-path.txt` bila tersedia,
+termasuk untuk npm, build dan website. Node.js minimal 22.13 diperlukan oleh
+launcher agar sesuai dengan dependensi Puppeteer dan backend. PATH global
+Windows tidak diubah. Sebelum `npm install`, launcher menghentikan proses Node
+yang memuat DLL Prisma milik proyek ini, termasuk server development port 3001.
+Pemeriksaan hanya baca: `powershell -NoProfile -File scripts/prepare-prisma-install.ps1 -CheckOnly`.
+`prisma generate` dijalankan sekali melalui `postinstall` npm. Database tidak
+diubah oleh regenerasi client ini.
 
 Startup memeriksa semua tabel, kolom dan enum yang dibutuhkan Prisma, serta
 konsistensi harga dan trigger. Periksa tanpa menjalankan layanan dengan
