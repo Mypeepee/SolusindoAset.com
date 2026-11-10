@@ -9,6 +9,15 @@ Setelah aset dipilih dan detail/biaya diterima, ucapan “oke pak, saya serius�
 
 > Saya lampirkan draf MOU aset pilihan Anda. Mulai dari Pasal 3 untuk biaya pendampingan, Pasal 4 untuk tanda jadi dan jaminan lelang, Pasal 9 untuk pembatalan, lalu Pasal 11 untuk pengembalian dana jika kalah. Data yang belum lengkap ditandai di dokumen; ketentuannya bisa dibahas bersama tim sebelum disetujui.
 
+Jawaban yang jelas cocok pada pertanyaan kecocokan budget, misalnya “oke cocok”,
+“pas banget”, atau “yes it fits my budget”, kini juga langsung membuka alur
+draf tersebut. Keberatan harga menanyakan budget total terlebih dahulu dan
+tidak mengirim PDF. Jawaban “oke” saat bot meminta nominal budget juga tidak
+mengirim PDF. Tafsiran bahasa lain memakai bukti dari pesan terakhir; hasil
+yang tidak pasti diklarifikasi. Izin pengiriman berdasarkan kecocokan budget
+hanya berlaku untuk giliran jawaban itu, sehingga penolakan pengiriman pada
+giliran berikutnya tidak dapat ditimpa oleh status kecocokan lama.
+
 Minat/serius sesudah memilih aset kini langsung masuk `purchase_preparation`: nominal tanda jadi, persiapan KTP dan cover buku tabungan atas nama klien, serta draf PDF dengan panduan Pasal 3, 4 dan 11. Ini satu fokus persiapan pembelian, bukan urutan meminta izin menjelaskan setiap tahap SOP. Jawaban “baik” melanjutkan tawaran pendampingan; kesiapan berkas atau penerimaan tawaran itu membawa sesi ke `purchasing_handoff` dan menjeda bot. Handoff persiapan boleh dilakukan saat stok menunggu; pembayaran tetap menunggu kepastian aset dan persetujuan MOU. Status berkas/pembayaran tetap belum terverifikasi sampai diperiksa tim. Lampiran atau nomor identitas masuk tidak diberikan ke LLM; sesi dijeda untuk pemeriksaan manusia.
 
 PDF tidak dikirim lagi pada tiap jawaban. Permintaan “kirim ulang PDF MOU” dapat menghasilkan salinan baru untuk aset yang sedang dipilih. Draf boleh dipelajari sebelum klien menyatakan seluruh proses dipahami. Jalur penjelasan SOP lama tetap menjawab pertanyaan spesifik, termasuk keberatan soal refund. Persetujuan tanda tangan dan permintaan pembayaran tidak disimpulkan dari ucapan minat atau “siap”.

@@ -18,7 +18,7 @@ export function compareNewestListings(a, b) {
   return left === right ? 0 : left > right ? -1 : 1;
 }
 export const SEARCH_CRITERIA_FIELDS = ['location', 'locations', 'cities', 'route_landmarks', 'certificate_types', 'legal_requirements', 'special_requirements', 'city', 'province', 'district', 'village', 'region_group', 'nearby',
-  'category', 'categories', 'transaction_type', 'transaction_types', 'rental_period', 'min_price', 'max_price',
+  'category', 'categories', 'transaction_type', 'transaction_types', 'rental_period', 'min_price', 'max_price', 'min_total_budget', 'max_total_budget',
   'purpose', 'sort_by', 'min_land_area_m2', 'max_land_area_m2'];
 
 export function offeredPropertyIds(...groups) {

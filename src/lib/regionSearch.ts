@@ -40,7 +40,7 @@ import { intiNamaKota } from "./regionMatch";
 export type RegionLevel = "provinsi" | "kota" | "kecamatan" | "kelurahan";
 
 export interface SelectedRegion {
-  /** id wilayah (ibnux) saat dipilih langsung, atau id sintetis "level:name" saat dihidrasi dari URL. */
+  /** ID wilayah saat dipilih, atau ID sintetis dengan rantai induk saat dipulihkan. */
   id: string;
   name: string;
   level: RegionLevel;
@@ -51,7 +51,8 @@ export interface SelectedRegion {
    * terjauh, nama sudah dinormalisasi per levelnya. Untuk sebuah kecamatan
    * isinya `["Sidoarjo"]` (kota); untuk kelurahan `["Taman", "Sidoarjo"]`.
    *
-   * Kosong = tidak dibatasi (dipakai provinsi/kota, dan tautan lama).
+   * CRM menyimpan nama administratif utuh dan provinsi juga; pencarian URL
+   * memakai rantai ringkas. Kosong = induk tidak diketahui (tautan/data lama).
    */
   ancestors?: string[];
 }
@@ -112,17 +113,26 @@ export function regionKey(r: {
 }): string {
   const induk = (r.ancestors ?? [])
     .map((a) => a.trim().toLowerCase())
-    .filter(Boolean)
     .join(REGION_SCOPE_SEP);
   return `${r.level}|${r.name.trim().toLowerCase()}${induk ? `@${induk}` : ""}`;
 }
 
-/** Apakah dua wilayah merujuk lokasi yang sama (berdasarkan level + nama inti). */
+/** Same scoped selection, allowing an unknown optional province in legacy CRM rows.
+ * Required city/district parents must exist on both sides; never infer them. */
 export function isSameRegion(
   a: { name: string; level: RegionLevel; ancestors?: string[] },
   b: { name: string; level: RegionLevel; ancestors?: string[] }
 ): boolean {
-  return regionKey(a) === regionKey(b);
+  if (regionKey(a) === regionKey(b)) return true;
+  if (a.level !== b.level || a.name.trim().toLowerCase() !== b.name.trim().toLowerCase()) return false;
+  const required = a.level === "kelurahan" ? 2 : a.level === "kecamatan" ? 1 : 0;
+  const aa = a.ancestors ?? [], bb = b.ancestors ?? [];
+  for (let i = 0; i < Math.max(required, aa.length, bb.length); i++) {
+    const av = aa[i]?.trim().toLowerCase(), bv = bb[i]?.trim().toLowerCase();
+    if (i < required && (!av || !bv)) return false;
+    if (av && bv && av !== bv) return false;
+  }
+  return true;
 }
 
 /**
@@ -274,12 +284,15 @@ export function locationsToSelectedRegions(
  */
 export function regionLabel(r: {
   name: string;
+  level?: RegionLevel;
   ancestors?: string[];
+  parent?: string;
 }): string {
-  const induk = (r.ancestors ?? []).filter(Boolean);
-  // Cukup induk terdekat: "Bringinbendo, Taman" sudah menjawab "yang mana",
-  // sementara menambah kota lagi membuat chip terpotong di layar 320px.
-  return induk.length ? `${r.name}, ${induk[0]}` : r.name;
+  // A village needs both district and city: district names can also repeat.
+  const induk = (r.ancestors ?? (r.parent ? [r.parent] : []))
+    .slice(0, r.level === "kelurahan" ? 2 : 1)
+    .filter(Boolean);
+  return [r.name, ...induk].join(", ");
 }
 
 /** True bila ada minimal satu wilayah terpilih di URL. */

@@ -1,6 +1,7 @@
 // Land preferences are independent from price and building area. No listing or
 // assistant statement may establish the client's bounds.
 import { normalizeBuyerQuantities, assistantQuestions, correctedQuantityText, unrestrictedPreferenceAnswer, QUANTITY_RANGE_SEPARATOR } from './buyer_language.js';
+import { normalizeLandDimensions } from './land_dimensions.js';
 const N = '(\\d+(?:[.,]\\d+)*)';
 const U = '(m\\s*[²2]|meter\\s*(?:persegi|kuadrat)|hektar|ha|are|meter|m)';
 const landLabel = /\b(?:luas\s+(?:tanah|lahan)(?:nya)?|lt)\b/i;
@@ -23,7 +24,9 @@ function sqm(value, unit) {
 }
 
 export function extractLandArea(text, { allowImplicit = false, expected = allowImplicit } = {}) {
-  const clean = correctedQuantityText(normalizeBuyerQuantities(text)).replace(/\*/g, '')
+  const clean = normalizeLandDimensions(correctedQuantityText(normalizeBuyerQuantities(text))).replace(/\*/g, '')
+    .replace(/\bminim\b/gi, 'minimal').replace(/\bluasan(?:nya)?\b/gi, 'luas')
+    .replace(/\b(minimal|minimum|min|maksimal|maksimum|max)\s+luas(?:nya)?(?!\s+bangunan)\b(?:\s+(?:tanah|lahan))?/gi, 'luas tanah $1')
     // A closing inventory question does not turn the preceding explicit land
     // preference into a question: "luas tanah bebas, apakah ada?".
     .replace(/[,;]\s*(?:apa(?:kah)?\s+ada|ada(?:kah)?|masih tersedia)(?:\s+(?:pak|bu|bapak|ibu))?[?？]\s*$/i, '');

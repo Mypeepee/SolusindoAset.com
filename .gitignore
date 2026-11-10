@@ -51,6 +51,7 @@ backend/keys/
 /Kosku.com.zip.next/cache
 .next/cache
 .next/
+/.next-*/
 /.next-staging/
 /.next-dev/
 /.next-build-*/

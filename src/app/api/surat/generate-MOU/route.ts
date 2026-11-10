@@ -7,6 +7,8 @@ import { prisma } from "@/lib/prisma";
 import { docxToPdf } from "@/lib/server/docxToPdf";
 import { mouPaymentFields } from "@/lib/server/mouPaymentTerms.mjs";
 import { mouCostFields } from "@/lib/server/mouCostFields.mjs";
+import { parseSuratValues, SuratInputError } from "@/lib/server/suratPermohonan";
+import { suratErrors } from "@/lib/suratGeneration";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -83,7 +85,9 @@ export async function POST(req: Request) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const body = await req.json() as Record<string, string>;
+    const body = parseSuratValues(await req.json().catch(() => { throw new SuratInputError("Data JSON tidak valid."); }));
+    const errors = suratErrors("mou-transaksi", body);
+    if (Object.keys(errors).length) return NextResponse.json({ error: Object.values(errors).join(" ") }, { status: 400 });
     const { id_transaksi } = body;
     if (!id_transaksi) return NextResponse.json({ error: "id_transaksi wajib diisi" }, { status: 400 });
 
@@ -225,6 +229,7 @@ export async function POST(req: Request) {
       },
     });
   } catch (e: unknown) {
+    if (e instanceof SuratInputError) return NextResponse.json({ error: e.message }, { status: 400 });
     console.error("[generate-mou]", e);
     const msg = e instanceof Error ? e.message : "Gagal generate MOU.";
     return NextResponse.json({ error: msg }, { status: 500 });

@@ -97,104 +97,106 @@ export async function POST(req: Request) {
       return NextResponse.json({ detail: "id_invoice wajib diisi." }, { status: 400 });
     }
 
-    const invoice = await prisma.invoice.findUnique({
-      where: { id_invoice },
-      include: {
-        transaksi: {
-          include: {
-            listing: { select: { alamat_lengkap: true, judul: true, kota: true } },
-            agent: {
-              include: {
-                pengguna: { select: { nama_lengkap: true } },
-              },
-            },
+    // Reserve/update the receipt and render under one database transaction.
+    // The advisory lock also covers other Node processes, so simultaneous
+    // requests cannot allocate the same monthly number or renumber one invoice.
+    return await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('surat-kuitansi'))`;
+      const invoice = await tx.invoice.findUnique({
+        where: { id_invoice },
+        include: {
+          transaksi: {
+            include: { mou: { include: {
+              listing: { select: { alamat_lengkap: true, judul: true, kota: true } },
+              agent: { include: { pengguna: { select: { nama_lengkap: true } } } },
+            } } },
           },
         },
-      },
-    });
-    if (!invoice) {
-      return NextResponse.json({ detail: "Invoice tidak ditemukan." }, { status: 404 });
-    }
+      });
+      if (!invoice) {
+        return NextResponse.json({ detail: "Invoice tidak ditemukan." }, { status: 404 });
+      }
 
-    const alamat    = invoice.transaksi.listing.alamat_lengkap ?? invoice.transaksi.listing.kota ?? "";
-    const namaAgent = invoice.transaksi.agent_luar_nama ?? invoice.transaksi.agent.pengguna.nama_lengkap;
+      const alamat    = invoice.transaksi.mou.listing.alamat_lengkap ?? invoice.transaksi.mou.listing.kota ?? "";
+      const namaAgent = invoice.transaksi.mou.agent_luar_nama ?? invoice.transaksi.mou.agent.pengguna.nama_lengkap;
 
-    const now = new Date();
+      const now = invoice.tanggal_kuitansi ?? new Date();
 
-    // Generate nomor kuitansi — hitung per bulan
-    const bulanIni   = new Date(now.getFullYear(), now.getMonth(), 1);
-    const bulanDepan = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const countBulanIni = await prisma.invoice.count({
-      where: {
-        id_kuitansi:      { not: null },
-        tanggal_kuitansi: { gte: bulanIni, lt: bulanDepan },
-      },
-    });
-    const nomor_kuitansi = composeNomorKuitansi(countBulanIni + 1, now);
+      // Generate nomor kuitansi — hitung per bulan
+      const bulanIni   = new Date(now.getFullYear(), now.getMonth(), 1);
+      const bulanDepan = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const countBulanIni = await tx.invoice.count({
+        where: {
+          id_kuitansi:      { not: null },
+          tanggal_kuitansi: { gte: bulanIni, lt: bulanDepan },
+        },
+      });
+      const nomor_kuitansi = invoice.id_kuitansi ?? composeNomorKuitansi(countBulanIni + 1, now);
 
-    const nominalNum       = Number(invoice.nominal);
-    const nominalFormatted = `Rp ${nominalNum.toLocaleString("id-ID")}`;
-    const terbilangText    = terbilang(nominalNum);
+      const nominalNum       = Number(invoice.nominal);
+      const nominalFormatted = `Rp ${nominalNum.toLocaleString("id-ID")}`;
+      const terbilangText    = terbilang(nominalNum);
 
-    const templatePath = path.join(
-      process.cwd(),
-      "src/app/dashboard/surat/components/templates/Kuitansi_Solusindo_Premier.docx",
-    );
+      const templatePath = path.join(
+        process.cwd(),
+        "src/app/dashboard/surat/components/templates/Kuitansi_Solusindo_Premier.docx",
+      );
 
-    // Prefill — mirror invoice's field naming + tambah field khusus kuitansi
-    const docxBuffer = await fillDocx(templatePath, {
-      // identitas kuitansi
-      nomor_kuitansi,
-      tanggal:               formatTanggal(now),
-      kota:                  "Surabaya",
-      // identitas pembayar (dari invoice.ditagihkan_ke)
-      nama_pembayar:         invoice.ditagihkan_ke,
-      nama_pembeli:          invoice.ditagihkan_ke,
-      // nominal
-      nilai:                 nominalFormatted,
-      total_nilai:           nominalFormatted,
-      nominal:               nominalFormatted,
-      nominal_angka:         nominalNum.toLocaleString("id-ID"),
-      // terbilang — ini yang penting
-      terbilang:             terbilangText,
-      terbilang_total_nilai: terbilangText,
-      terbilang_nilai:       terbilangText,
-      // keperluan
-      keterangan:            invoice.keterangan,
-      perihal:               invoice.keterangan,
-      // alamat property & agent
-      alamat_lengkap:        alamat,
-      alamat_property:       alamat,
-      alamat:                alamat,
-      nama_agent:            namaAgent,
-      agent:                 namaAgent,
-      // referensi ke invoice
-      nomor_invoice:         invoice.id_invoice,
-      id_invoice:            invoice.id_invoice,
-      catatan:               `Referensi Invoice: ${invoice.id_invoice}`,
-    });
+      // Prefill — mirror invoice's field naming + tambah field khusus kuitansi
+      const docxBuffer = await fillDocx(templatePath, {
+        // identitas kuitansi
+        nomor_kuitansi,
+        tanggal:               formatTanggal(now),
+        kota:                  "Surabaya",
+        // identitas pembayar (dari invoice.ditagihkan_ke)
+        nama_pembayar:         invoice.ditagihkan_ke,
+        nama_pembeli:          invoice.ditagihkan_ke,
+        // nominal
+        nilai:                 nominalFormatted,
+        total_nilai:           nominalFormatted,
+        nominal:               nominalFormatted,
+        nominal_angka:         nominalNum.toLocaleString("id-ID"),
+        // terbilang — ini yang penting
+        terbilang:             terbilangText,
+        terbilang_total_nilai: terbilangText,
+        terbilang_nilai:       terbilangText,
+        // keperluan
+        keterangan:            invoice.keterangan,
+        perihal:               invoice.keterangan,
+        // alamat property & agent
+        alamat_lengkap:        alamat,
+        alamat_property:       alamat,
+        alamat:                alamat,
+        nama_agent:            namaAgent,
+        agent:                 namaAgent,
+        // referensi ke invoice
+        nomor_invoice:         invoice.id_invoice,
+        id_invoice:            invoice.id_invoice,
+        catatan:               `Referensi Invoice: ${invoice.id_invoice}`,
+      });
 
-    const pdfBuffer = await docxToPdf(docxBuffer);
+      const pdfBuffer = await docxToPdf(docxBuffer);
 
-    // Update invoice: isi id_kuitansi dan tanggal_kuitansi
-    await prisma.invoice.update({
-      where: { id_invoice },
-      data: {
-        id_kuitansi:      nomor_kuitansi,
-        tanggal_kuitansi: now,
-      },
-    });
+      // Update invoice: isi id_kuitansi dan tanggal_kuitansi
+      await tx.invoice.update({
+        where: { id_invoice },
+        data: {
+          id_kuitansi:      nomor_kuitansi,
+          tanggal_kuitansi: now,
+        },
+      });
 
-    const safeNomor = nomor_kuitansi.replace(/[^a-zA-Z0-9]/g, "_");
-    const filename  = `Kuitansi_${safeNomor}.pdf`;
+      const safeNomor = nomor_kuitansi.replace(/[^a-zA-Z0-9]/g, "_");
+      const filename  = `Kuitansi_${safeNomor}.pdf`;
 
-    return new NextResponse(pdfBuffer, {
-      status: 200,
-      headers: {
-        "Content-Type":        "application/pdf",
-        "Content-Disposition": `attachment; filename="${filename}"`,
-      },
-    });
+      return new NextResponse(new Uint8Array(pdfBuffer), {
+        status: 200,
+        headers: {
+          "Content-Type":        "application/pdf",
+          "Content-Disposition": `attachment; filename="${filename}"`,
+        },
+      });
+    }, { maxWait: 5_000, timeout: 55_000 });
   } catch (e: unknown) {
     console.error("[generate-kuitansi]", e);
     const msg = e instanceof Error ? e.message : "Gagal generate kuitansi.";

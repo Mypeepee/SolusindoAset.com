@@ -389,7 +389,17 @@ export function buyerContext(history, text, previousId, { seed = {}, forceSearch
       cityFromBuyer = true;
       if (search && !location && !cityQuestion && !villageName) { profile.location = null; profile.district = null; profile.village = null; villageAnswered = false; }
     }
-    if (validBudget) Object.assign(profile, validBudget);
+    if (validBudget) {
+      if (profile.max_total_budget != null && !/\bharga\s+(?:limit|aset|properti)\b/i.test(content)) {
+        profile.max_total_budget = validBudget.max_price;
+        profile.min_total_budget = validBudget.min_price || null;
+        Object.assign(profile, { min_price: null, max_price: validBudget.max_price });
+      } else {
+        delete profile.max_total_budget;
+        delete profile.min_total_budget;
+        Object.assign(profile, validBudget);
+      }
+    }
     if (location) {
       if (!discoveryGeography) { delete profile.locations; delete profile.route_landmarks; }
       if (before.location?.toLowerCase() !== location.toLowerCase()) delete profile.region_group;

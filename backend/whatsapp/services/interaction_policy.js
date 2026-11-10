@@ -11,6 +11,9 @@ import { INTRODUCTION_MESSAGE, isClientGreeting } from './client_identity.js';
 import { CLOSING_STATE, detectClosingIntent, isClosingTurnText } from './closing_state.js';
 import { discoveryQuestionReply, localDiscovery } from './smart_search_parser.js';
 import { localPropertyScope, propertyScopeText } from './property_scope.js';
+import { auctionBudgetAnswer, consultationSearchText } from './asset_consultation.js';
+import { isLinkedSearchTurn } from './linked_search.js';
+import { nonBuyerHandoffReason, hasExplicitBuyerRequest, needsConversationPurposeReview, NON_BUYER_HANDOVER_MESSAGE } from './conversation_purpose.js';
 
 export const CONTEXT_REQUIRED_MESSAGE = 'Halo, saya asisten virtual Solusindo Aset. Ada yang bisa saya bantu?';
 export const HANDOVER_MESSAGE = 'Untuk proses lanjutan seperti jadwal survei lokasi, dokumen legalitas, dan teknis lelang, agen kami (Jason) akan segera mengambil alih chat ini dan menghubungi Bapak/Ibu secepatnya. Mohon ditunggu ya.';
@@ -23,6 +26,7 @@ export function ignoredInbound(message) {
 }
 
 export function requestsPropertySearch(text) {
+  if (nonBuyerHandoffReason(text)) return false;
   text = normalizeBuyerLanguage(text);
   if (localPropertyScope(text) === 'other') return false;
   text = propertyScopeText(text);
@@ -45,6 +49,8 @@ const handoverTriggers = [
 ];
 
 export function detectHandover(text, { closing = false, canScheduleVisit = false } = {}) {
+  const purpose = nonBuyerHandoffReason(text);
+  if (purpose) return `non_buyer:${purpose}`;
   if (localPropertyScope(text) === 'other') return null;
   text = propertyScopeText(text);
   const normalized = ` ${normalizeText(text)} `;
@@ -52,7 +58,8 @@ export function detectHandover(text, { closing = false, canScheduleVisit = false
   if (trigger && !(canScheduleVisit && /viewing|survei|survey/.test(trigger))) return trigger;
   if (/\b(nego(?:siasi)?|tawar|menawar|diskon|grosse)\b|\bharga\b.{0,35}\b(?:kurang(?!\s+dari)|turun|diturunkan|nego)\b|\b(?:kurangi|turunkan)\s+harga\b/i.test(text) || !canScheduleVisit && /\b(viewing|survei|survey)\b/i.test(text)) return 'negotiation_or_viewing';
   const legalPreference = /\b(?:wajib|harus|hanya|mau|pilih|syarat|legalitas|sertifikat)\b[^?\n]{0,60}\b(?:shm|hgb|shgb)\b/i.test(text) &&
-    !/\b(?:asli|sengketa|cek|periksa|nomor|dokumen)\b/i.test(text);
+    !/\b(?:asli|sengketa|cek|periksa|nomor|dokumen)\b/i.test(text) ||
+    hasExplicitBuyerRequest(text) && /\b(?:bebas|tanpa|tidak\s+(?:dalam|ada|sedang))\s+sengketa\b/i.test(text);
   if (!legalPreference && !parsePropertyInquiry(text) && /\b(shm|shgb|hgb|sertifikat|akta|sengketa)|dokumen\s+(?:legalitas|legal)\b/i.test(text)) return 'specific_legal_document';
   const explainingAftercare = closing && /\b(?:kalau|jika|setelah)\s+(?:saya\s+)?menang\b|\b(?:apa|bagaimana|gimana|jelaskan)\b/i.test(text);
   if (/\b(?:ajukan|lakukan|jalankan|jadwalkan|urus)\s+(?:permohonan\s+)?(?:eksekusi|pengosongan)\b/i.test(text) ||
@@ -70,13 +77,14 @@ export function historyPolicy(history) {
   const lastNudge = history.findLastIndex((item) => item.role === 'assistant' && [CONTEXT_REQUIRED_MESSAGE, INTRODUCTION_MESSAGE].includes(item.content));
   const lastContext = history.findLastIndex((item) => item.role === 'user' && (hasPropertyReference(item.content) || requestsPropertySearch(item.content)));
   return { out_of_scope_notified: lastNudge > lastContext,
-    is_bot_active: !history.some((item) => item.role === 'assistant' && item.content.startsWith(HANDOVER_MESSAGE)) };
+    is_bot_active: !history.some((item) => item.role === 'assistant' && [HANDOVER_MESSAGE, NON_BUYER_HANDOVER_MESSAGE].some(message => item.content.startsWith(message))) };
 }
 
 // Assistant prose alone cannot establish a property context. Unclear property
 // follow-ups ask for clarification; only actual handover requests pause the bot.
 export function interactionDecision({ text = '', type = 'text', previousId, history = [], state = {} }) {
   if (state.is_bot_active === false) return 'silent';
+  if (nonBuyerHandoffReason(text) || state.handoffNonBuyerMessages && localPropertyScope(text) === 'other') return 'human';
   // This gate precedes property lookup, pending survey answers and handoff.
   // A previous property conversation never authorizes answering other work.
   if (localPropertyScope(text) === 'other') return 'silent';
@@ -85,6 +93,9 @@ export function interactionDecision({ text = '', type = 'text', previousId, hist
   if (state.canScheduleVisit && (state.survey_state && state.survey_state.phase !== 'booked' || /\b(?:viewing|survei|survey|kondisi|kondisine|bangunane|nengok|tilik|mampir|janjian)\b/i.test(text))) return 'allow';
   const nudge = () => state.out_of_scope_notified ? 'silent' : 'nudge';
   if (!['text', 'interactive', 'button'].includes(type) || !text.trim()) return 'silent';
+  const consultationInput = { history, consultation: state.consultation, assetId: previousId || state.asset_id };
+  if (isLinkedSearchTurn(text, consultationInput)) return 'allow';
+  if (consultationInput.assetId && (state.budget_answer || auctionBudgetAnswer(text, consultationInput) || consultationSearchText(text, consultationInput) !== text)) return 'allow';
   if (detectClosingIntent(text, { selectedAssetId: previousId || state.asset_id, history }) || state.conversion?.mode === CLOSING_STATE && isClosingTurnText(text)) return 'allow';
   if (confirmedPreferenceText(text, history.findLast((item) => item.role === 'assistant')?.content)) return 'allow';
   if (selectedRecommendation(text, history)) return 'allow';
@@ -116,19 +127,21 @@ export function interactionDecision({ text = '', type = 'text', previousId, hist
 export async function resolveInteractionDecision(input, ai, signal) {
   const decision = interactionDecision(input);
   const { text = '', history = [], state = {}, previousId } = input;
+  const reviewPurpose = needsConversationPurposeReview(text);
   if (state.is_bot_active === false || !text.trim() || input.type && !['text', 'interactive', 'button'].includes(input.type) ||
-      greeting.test(text.trim()) || isClientGreeting(text) || localPropertyScope(text) !== 'unknown' || decision === 'handoff' ||
-      typeof ai?.classifyPropertyScope !== 'function') return decision;
+      greeting.test(text.trim()) || isClientGreeting(text) || !reviewPurpose && localPropertyScope(text) !== 'unknown' || ['handoff', 'human'].includes(decision)) return decision;
+  if (typeof ai?.classifyPropertyScope !== 'function') return reviewPurpose ? 'human' : decision;
   // Recognized answers already matched a specific property question locally.
-  if (decision === 'allow') return decision;
+  if (decision === 'allow' && !reviewPurpose) return decision;
   if (unrestrictedPreferenceAnswer(text) || /^(?:belum|tidak|nggak|gak|ga)\s+(?:tahu|tau|yakin|pasti)(?:\s+(?:pak|bu|ya))?$/i.test(text.trim())) return decision;
   try {
     const hasContext = !!previousId || !!state.buyer_state?.searchStarted || history.some((item) => item.role === 'user' && requestsPropertySearch(item.content));
     const scope = await ai.classifyPropertyScope({ text, history, hasContext, signal });
     if (signal?.aborted) throw signal.reason;
-    if (scope === 'other') return 'silent';
+    if (scope === 'human') return 'human';
+    if (scope === 'other') return state.handoffNonBuyerMessages || reviewPurpose ? 'human' : 'silent';
     if (scope === 'property_search') return 'search';
     if (scope === 'property') return decision === 'silent' ? 'clarify' : decision;
   } catch (error) { if (signal?.aborted) throw error; }
-  return decision;
+  return reviewPurpose ? 'human' : decision;
 }

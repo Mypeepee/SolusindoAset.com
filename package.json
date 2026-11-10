@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test:drive": "node --test scripts/test-google-drive.mjs scripts/test-google-drive-upload-routes.cjs",
+    "diagnose:drive": "node scripts/diagnose-google-drive.mjs",
+    "test:surat": "node --test scripts/test-surat-generation.cjs",
+    "test:surat:pdf": "cross-env SURAT_QA_PDF=1 node --test scripts/test-surat-generation.cjs",
+    "verify:surat:browser": "node scripts/verify-surat-browser.mjs",
     "db:investor-alerts": "node scripts/install-investor-owner-alerts.cjs --apply",
     "test:investor-alerts": "node --test scripts/test-investor-owner-alerts.cjs",
     "db:marketing": "node scripts/install-marketing.cjs --apply",

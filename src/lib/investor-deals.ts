@@ -379,6 +379,13 @@ export function selectDeals(
   const numericQuery = /^\d+$/.test(query);
   const saved = filters.savedOnly ? new Set(savedIds) : null;
   const dayStart = jakartaDayStart(now);
+  const upcomingAuctionDay = (item: InvestorListing) => {
+    const timestamp = item.auctionDate ? Date.parse(item.auctionDate) : NaN;
+    // Match the card's WIB calendar date: same-day points outrank clock time.
+    return Number.isFinite(timestamp) && timestamp >= dayStart
+      ? jakartaDayStart(new Date(timestamp))
+      : null;
+  };
   const matchesText = (listing: InvestorListing) => {
     if (!query) return true;
     if (numericQuery) return listing.id === query;
@@ -402,10 +409,8 @@ export function selectDeals(
         : filters.sort === "price"
           ? item.pricePerSqm
           : filters.sort === "auctionDate"
-            ? item.auctionDate && Date.parse(item.auctionDate) >= dayStart
-              ? Date.parse(item.auctionDate)
-              : null
-          : item.primaryDealScore;
+            ? upcomingAuctionDay(item)
+            : item.primaryDealScore;
   return listings
     .filter((listing) => {
       return (

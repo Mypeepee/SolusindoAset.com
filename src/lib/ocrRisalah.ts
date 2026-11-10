@@ -5,6 +5,7 @@ export async function ocrRisalah(file: File) {
   const res = await fetch("/api/surat/ocr-risalah", {
     method: "POST",
     body: formData,
+    signal: AbortSignal.timeout(60_000),
   });
 
   const json = await res.json();

@@ -32,7 +32,7 @@ export function searchReply(context, now = Date.now()) {
   const wholeCity = area && cityName && !buyer.profile?.district && area.toLowerCase() === cityName.toLowerCase();
   const number = (value) => new Intl.NumberFormat('id-ID', { maximumFractionDigits: 2 }).format(value);
   const minPrice = buyer.profile?.min_price, maxPrice = buyer.profile?.max_price;
-  const budget = minPrice > 0 && maxPrice > 0 ? `, budget Rp ${number(minPrice)}–Rp ${number(maxPrice)}` :
+  const budget = buyer.profile?.max_total_budget > 0 ? `, budget total maksimal Rp ${number(buyer.profile.max_total_budget)} termasuk biaya pembelian` : minPrice > 0 && maxPrice > 0 ? `, budget Rp ${number(minPrice)}–Rp ${number(maxPrice)}` :
     maxPrice > 0 ? `, budget maksimal Rp ${number(maxPrice)}` : minPrice > 0 ? `, budget minimal Rp ${number(minPrice)}` : '';
   const minLand = buyer.profile?.min_land_area_m2, maxLand = buyer.profile?.max_land_area_m2;
   const land = minLand > 0 && maxLand > 0 ? `, luas tanah ${number(minLand)}–${number(maxLand)} m²` :

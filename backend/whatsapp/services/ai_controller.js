@@ -11,6 +11,7 @@ import { withoutFloorCount } from './catalog.js';
 import { createClosingController } from './closing_controller.js';
 import { createSmartSearchParser } from './smart_search_parser.js';
 import { createPropertyScopeClassifier } from './property_scope.js';
+import { createBudgetInterpreter } from './budget_response.js';
 export { HANDOVER_MESSAGE, detectHandover } from './interaction_policy.js';
 
 export const FUNDS_QUESTION = 'Lelang ini mewajibkan uang jaminan tunai. Apakah Bapak/Ibu sudah memiliki alokasi dana siap pakai untuk aset ini?';
@@ -413,6 +414,7 @@ export function createAiController(config, dependencies = {}) {
   return {
     generateClosing: createClosingController(config, dependencies),
     interpretBuyer: createBuyerInterpreter(config, dependencies),
+    interpretBudget: createBudgetInterpreter(config, dependencies),
     parseSearch: createSmartSearchParser(config, dependencies),
     classifyPropertyScope: createPropertyScopeClassifier(config, dependencies),
     async generate({ history, facts, catalog, qualification, userText, knowledge, signal, now = Date.now() }) {

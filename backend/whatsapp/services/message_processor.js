@@ -2,14 +2,21 @@ import { ServiceError, logFailure } from '../lib/http.js';
 import { detectHandover, HANDOVER_MESSAGE } from './ai_controller.js';
 import { resolvePropertyContext, selectedAssetIdFromHistory, isPrivateRequest, replyFromPropertyContext } from './property_reply.js';
 import { needsAuctionCheck, requestAuctionCheck } from './auction_check.js';
-import { ignoredInbound, interactionDecision, resolveInteractionDecision, CONTEXT_REQUIRED_MESSAGE, requestsPropertySearch } from './interaction_policy.js';
+import { ignoredInbound, interactionDecision, resolveInteractionDecision, CONTEXT_REQUIRED_MESSAGE, requestsPropertySearch, hasPropertyReference } from './interaction_policy.js';
+import { isPurchaseCostQuestion } from './property_costs.js';
+import { requestsPropertyDetails } from './property_details.js';
+import { isConditionQuestion, isVisitRequest } from './asset_consultation.js';
+import { propertyInquiryEntry, hasActivePropertyInquiry } from './property_inquiry.js';
+import { deliveredPropertyQuestion, restorePropertyQuestion } from './property_followup.js';
 import { clientIntroductionTurn } from './client_identity.js';
-import { ignorePropertyTurn } from './property_scope.js';
+import { ignorePropertyTurn, localPropertyScope } from './property_scope.js';
+import { nonBuyerHandoffReason, NON_BUYER_HANDOVER_MESSAGE } from './conversation_purpose.js';
+import { resolveBudgetAnswer } from './budget_response.js';
 import { qualifiedClientFunnel } from './client_capture.js';
 import { validPhone, validContact } from '../lib/security.js';
-import { CLOSING_STATE, applyClosingOutcome, searchConversion } from './closing_state.js';
+import { CLOSING_STATE, applyClosingOutcome, searchConversion, detectClosingIntent } from './closing_state.js';
 import { MouDocumentClient, shouldSendMouDocument, validatePdf, MOU_CAPTION } from './mou_document.js';
-import { isPurchaseDocumentSubmission, purchaseHandoffText } from './purchase_intake.js';
+import { isPurchaseDocumentSubmission, isPurchasePreparationText, purchaseHandoffText } from './purchase_intake.js';
 import { recommendationPreference } from './new_property_notifications.js';
 import { offeredPropertyIds, savedRecommendationSearch } from './recommendation_policy.js';
 import { recommendationIds, withPresentingAgent } from './recommendations.js';
@@ -52,6 +59,14 @@ export class MessageProcessor {
     if (actual === this.botControlPhone) return 'bot_control_contact';
     if (this.config.stokerPhone && actual === this.config.stokerPhone && actual !== this.config.testClientPhone) return 'internal_stock_contact';
     if (actual === this.whatsapp.getStatus?.().phone) return 'connected_account';
+    return null;
+  }
+
+  admittedPropertyInquiry(phone) {
+    for (const alias of this.contactAliases(phone)) {
+      const saved = this.store.get(alias) || this.store.control?.getSearch?.(alias);
+      if (hasActivePropertyInquiry(saved, this.config, this.now())) return saved;
+    }
     return null;
   }
 
@@ -100,6 +115,7 @@ export class MessageProcessor {
   pinHandover(session, reason) {
     this.cancelPropertyLookup(session.phone);
     session.is_bot_active = false; session.generation += 1; session.pending_reply = null;
+    session.property_followup = null;
     session.handover = { reason, at: this.now(), notice: 'not_requested' };
     for (const alias of this.contactAliases(session.phone)) this.store.control?.pause(alias, reason);
     this.store.rememberSearch(session);
@@ -208,8 +224,25 @@ export class MessageProcessor {
     // Internal contacts stay excluded, apart from an explicitly configured
     // client test number. Resolve Baileys LID aliases for both roles.
     messages = messages.filter((message) => message.type !== 'human_takeover' && !['internal_stock_contact', 'bot_control_contact'].includes(this.blockedContact(message.from)));
-    const unique = [...new Map(messages.filter((message) => !ignoredInbound(message)).map((message) => [message.id, message])).values()]
+    let unique = [...new Map(messages.filter((message) => !ignoredInbound(message)).map((message) => [message.id, message])).values()]
       .filter((message) => !this.store.seen.has(message.id));
+    const admissions = new Map(), batchAdmissions = new Map(), humanMessages = new Map();
+    for (const message of unique) {
+      if (!['text', 'interactive', 'button'].includes(message.type)) continue;
+      const reason = nonBuyerHandoffReason(message.text) ||
+        (this.config.handoffNonBuyerMessages && localPropertyScope(message.text) === 'other' ? 'other_work' : null);
+      if (reason) humanMessages.set(message.id, `non_buyer:${reason}`);
+    }
+    if (this.config.requirePropertyInquiry) unique = unique.filter((message) => {
+      const aliases = this.contactAliases(message.from);
+      const admitted = this.admittedPropertyInquiry(message.from);
+      const entry = (message.type === 'text' ? propertyInquiryEntry(message.text) : null) ||
+        aliases.map(alias => batchAdmissions.get(alias)).find(Boolean) || admitted?.property_inquiry_entry;
+      if (!entry && !humanMessages.has(message.id)) return false;
+      admissions.set(message.id, { entry: entry || null, assetId: admitted?.asset_id });
+      if (entry) for (const alias of aliases) batchAdmissions.set(alias, entry);
+      return true;
+    });
     const newPhones = new Set(unique.filter((message) => !this.store.get(message.from)).map((message) => message.from));
     this.store.assertCapacity(newPhones.size, unique.length);
     const additions = new Map();
@@ -223,7 +256,9 @@ export class MessageProcessor {
       const preference = recommendationPreference(message.text);
       const contactPhone = this.whatsapp.getContactPhone?.(message.from) || message.from;
       if (preference != null && validPhone(contactPhone)) this.recommendationPreferences?.setEnabled(contactPhone, preference);
-      const session = this.store.get(message.from) || this.store.create(message.from);
+      const existing = this.store.get(message.from);
+      const session = existing || this.store.create(message.from);
+      if (!existing && this.config.requirePropertyInquiry && admissions.get(message.id).assetId) session.asset_id ||= admissions.get(message.id).assetId;
       const ownership = this.ownership(message.from);
       if (ownership?.resume_at != null && ownership.resume_at <= this.now() && ownership.reason === 'manual_cs') this.setBotActive(message.from, true, { replayPending: false });
       else if (!ownership && !session.is_bot_active && session.handover) this.setBotActive(message.from, true, { replayPending: false });
@@ -232,12 +267,13 @@ export class MessageProcessor {
         session.handover = { ...ownership, notice: 'not_requested' };
       }
       this.store.resetIfIdle(session);
+      if (this.config.requirePropertyInquiry) session.property_inquiry_entry = admissions.get(message.id).entry;
       session.last_user_received_at = this.now();
       session.last_user_at = Math.max(session.last_user_at || 0, message.timestamp);
       session.updated_at = this.now();
       session.reply_version = (session.reply_version || 0) + 1;
-      const trigger = message.text ? detectHandover(message.text, { closing: session.conversion?.mode === CLOSING_STATE, canScheduleVisit: !!this.surveys }) ||
-        (interactionDecision({ text: message.text, type: message.type, previousId: session.asset_id, history: session.history, state: { ...session, canScheduleVisit: !!this.surveys } }) === 'handoff' ? 'unrecognized_language' : null) : null;
+      const trigger = humanMessages.get(message.id) || (message.text ? detectHandover(message.text, { closing: session.conversion?.mode === CLOSING_STATE, canScheduleVisit: !!this.surveys }) ||
+        (interactionDecision({ text: message.text, type: message.type, previousId: session.asset_id, history: session.history, state: { ...session, canScheduleVisit: !!this.surveys } }) === 'handoff' ? 'unrecognized_language' : null) : null);
       // Pause sinkron membatalkan hasil LLM yang sedang berjalan pada nomor ini.
       const handover = trigger ? this.store.pause(session, `keyword:${trigger}`) : false;
       // Release a slow lookup immediately when CS takes over or a newer turn
@@ -248,7 +284,7 @@ export class MessageProcessor {
       if (!session.is_bot_active) {
         // Keep one unanswered, non-sensitive text. A newer manual answer clears
         // it; neither activation nor expiry may replay an older customer turn.
-        session.pending_reply = message.type === 'text' && !trigger && !purchaseSubmission && !isPrivateRequest(message.text || '', session.conversion)
+        session.pending_reply = message.type === 'text' && !trigger && !purchaseSubmission && !session.handover?.reason.includes('non_buyer:') && !isPrivateRequest(message.text || '', session.conversion)
           ? { message: { ...message }, recorded: false, expires_at: this.now() + 15 * 60000 } : null;
         this.store.rememberSearch(session);
       }
@@ -295,8 +331,17 @@ export class MessageProcessor {
       if (!session.client_identity.name && sent.name) session.client_identity = { ...session.client_identity, name: sent.name, asked: true };
       this.store.rememberSearch(session);
     }
-    return sent && !session.history.some(item => item.role === 'assistant' && item.content === sent.text)
+    let history = sent && !session.history.some(item => item.role === 'assistant' && item.content === sent.text)
       ? [{ role: 'assistant', content: sent.text }, ...session.history] : session.history;
+    if (hasActivePropertyInquiry(session, this.config, this.now()) && !session.history.some(item => item.role === 'assistant')) {
+      const saved = this.contactAliases(session.phone).map(alias => this.store.get(alias) || this.store.control?.getSearch?.(alias))
+        .filter(item => item?.property_followup?.asset_id === session.asset_id)
+        .sort((a, b) => b.property_followup.at - a.property_followup.at)[0];
+      const question = restorePropertyQuestion(saved?.property_followup, session.asset_id);
+      if (question) history = [...history.filter(item => item.role === 'assistant'), question,
+        ...history.filter(item => item.role !== 'assistant')];
+    }
+    return history;
   }
 
   async deliver(session, text, replyTo, { human = false, handover = false } = {}) {
@@ -313,6 +358,7 @@ export class MessageProcessor {
         session.outbound_recommendation = { text, at: this.now(), property_ids: ids, offered_ids: session.buyer_state.offered_ids,
           search_criteria: session.buyer_state.profile, name: session.client_identity.name || null, agent_id: session.buyer_state.sender_agent_id || null };
       }
+      session.property_followup = deliveredPropertyQuestion(id && !human && !handover ? text : '', session.asset_id, this.now());
       this.store.append(session, 'assistant', text);
       session.delivery_error = null;
       return id;
@@ -322,7 +368,7 @@ export class MessageProcessor {
     }
   }
 
-  async sendHandover(session, message, text = HANDOVER_MESSAGE) {
+  async sendHandover(session, message, text = session.handover?.reason.includes('non_buyer:') ? NON_BUYER_HANDOVER_MESSAGE : HANDOVER_MESSAGE) {
     try {
       const id = await this.deliver(session, text, message.id, { handover: true });
       if (id) session.handover.notice = 'sent';
@@ -335,6 +381,8 @@ export class MessageProcessor {
 
   async process(message, session, { handover, generation, replyVersion, alreadyRecorded = false }) {
     if (session.generation !== generation) return;
+    // Old pending replies cannot bypass admission after a service restart.
+    if (this.config.requirePropertyInquiry && !session.property_inquiry_entry && !handover) return;
     const purchaseSubmission = isPurchaseDocumentSubmission({ ...message, conversion: session.conversion });
     if (!alreadyRecorded) this.store.append(session, 'user', purchaseSubmission
       ? '[Lampiran atau data pembelian; isi tidak diproses AI dan menunggu pemeriksaan tim]'
@@ -366,10 +414,36 @@ export class MessageProcessor {
     const conversation = this.conversationHistory(session);
     const history = conversation.filter((item) => !item.property_ignored);
     session.asset_id ||= session.survey_state?.asset_id || session.consultation?.asset_id || selectedAssetIdFromHistory(history);
-    let decision = interactionDecision({ text: message.text || '', type: message.type, previousId: session.asset_id, history, state: { ...session, canScheduleVisit: !!this.surveys } });
+    const policyState = () => ({ ...session, handoffNonBuyerMessages: this.config.handoffNonBuyerMessages, canScheduleVisit: !!this.surveys });
+    let decision = interactionDecision({ text: message.text || '', type: message.type, previousId: session.asset_id, history, state: policyState() });
+    if (decision === 'human') {
+      this.store.pause(session, 'non_buyer:conversation_purpose');
+      session.pending_reply = null; this.store.rememberSearch(session);
+      await this.sendHandover(session, message); return;
+    }
     const client = clientIntroductionTurn({ text: message.text || '', history, identity: session.client_identity,
       hasContext: !!session.asset_id || conversation !== session.history || !!session.buyer_state?.searchStarted || history.some((item) => item.role === 'user' && requestsPropertySearch(item.content)) });
     const phone = this.whatsapp.getContactPhone?.(message.from) || (validPhone(message.from) ? message.from : null);
+    if (isPrivateRequest(message.text || '', session.conversion)) { ignorePropertyTurn(session.history, message.text); return; }
+    const scopeLookup = new AbortController();
+    this.propertyLookups.set(session.phone, scopeLookup);
+    let budgetAnswer;
+    try {
+      budgetAnswer = localPropertyScope(message.text || '') === 'other' || !['text', 'interactive', 'button'].includes(message.type) ? null
+        : await resolveBudgetAnswer(message.text || '', { history, consultation: session.consultation, assetId: session.asset_id,
+          otherIntent: hasPropertyReference(message.text || '') || requestsPropertySearch(message.text || '') || isPurchaseCostQuestion(message.text || '') ||
+            requestsPropertyDetails(message.text || '') || isConditionQuestion(message.text || '') || isVisitRequest(message.text || '') ||
+            isPurchasePreparationText(message.text || '', session.conversion) ||
+            detectClosingIntent(message.text || '', { selectedAssetId: session.asset_id, history }) }, this.ai, scopeLookup.signal);
+      decision = await resolveInteractionDecision({ text: message.text || '', type: message.type, previousId: session.asset_id, history, state: { ...policyState(), budget_answer: budgetAnswer } }, this.ai, scopeLookup.signal);
+    }
+    finally { if (this.propertyLookups.get(session.phone) === scopeLookup) this.propertyLookups.delete(session.phone); }
+    if (!stillActive()) return;
+    if (['human', 'handoff'].includes(decision)) {
+      this.store.pause(session, decision === 'human' ? 'non_buyer:conversation_purpose' : 'unrecognized_language');
+      session.pending_reply = null; this.store.rememberSearch(session);
+      await this.sendHandover(session, message); return;
+    }
     try {
       if (phone && client.identity?.name) this.clients?.setName(phone, client.identity.name);
       if (phone && session.client_capture && this.clients) {
@@ -378,28 +452,23 @@ export class MessageProcessor {
       }
     }
     catch (error) { logFailure(this.logger, 'client_identity_save_failed', error); }
-    if (client.reply && decision !== 'handoff' && !isPrivateRequest(message.text || '', session.conversion) && message.type === 'text') {
+    if (client.reply && !isPrivateRequest(message.text || '', session.conversion) && message.type === 'text') {
       session.out_of_scope_notified = true;
       await this.deliver(session, client.reply, message.id);
       return;
     }
-    if (isPrivateRequest(message.text || '', session.conversion)) { ignorePropertyTurn(session.history, message.text); return; }
-    const scopeLookup = new AbortController();
-    this.propertyLookups.set(session.phone, scopeLookup);
-    try { decision = await resolveInteractionDecision({ text: message.text || '', type: message.type, previousId: session.asset_id, history, state: { ...session, canScheduleVisit: !!this.surveys } }, this.ai, scopeLookup.signal); }
-    finally { if (this.propertyLookups.get(session.phone) === scopeLookup) this.propertyLookups.delete(session.phone); }
-    if (!stillActive()) return;
     if (decision === 'silent') { ignorePropertyTurn(session.history, message.text); return; }
     if (decision === 'nudge') {
       if (!session.out_of_scope_notified) { session.out_of_scope_notified = true; await this.deliver(session, CONTEXT_REQUIRED_MESSAGE, message.id); }
       return;
     }
-    if (decision === 'handoff') { this.store.pause(session, 'unrecognized_language'); await this.sendHandover(session, message); return; }
     const previouslySelectedAssetId = session.asset_id;
     const lookup = new AbortController();
     this.propertyLookups.set(session.phone, lookup);
     let context;
-    try { context = await resolvePropertyContext(this.catalog, message.text, session.asset_id, history, this.now(), lookup.signal, session.buyer_state, session.conversion, this.ai, { surveyState: session.survey_state, consultation: session.consultation }, decision === 'search'); }
+    const inquiry = this.config.requirePropertyInquiry ? propertyInquiryEntry(message.text) : null;
+    const lookupText = inquiry ? `Kode ${inquiry.asset_id}` : message.text;
+    try { context = await resolvePropertyContext(this.catalog, lookupText, session.asset_id, history, this.now(), lookup.signal, session.buyer_state, session.conversion, this.ai, { surveyState: session.survey_state, consultation: session.consultation, budgetAnswer }, decision === 'search'); }
     catch (error) {
       if (lookup.signal.aborted) return;
       logFailure(this.logger, 'property_lookup_failed', error);
@@ -442,7 +511,7 @@ export class MessageProcessor {
         selectedAssetId: previouslySelectedAssetId,
         history: history.map((item) => ({ ...item })), qualification: session.qualification, conversion: session.conversion,
         now: this.now(), clarify: decision === 'clarify', clientIdentity: client.identity,
-        consultation: session.consultation, surveyState: session.survey_state, phone, agentId: this.agentId, surveys: this.surveys,
+        consultation: session.consultation, budgetAnswer, surveyState: session.survey_state, phone, agentId: this.agentId, surveys: this.surveys,
         persistSurvey: visit => { session.survey_state = structuredClone(visit); this.store.rememberSearch(session); } });
     } catch (error) {
       logFailure(this.logger, 'ai_generation_failed', error);
@@ -451,6 +520,10 @@ export class MessageProcessor {
     }
     // Pemeriksaan kedua penting jika trigger tiba saat menunggu API LLM.
     if (result.consultation) session.consultation = result.consultation;
+    if (result.budget_answer_handled) {
+      const turn = session.history.findLast(item => item.role === 'user');
+      if (turn) turn.budget_answer = true;
+    }
     if ('survey_state' in result) session.survey_state = result.survey_state;
     this.store.rememberSearch(session);
     if (!stillActive()) return;
@@ -483,7 +556,7 @@ export class MessageProcessor {
     }
     if (result.conversion) this.store.setConversion(session, result.conversion);
     if (this.documents && this.whatsapp.sendDocument && shouldSendMouDocument({ asset,
-      conversion: result.conversion, history: session.history, text: message.text, selectedAssetId: previouslySelectedAssetId })) {
+      conversion: result.conversion, history: session.history, text: message.text, selectedAssetId: previouslySelectedAssetId, budgetFitAccepted: result.budget_fit_accepted === true })) {
       const previous = result.conversion;
       const record = { asset_id: asset.id, status: 'preparing', at: this.now() };
       result.conversion = { ...previous, draft_document: record };
@@ -538,6 +611,7 @@ export class MessageProcessor {
       current.pending_reply = null; current.qualification = {}; current.lead_status = 'new';
       if (!preserveSearch) {
         current.history = []; current.asset_id = null; current.buyer_state = null;
+        current.property_followup = null;
         this.store.setConversion(current, searchConversion());
       }
       current.out_of_scope_notified = false; current.updated_at = this.now();
@@ -565,6 +639,7 @@ export class MessageProcessor {
       const current = this.store.get(alias);
       if (current) {
         current.is_bot_active = false; current.generation += 1; current.pending_reply = null;
+        current.property_followup = null;
         current.handover = { ...handover, notice: 'not_requested' }; current.updated_at = this.now();
         this.store.rememberSearch(current);
       }

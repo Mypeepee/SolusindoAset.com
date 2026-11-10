@@ -20,6 +20,8 @@ import { createPortal } from "react-dom";
 import { Icon } from "@iconify/react";
 import { X } from "lucide-react";
 import type { SuratTemplate } from "./data";
+import { downloadSurat } from "@/lib/suratDownload";
+import { toast } from "sonner";
 
 // ── Tipe ──────────────────────────────────────────────────────────────────────
 
@@ -815,26 +817,11 @@ export function DebiturCareModal({ open, template, onClose }: Props) {
         sumber_ocr: sumber,
         skor_ocr: String(skor),
       };
-      const res = await fetch("/api/surat/generate-debitur-care", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(muatan),
-      });
-      if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as { detail?: string };
-        setGalat(err.detail ?? "Gagal membuat surat. Coba lagi.");
-        return;
-      }
-      const disp = res.headers.get("Content-Disposition") ?? "";
-      const namaBerkas = disp.match(/filename="([^"]+)"/)?.[1] ?? "DebiturCare.pdf";
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = namaBerkas; a.click();
-      URL.revokeObjectURL(url);
+      await downloadSurat("/api/surat/generate-debitur-care", muatan, "DebiturCare.pdf");
+      toast.success("Dokumen berhasil dibuat. Unduhan PDF dimulai.");
       onClose();
-    } catch {
-      setGalat("Gagal menghubungi server.");
+    } catch (cause) {
+      setGalat(cause instanceof Error ? cause.message : "Gagal membuat dokumen. Coba lagi.");
     } finally {
       setMembuat(false);
     }

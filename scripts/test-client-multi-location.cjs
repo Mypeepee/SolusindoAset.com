@@ -100,9 +100,9 @@ test('one preference card searches all four locations and exposes their full nam
   assert.deepEqual(data.items.map(item => item.id_property).sort(), ['1', '2', '3', '4']);
   assert.equal(data.total, 4);
   assert.equal(data.preferensi.length, 1);
-  assert.equal(data.preferensi[0].label, 'Rumah · Waru +3 · ≤ 310 jt · LT ≥ 120 m²');
+  assert.equal(data.preferensi[0].label, 'Rumah · Waru, Kabupaten Sidoarjo +3 · ≤ 310 jt · LT ≥ 120 m²');
   assert.equal(data.preferensi[0].label_lengkap,
-    'Rumah · Waru / Menganti / Taman / Kota Surabaya · ≤ 310 jt · LT ≥ 120 m²');
+    'Rumah · Waru, Kabupaten Sidoarjo / Menganti, Kabupaten Gresik / Taman, Kabupaten Sidoarjo / Kota Surabaya · ≤ 310 jt · LT ≥ 120 m²');
 });
 
 test('a match only in the fourth location still appears', async () => {
@@ -114,7 +114,7 @@ test('a match only in the fourth location still appears', async () => {
 test('explicit preference IDs narrow the search without falling back to the first location', async () => {
   const data = await search({ query: '?pref=2,3,9999' });
   assert.deepEqual(data.items.map(item => item.id_property).sort(), ['2', '3']);
-  assert.equal(data.preferensi[0].label_lengkap, 'Rumah · Menganti / Taman · ≤ 310 jt · LT ≥ 120 m²');
+  assert.equal(data.preferensi[0].label_lengkap, 'Rumah · Menganti, Kabupaten Gresik / Taman, Kabupaten Sidoarjo · ≤ 310 jt · LT ≥ 120 m²');
 });
 
 test('an empty result retains the full search scope and treats 310 as rupiah', async () => {
@@ -122,7 +122,7 @@ test('an empty result retains the full search scope and treats 310 as rupiah', a
   assert.equal(data.total, 0);
   assert.deepEqual(data.items, []);
   assert.equal(data.preferensi[0].label_lengkap,
-    'Rumah · Waru / Menganti / Taman / Kota Surabaya · ≤ 310 · LT ≥ 120 m²');
+    'Rumah · Waru, Kabupaten Sidoarjo / Menganti, Kabupaten Gresik / Taman, Kabupaten Sidoarjo / Kota Surabaya · ≤ 310 · LT ≥ 120 m²');
   assert.equal(data.diagnosa.jikaBudgetNaik10, 0);
 });
 
@@ -131,5 +131,5 @@ test('previously dismissed matches stay excluded across all locations', async ()
   assert.equal(data.total, 0);
   assert.deepEqual(data.items, []);
   assert.equal(data.jumlahDisingkirkan, 4);
-  assert.match(data.preferensi[0].label_lengkap, /Waru \/ Menganti \/ Taman \/ Kota Surabaya/);
+  assert.match(data.preferensi[0].label_lengkap, /Waru, Kabupaten Sidoarjo \/ Menganti, Kabupaten Gresik \/ Taman, Kabupaten Sidoarjo \/ Kota Surabaya/);
 });

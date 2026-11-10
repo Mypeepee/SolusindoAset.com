@@ -1,5 +1,6 @@
 # About page / completed-project editor
 
+
 Scope: completed-project publication from `/about/company-profile`. Existing dashboard workflows retain their own contracts.
 
 | Capability    | Canonical owner                                | Source of truth                                       | Allowed variants                           | Verification                                   |
@@ -40,6 +41,29 @@ Agent; the existing agent application and upline rules remain the authority.
 Code/share/copy stay in one responsive row, with visible keyboard focus and
 accessible names in compact mode. Verify proxy redirects, code prefill, copy,
 native-share cancellation/fallback, and narrow layouts in browser checks.
+
+## CRM region preferences — 2026-11-05
+
+CRM geographic identity (user correction, 2026-11-05): `FormPreferensi` owns
+conversion between `SelectedRegion` and all four saved `loc_*` fields.
+`LocationPicker`'s administrative variant carries the full parent chain and
+Kota/Kabupaten prefixes. Rehydration and selection IDs retain those parents;
+namesakes in different cities or districts remain separate selections. District
+pills show the city/regency; village pills show district and city/regency.
+`klienMatch` applies every known saved parent in both SQL before its candidate
+limit and strict in-memory matching, including cron and chatbot consumers.
+Missing legacy parents remain unknown and are never guessed from a name alone.
+District saves require their city/regency; village saves require district and
+city/regency. Incomplete legacy scopes cannot match arbitrary namesakes, and the
+shared form explains which region must be selected again.
+A legacy selection missing only its province can still be unchecked under the
+same known city/district. Ignore aborted/superseded child-list responses when
+navigating, closing or reopening the picker. Verify save/read/edit round trips,
+Sukodono Sidoarjo vs Lumajang, namesake villages, city/regency distinction,
+multiple selections, request races, failure recovery, keyboard and narrow layouts.
+
+Regression checks: `scripts/test-client-region-scope.cjs` and
+`scripts/verify-client-region-browser.mjs` (local intercepted fixtures).
 
 ## CRM discount preferences — 2026-11-01
 
@@ -226,6 +250,8 @@ The purchase simulation is scoped to Investor: auction base + BPHTB 5% + bea lel
 All market discounts and ROI baselines use the exact kelurahan/property/intent/period group. One valid peer is enough; no peer means unknown. Cards remain visible in Semua listing. There is no kecamatan benchmark or automatic expansion. The sort dropdown includes Diskon kelurahan tertinggi and Penurunan lelang tertinggi (buy only), globally ranked before the 30-card page is sliced.
 
 The browser displays only snapshots matching owner, policy and complete filter key. Its 60s cache is bounded and every shown snapshot revalidates authorization/data. A forced refresh bypasses cached values; 401/403 clears the stored feed and visible cards. Transient failures retain matching data with the existing snapshot warning. Request coalescing removes StrictMode/bookmark-hydration duplicates, and obsolete searches still abort. The server coalesces cold work and reuses 60s financial snapshots/full rankings; only page/proof photos are batch-hydrated. Cached financial results are never a page-local ranking or a manual valuation. Public property and auction-detail behavior stays unchanged.
+
+Investor's “Jadwal lelang terdekat” sort uses the WIB calendar date, then descending signed points (diskon kelurahan + turun lelang) within the same date, then numeric listing ID for equal points. Auction time cannot outrank a higher score on that date. Today's auctions remain eligible throughout the WIB day; past, missing and invalid schedules follow upcoming dates. Missing drivers remain unknown, negative discounts reduce points, and sorting covers the full filtered scope before pagination. Canonical owner: `selectDeals` in `src/lib/investor-deals.ts`; regression coverage: `scripts/test-investor-date-ranking.cjs`.
 ## Public auction history ordering
 
 The detail history and Investor history share `auctionHistoryOrder.ts`: ascending
@@ -380,3 +406,61 @@ Policy version 4 requires old unapproved proposals to regenerate.
 Current automated acceptance for this workflow lives in verify-marketing-batches-browser.mjs
 and verify-marketing-campaigns-db.cjs. Earlier archive/simulation browser scripts describe
 the retired workflow and are superseded for production acceptance.
+
+## Surat generation — 2026-11-04
+
+The current request requires all letter types to produce a PDF and expose
+actionable failures. `suratGeneration.ts` owns the PN/Grosse/MOU form fields and
+validation; their actual supplied DOCX documents and existing MOU service own
+document wording and financial terms. The supplied PN body is signed directly
+by the applicant, despite its original filename. Do not invent a PN authority
+clause; show that limitation in its form. Grosse can include the supplied power
+of attorney. Original Word files remain untouched; `prepare-permohonan-templates.py`
+produces separate parameterised copies and fails on unexpected source changes.
+
+| Capability | Canonical owner | Source of truth | Variant | Verification |
+| --- | --- | --- | --- | --- |
+| Form | Shared Input/Textarea, SuratTemplateModal | suratGeneration.ts, supplied DOCX | PN, Grosse, MOU | Required data, NIK, date, first-error focus, manual entry |
+| Dialog | DialogFrame / Radix | Existing shared primitive | Permohonan/MOU | Focus, Escape, dirty dismissal, mobile |
+| Date | Typed YYYY-MM-DD | Shared validation; Asia/Jakarta | Surat date | Invalid calendar dates; midnight WIB |
+| Toast | Root Sonner | Valid PDF response | Download started | Never claim local save completion |
+| Download | suratDownload.ts | PDF content type/signature and server filename | All surat modals | HTTP, session, timeout, invalid body, delayed URL cleanup |
+| Generation | Existing route + docxToPdf | Current Prisma schema; supplied template | All letter types | Real LibreOffice PDF; isolated database fixtures |
+
+OCR is optional; all required values remain manually editable. Map the OCR API's
+actual `*_pemohon` keys to the selected party and retain manual values when OCR
+returns empty fields. Block generation during scanning, prevent duplicate submit,
+ignore stale scan results, preserve values on failure, and leave an explicit retry
+action. A generation success closes the form only after a valid PDF starts downloading.
+The shared converter bounds queue wait and execution, isolates each LibreOffice
+profile, and retains all document pages. Invoice persistence failure is a failed
+operation; identical invoice retries reuse the existing record. Receipt retries
+retain the recorded number/date, with database locking across number allocation
+and generation. Financial/register QA uses an in-memory database and intercepted
+browser mutations, never production fixture inserts.
+
+## Dua akun Google Drive — 2026-11-04
+
+Authority: the user's explicit choice of server configuration only. There is no
+new storage dashboard or database token store. `googleDrivePool.mjs` owns OAuth
+refresh, quota checks, folder paths, file ownership lookup and bounded uploads;
+`googleDrive.ts` supplies the server singleton. The standalone scraper uses the
+same pool and environment configuration.
+
+Drive 1 keeps its existing roots. Drive 2 uses its own configured roots or lazy
+app-owned folders. Insufficient remaining bytes and `storageQuotaExceeded` permit
+per-file fallback; permission, rate and uncertain network failures do not trigger
+a second upload. Preserve file IDs/URLs and cover ordering. Cleanup targets only
+the current operation's created files, or old files explicitly replaced by the
+existing workflow, and locates their account by permission-aware lookup.
+
+The pool defaults to private sharing; callers explicitly retain the existing
+workflow's sharing policy. Tokens remain server environment variables and never
+appear in API status or error output. Uploading listing photos requires the same
+signed-in agent as listing creation. Agent-registration uploads belong to the
+signed-in user. API failures preserve the user's form and explain capacity/errors.
+
+Acceptance: `npm run test:drive` covers the pool and actual upload handlers with
+injected Google/database adapters. `npm run diagnose:drive` reads real account
+capacity and configuration without uploading or changing files. Second-account
+activation requires its genuine OAuth refresh token and an application restart.

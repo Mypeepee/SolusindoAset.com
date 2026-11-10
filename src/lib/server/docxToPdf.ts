@@ -20,8 +20,8 @@
 // $HOME/.config/libreoffice — di shared hosting sering tidak siap, dan dua
 // konversi bersamaan akan berebut kunci profil yang sama lalu menggantung
 // diam-diam. Di sini profilnya dipaksa ke satu folder tmp milik aplikasi dan
-// konversi dijalankan bergiliran: lebih aman di jatah RAM shared hosting, dan
-// profilnya dipakai ulang sehingga tidak dibangun ulang tiap surat.
+// konversi dijalankan bergiliran. Setiap konversi sekarang mendapat profil
+// sendiri di folder kerjanya agar proses/bundel rute lain tidak berebut kunci.
 // ---------------------------------------------------------------------------
 
 import { accessSync, constants, existsSync, readdirSync, statSync } from "fs";
@@ -38,16 +38,13 @@ const execFileAsync = promisify(execFile);
 // untuk kasus soffice menggantung (profil rusak, kehabisan memori): request
 // route punya maxDuration 60 detik, jadi kita harus menyerah lebih dulu agar
 // pemanggilnya masih sempat menerima pesan error yang jelas.
-const BATAS_WAKTU_MS = 45_000;
+const BATAS_WAKTU_MS = 50_000;
 
 const NAMA_BIN = process.platform === "win32"
   // soffice.com dipakai lebih dulu di Windows: soffice.exe bisa melepas diri
   // (detach) sehingga proses "selesai" sebelum PDF-nya benar-benar ditulis.
   ? ["soffice.com", "soffice.exe", "soffice"]
   : ["soffice"];
-
-// Profil dipakai ulang lintas request dalam satu proses Node.
-const PROFIL_DIR = join(tmpdir(), "lo-profil-solusindoaset");
 
 function bisaDieksekusi(p: string): boolean {
   try {
@@ -154,19 +151,23 @@ export function findSoffice(): string {
 
 // Konversi dijalankan bergiliran: satu profil LibreOffice tidak boleh dipakai
 // dua proses sekaligus, dan shared hosting tidak punya RAM untuk dua soffice.
-let antrean: Promise<unknown> = Promise.resolve();
+// Next may bundle this module separately for each route. Share the queue across
+// those bundles, and isolate each job's profile across separate Node processes.
+const host = globalThis as typeof globalThis & { __suratPdfQueue?: Promise<unknown> };
 
 function bergiliran<T>(tugas: () => Promise<T>): Promise<T> {
-  const hasil = antrean.then(tugas, tugas);
-  antrean = hasil.catch(() => {});
+  const hasil = (host.__suratPdfQueue ?? Promise.resolve()).then(tugas, tugas);
+  host.__suratPdfQueue = hasil.catch(() => {});
   return hasil;
 }
 
-async function jalankan(soffice: string, kerja: string, docxPath: string): Promise<void> {
+async function jalankan(soffice: string, kerja: string, docxPath: string, deadline: number): Promise<void> {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) throw new Error("Antrean konversi PDF penuh. Silakan coba lagi.");
   await execFileAsync(
     soffice,
     [
-      `-env:UserInstallation=${pathToFileURL(PROFIL_DIR).href}`,
+      `-env:UserInstallation=${pathToFileURL(join(kerja, "profil")).href}`,
       "--headless",
       "--norestore",
       "--nolockcheck",
@@ -178,7 +179,7 @@ async function jalankan(soffice: string, kerja: string, docxPath: string): Promi
       docxPath,
     ],
     {
-      timeout: BATAS_WAKTU_MS,
+      timeout: remaining,
       killSignal: "SIGKILL",
       maxBuffer: 10 * 1024 * 1024,
       // HOME wajib ada & bisa ditulis; kalau tidak, LibreOffice mati tanpa pesan.
@@ -193,8 +194,17 @@ async function jalankan(soffice: string, kerja: string, docxPath: string): Promi
  */
 export async function docxToPdf(docxBuffer: Buffer, prefix = "surat"): Promise<Buffer> {
   const soffice = findSoffice();
-
-  return bergiliran(async () => {
+  const deadline = Date.now() + BATAS_WAKTU_MS;
+  let expired = false;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const waiting = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      expired = true;
+      reject(new Error("Konversi PDF melewati batas waktu. Silakan coba lagi."));
+    }, BATAS_WAKTU_MS);
+  });
+  const work = bergiliran(async () => {
+    if (expired || Date.now() >= deadline) throw new Error("Antrean konversi PDF penuh. Silakan coba lagi.");
     const kerja = await mkdtemp(join(tmpdir(), `${prefix}-`));
     const docxPath = join(kerja, "dokumen.docx");
     const pdfPath = join(kerja, "dokumen.pdf");
@@ -202,14 +212,7 @@ export async function docxToPdf(docxBuffer: Buffer, prefix = "surat"): Promise<B
     try {
       await writeFile(docxPath, docxBuffer);
 
-      try {
-        await jalankan(soffice, kerja, docxPath);
-      } catch (e) {
-        // Percobaan kedua dengan profil bersih: sisa kunci dari proses yang mati
-        // mendadak adalah penyebab paling sering konversi gagal/menggantung.
-        await rm(PROFIL_DIR, { recursive: true, force: true }).catch(() => {});
-        await jalankan(soffice, kerja, docxPath).catch(() => { throw e; });
-      }
+      await jalankan(soffice, kerja, docxPath, deadline);
 
       if (!existsSync(pdfPath)) {
         throw new Error(
@@ -217,11 +220,18 @@ export async function docxToPdf(docxBuffer: Buffer, prefix = "surat"): Promise<B
           "Biasanya template .docx-nya rusak atau memori server tidak cukup.",
         );
       }
-      return await readFile(pdfPath);
+      const pdf = await readFile(pdfPath);
+      if (pdf.subarray(0, 5).toString() !== "%PDF-") throw new Error("Hasil konversi bukan PDF yang valid.");
+      return pdf;
     } finally {
       await rm(kerja, { recursive: true, force: true }).catch(() => {});
     }
   });
+  try {
+    return await Promise.race([work, waiting]);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /** Laporan untuk /api/diagnostik/soffice — dijalankan DI server yang bermasalah. */

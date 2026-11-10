@@ -37,8 +37,9 @@ import SearchSelect from "@/components/search/SearchSelect";
 import { SewingPinIcon, DoubleArrowDownIcon, LayersIcon, Cross2Icon } from "@radix-ui/react-icons";
 import { JENIS_DISKON, LABEL_DISKON, inputPersenDiskon, masalahDiskon, type JenisDiskon } from "@/lib/preferensiDiskon";
 import { PremiumSelect, type PremiumOption } from "./CrmFormControls";
-import { regionKey, type RegionLevel, type SelectedRegion } from "@/lib/regionSearch";
+import { ancestorLevels, regionKey, regionLabel, type SelectedRegion } from "@/lib/regionSearch";
 import { labelLuas } from "@/lib/klienRingkas";
+import { masalahIndukLokasi } from "@/lib/preferensiLokasi";
 import {
   PreferensiForm, PreferensiKlien, TipeProperti, JenisTransaksi, TujuanBeli,
   JENIS_TRANSAKSI_LABEL, TIPE_PROPERTI_LABEL, SERTIFIKAT_LABEL, type Sertifikat,
@@ -106,6 +107,10 @@ export function unformatRupiah(formatted: string) {
    berdampingan. */
 export function masalahPreferensi(p: PreferensiForm): string | null {
   if (p.locations.length === 0) return "Lokasi belum dipilih";
+  for (const region of p.locations) {
+    const masalah = masalahIndukLokasi(regionToLocFields(region));
+    if (masalah) return masalah;
+  }
   const bmin = Number(unformatRupiah(p.budget_min)) || 0;
   const bmax = Number(unformatRupiah(p.budget_max)) || 0;
   if (bmin && bmax && bmin > bmax) return "Budget minimum lebih besar dari maksimum";
@@ -135,11 +140,10 @@ export type PickerPref = "type" | "transaksi" | "location" | "tujuan" | "legalit
 export function regionToLocFields(r: SelectedRegion) {
   const f: { loc_provinsi: string | null; loc_kota: string | null; loc_kecamatan: string | null; loc_kelurahan: string | null } =
     { loc_provinsi: null, loc_kota: null, loc_kecamatan: null, loc_kelurahan: null };
-  switch (r.level) {
-    case "provinsi":  f.loc_provinsi = r.name; break;
-    case "kota":      f.loc_kota = r.name;      if (r.parent) f.loc_provinsi = r.parent; break;
-    case "kecamatan": f.loc_kecamatan = r.name; if (r.parent) f.loc_kota = r.parent; break;
-    case "kelurahan": f.loc_kelurahan = r.name; if (r.parent) f.loc_kecamatan = r.parent; break;
+  f[`loc_${r.level}`] = r.name;
+  for (const [i, level] of ancestorLevels(r.level).entries()) {
+    // ancestors carries identity; parent is only a legacy display fallback.
+    f[`loc_${level}`] = (r.ancestors?.[i] ?? (i === 0 ? r.parent : null))?.trim() || null;
   }
   return f;
 }
@@ -150,12 +154,15 @@ export function locFieldsToRegion(p: {
   loc_provinsi: string | null; loc_kota: string | null;
   loc_kecamatan: string | null; loc_kelurahan: string | null;
 }): SelectedRegion | null {
-  const mk = (level: RegionLevel, name: string, parent?: string | null): SelectedRegion =>
-    ({ id: `${level}:${name}`, name, level, ...(parent ? { parent } : {}) });
-  if (p.loc_kelurahan) return mk("kelurahan", p.loc_kelurahan, p.loc_kecamatan);
-  if (p.loc_kecamatan) return mk("kecamatan", p.loc_kecamatan, p.loc_kota);
-  if (p.loc_kota)      return mk("kota", p.loc_kota, p.loc_provinsi);
-  if (p.loc_provinsi)  return mk("provinsi", p.loc_provinsi);
+  for (const level of ["kelurahan", "kecamatan", "kota", "provinsi"] as const) {
+    const name = p[`loc_${level}`];
+    if (!name) continue;
+    const ancestors = ancestorLevels(level).map(l => p[`loc_${l}`] || "");
+    // Preserve gaps: a city must never slide into the district position.
+    while (ancestors.length && !ancestors[ancestors.length - 1]) ancestors.pop();
+    const region = { name, level, ancestors };
+    return { ...region, id: regionKey(region), parent: ancestors[0] || undefined };
+  }
   return null;
 }
 
@@ -190,7 +197,7 @@ export function buildPrefPayloads(p: PreferensiForm) {
     for (const loc of locs) {
       rows.push({
         tipe_properti: tipe,
-        lokasi_dicari: loc ? [loc.name, loc.parent].filter(Boolean).join(", ") : null,
+        lokasi_dicari: loc ? regionLabel(loc) : null,
         ...(loc ? regionToLocFields(loc) : { loc_provinsi: null, loc_kota: null, loc_kecamatan: null, loc_kelurahan: null }),
         ...shared,
       });
@@ -353,6 +360,7 @@ export function IsiPreferensi({
         >
           <LocationPicker
             theme="dark"
+            hierarchy="administrative"
             label=""
             value={form.locations}
             onChange={locs => onUbah("locations", locs)}

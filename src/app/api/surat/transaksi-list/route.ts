@@ -53,51 +53,30 @@ export async function GET() {
   const isOwner = agentRow?.jabatan === "OWNER";
 
   const rows = await prisma.transaksi.findMany({
-    where: isOwner ? {} : { id_agent: agentId },
+    where: isOwner ? {} : { mou: { id_agent: agentId } },
     select: {
-      id: true,
-      id_transaksi: true,
-      dibuat_pada: true,
-      tipe_komisi: true,
-      harga_deal: true,
-      harga_bidding: true,
-      agent_luar_nama: true,
-      listing: {
-        select: {
-          judul: true,
-          alamat_lengkap: true,
-          kota: true,
-          gambar: true,
-        },
-      },
-      agent: {
-        select: {
-          pengguna: {
-            select: { nama_lengkap: true },
-          },
-        },
-      },
+      id_transaksi: true, dibuat_pada: true, harga_bidding: true,
+      mou: { select: {
+        tipe_komisi: true, harga_deal: true, agent_luar_nama: true,
+        listing: { select: { judul: true, alamat_lengkap: true, kota: true, gambar: true } },
+        agent: { select: { pengguna: { select: { nama_lengkap: true } } } },
+      } },
     },
     orderBy: { dibuat_pada: "desc" },
     take: 200,
   });
 
   const result = rows.map((t) => {
-    const isPersentase = t.tipe_komisi.toUpperCase() === "PERSENTASE";
-    const harga = isPersentase ? toNum(t.harga_bidding) : toNum(t.harga_deal);
-
-    const rawGambar = extractFirstImageUrl(t.listing.gambar);
-    const foto_url  = toProxyImg(rawGambar);
-
+    const isPersentase = t.mou.tipe_komisi.toUpperCase() === "PERSENTASE";
     return {
-      id: t.id.toString(),
+      id: t.id_transaksi,
       kode_transaksi: t.id_transaksi,
       tanggal_transaksi: t.dibuat_pada.toISOString(),
-      judul_property: t.listing.judul,
-      alamat_property: t.listing.alamat_lengkap ?? t.listing.kota,
-      nama_agent: t.agent_luar_nama ?? t.agent.pengguna.nama_lengkap,
-      foto_url,
-      harga,
+      judul_property: t.mou.listing.judul,
+      alamat_property: t.mou.listing.alamat_lengkap ?? t.mou.listing.kota,
+      nama_agent: t.mou.agent_luar_nama ?? t.mou.agent.pengguna.nama_lengkap,
+      foto_url: toProxyImg(extractFirstImageUrl(t.mou.listing.gambar)),
+      harga: isPersentase ? toNum(t.harga_bidding) : toNum(t.mou.harga_deal),
       label_harga: isPersentase ? "Harga Bidding" : "Harga Deal",
     };
   });

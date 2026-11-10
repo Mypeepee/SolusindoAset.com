@@ -2,6 +2,7 @@ import { ServiceError } from '../lib/http.js';
 import { IDLE_TIMEOUT_MS } from '../services/interaction_policy.js';
 import { clientIdentity } from '../services/client_identity.js';
 import { CLOSING_STATE, searchConversion } from '../services/closing_state.js';
+import { hasActivePropertyInquiry } from '../services/property_inquiry.js';
 
 export class MemoryStore {
   constructor(config, now = Date.now, control = null) {
@@ -16,13 +17,17 @@ export class MemoryStore {
     const paused = this.control?.get(phone);
     const conversion = this.control?.getConversion?.(phone) || searchConversion();
     const remembered = this.control?.getSearch?.(phone);
-    const searchFresh = remembered && this.now() - remembered.last_user_received_at <= (this.config.sessionIdleMs || IDLE_TIMEOUT_MS);
+    const searchFresh = remembered && (hasActivePropertyInquiry(remembered, this.config, this.now()) ||
+      this.now() - remembered.last_user_received_at <= (this.config.sessionIdleMs || IDLE_TIMEOUT_MS));
     const session = {
       phone, is_bot_active: !paused, generation: 0,
-      asset_id: conversion.mode === CLOSING_STATE ? conversion.asset_id : null, conversion, out_of_scope_notified: false,
+      asset_id: conversion.mode === CLOSING_STATE ? conversion.asset_id : searchFresh && remembered.property_inquiry_entry ? remembered.asset_id || null : null,
+      conversion, out_of_scope_notified: false,
       qualification: {}, history: [], lead_status: 'new', buyer_state: searchFresh || remembered?.buyer_state?.notification_search && remembered?.outbound_recommendation?.at > this.now() - 7 * 86400000 ? remembered.buyer_state : null,
       client_identity: remembered?.client_identity || { name: null, salutation: null, asked: false, declined: false },
       message_sequence: remembered?.message_sequence || 0,
+      property_inquiry_entry: searchFresh ? remembered.property_inquiry_entry || null : null,
+      property_followup: searchFresh ? remembered.property_followup || null : null,
       pending_reply: searchFresh && remembered.pending_reply?.expires_at > this.now() ? { ...remembered.pending_reply, recorded: false } : null,
       outbound_recommendation: remembered?.outbound_recommendation?.at > this.now() - 7 * 86400000 ? remembered.outbound_recommendation : null,
       last_user_at: searchFresh ? remembered.last_user_at : null, last_user_received_at: searchFresh ? remembered.last_user_received_at : null, updated_at: this.now(),
@@ -37,16 +42,21 @@ export class MemoryStore {
 
   rememberSearch(session) {
     this.control?.saveSearch?.(session.phone, { buyer_state: session.buyer_state, client_identity: session.client_identity,
+      property_inquiry_entry: session.property_inquiry_entry || null, asset_id: session.asset_id,
+      property_followup: session.property_followup || null,
       message_sequence: session.message_sequence || 0, last_user_at: session.last_user_at,
       last_user_received_at: session.last_user_received_at, pending_reply: session.pending_reply || null,
       outbound_recommendation: session.outbound_recommendation || null, consultation: session.consultation || null, survey_state: session.survey_state || null });
   }
 
   resetIfIdle(session) {
+    if (hasActivePropertyInquiry(session, this.config, this.now())) return false;
     if (session.last_user_received_at == null || this.now() - session.last_user_received_at <= (this.config.sessionIdleMs || IDLE_TIMEOUT_MS)) return false;
     session.history = []; session.asset_id = session.conversion?.mode === CLOSING_STATE ? session.conversion.asset_id : null; session.qualification = {};
     if (!session.buyer_state?.notification_search || !(session.outbound_recommendation?.at > this.now() - 7 * 86400000)) session.buyer_state = null;
     session.lead_status = 'new'; session.out_of_scope_notified = false;
+    session.property_inquiry_entry = null;
+    session.property_followup = null;
     session.generation += 1;
     this.rememberSearch(session);
     // Human ownership is never revoked by a timer.
@@ -75,6 +85,7 @@ export class MemoryStore {
   pause(session, reason, { at = this.now(), resume_at = null } = {}) {
     if (!session.is_bot_active) return false;
     session.is_bot_active = false;
+    session.property_followup = null;
     session.generation += 1;
     session.handover = { reason, at, notice: 'pending', ...(resume_at != null ? { resume_at } : {}) };
     this.control?.pause(session.phone, reason, { at, resume_at });

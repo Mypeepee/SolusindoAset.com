@@ -17,9 +17,12 @@ import { CLOSING_STATE, detectClosingIntent, requestsClosingExit, planClosingTur
 import { replyFromClosingPlan } from './closing_controller.js';
 import { planPurchaseIntake, isPurchasePreparationText } from './purchase_intake.js';
 import { shouldParseSmartSearch, applyDiscovery, discoverySnapshot, discoveryQuestionReply } from './smart_search_parser.js';
-import { assetConsultationTurn, isVisitRequest, isConditionQuestion } from './asset_consultation.js';
+import { assetConsultationTurn, isVisitRequest, isConditionQuestion, auctionBudgetAnswer, consultationSearchText } from './asset_consultation.js';
 import { previewSurveys } from './survey_booking.js';
 import { localPropertyScope, propertyScopeText } from './property_scope.js';
+import { resolveBudgetAnswer } from './budget_response.js';
+import { resolveLinkedSearch } from './linked_search.js';
+import { NON_BUYER_HANDOVER_MESSAGE } from './conversation_purpose.js';
 
 export const PRIVACY_REPLY = 'Saya hanya dapat membantu dengan informasi properti yang ditayangkan untuk calon pembeli. Data akun, password, rekening, identitas pribadi, serta keuangan internal perusahaan tidak tersedia melalui chatbot.\n\nProperti atau kode aset mana yang ingin Bapak/Ibu ketahui?';
 
@@ -48,6 +51,12 @@ function retainedSearchHistory(history) {
   for (const [index, item] of history.entries()) {
     if (item.role === 'assistant') {
       if (isRecommendationList(item.content)) for (const id of recommendationIds(item.content)) known.add(id);
+      continue;
+    }
+    // An all-in budget answer must never become the price ceiling of a later
+    // alternative search (or a standalone numeric property selection).
+    if (item.budget_answer || auctionBudgetAnswer(item.content, { history: history.slice(0, index), assetId: currentId })) {
+      selections.add(index);
       continue;
     }
     const selected = selectedRecommendation(item.content, history.slice(0, index));
@@ -98,14 +107,29 @@ function excludedRecommendations(history, text, originalId, state) {
 export async function resolvePropertyContext(catalog, text, previousId, history = [], now = Date.now(), signal, preferenceState = null, conversion = null, ai = null, consultationState = null, forceSearch = false) {
   text = propertyScopeText(text);
   if (!previousId && !hasPropertyReference(text) && !requestsPropertySearch(text)) previousId = selectedAssetIdFromHistory(history);
+  if (!selectedRecommendation(text, history)) {
+    const linked = await resolveLinkedSearch({ text, history, consultation: consultationState?.consultation, catalog, ai, now, signal });
+    if (linked) return linked;
+  }
+  const consultationInput = { history, consultation: consultationState?.consultation, assetId: previousId };
+  const alternativeText = consultationSearchText(text, consultationInput);
+  const startsBudgetAlternatives = alternativeText !== text;
+  text = alternativeText;
+  const budgetAnswer = consultationState?.budgetAnswer || previousId && auctionBudgetAnswer(text, consultationInput);
   const memory = retainedSearchHistory(publicConversationHistory(history));
-  const continuation = explicitAsset(text, history.findLast((item) => item.role === 'assistant')) && memory.sourceId ? null : preferenceState;
-  let buyer = buyerContext(memory.history, text, previousId, { continuation, forceSearch });
+  let continuation = explicitAsset(text, history.findLast((item) => item.role === 'assistant')) && memory.sourceId ? null : preferenceState;
+  const totalBudget = consultationState?.consultation?.total_budget;
+  if (startsBudgetAlternatives && Number.isSafeInteger(totalBudget) && totalBudget > 0) {
+    const prior = buyerContext([], '', previousId, { continuation });
+    continuation = { ...prior.continuation, profile: { ...prior.profile, min_price: null,
+      transaction_type: prior.profile.transaction_type || 'LELANG', max_price: totalBudget, max_total_budget: totalBudget }, searchStarted: true };
+  }
+  let buyer = buyerContext(budgetAnswer ? [] : memory.history, budgetAnswer ? '' : text, previousId, { continuation, forceSearch: !budgetAnswer && forceSearch });
   const selectedCostQuestion = previousId && isPurchaseCostQuestion(text) && !hasSearchIntent(text) && !explicitAsset(text);
   // Local rules extract known expressions first. The LLM receives every retained
   // turn plus the structured memory, and can only propose a validated delta.
   let parsed = null;
-  if (!selectedCostQuestion && shouldParseSmartSearch(text, buyer) && typeof ai?.parseSearch === 'function') {
+  if (!selectedCostQuestion && !budgetAnswer && shouldParseSmartSearch(text, buyer) && typeof ai?.parseSearch === 'function') {
     try { parsed = await ai.parseSearch({ text, history: publicConversationHistory(history), buyer, signal }); }
     catch (error) { if (signal?.aborted) throw error; }
   }
@@ -148,7 +172,7 @@ export async function resolvePropertyContext(catalog, text, previousId, history 
       if (!selection.id) return { asset: null, catalog: [], status: selection.kind === 'ambiguous' ? 'ambiguous_selection' : selection.kind === 'missing' ? 'missing_selection' : 'invalid_selection', source: 'buyer_preferences', buyer };
       return { ...await lookup(`Kode ${selection.id}`, null), buyer, selected_recommendation: selection };
     }
-    if (selectedCostQuestion) {
+    if (selectedCostQuestion || budgetAnswer) {
       return { ...await lookup(`Kode ${previousId}`, null), buyer: { ...buyer, searching: false, stage: 'consultation' } };
     }
     if (previousId && !explicitAsset(text, history.findLast((item) => item.role === 'assistant')) &&
@@ -207,10 +231,29 @@ export async function resolvePropertyContext(catalog, text, previousId, history 
 }
 
 export async function replyFromPropertyContext(input) {
-  const closingIntent = detectClosingIntent(input.text, { selectedAssetId: input.selectedAssetId, history: input.history });
+  if (input.context.linked_search) {
+    const linked = input.context.linked_search;
+    const replies = recommendationMessages(linked.reply);
+    return { reply: replies[0], ...(replies.length > 1 ? { replies } : {}), consultation: linked.consultation,
+      asset: input.context.asset, qualification: {}, generation: { mode: 'rules' },
+      knowledge: { status: input.context.status, source: input.context.source } };
+  }
+  const budgetAnswer = input.budgetAnswer || auctionBudgetAnswer(input.text, { history: input.history, consultation: input.consultation, assetId: input.context.asset?.id });
+  const closingIntent = !budgetAnswer && detectClosingIntent(input.text, { selectedAssetId: input.selectedAssetId, history: input.history });
   if ((!input.context.buyer?.searching || isVisitRequest(input.text) && !requestsPropertySearch(input.text)) && !closingIntent) {
     const consultation = await assetConsultationTurn({ asset: input.context.asset, text: input.text, consultation: input.consultation, surveyState: input.surveyState,
-      identity: input.clientIdentity || clientIdentity(input.history), phone: input.phone, agentId: input.agentId, surveys: input.surveys, history: input.history, now: input.now, persistSurvey: input.persistSurvey });
+      identity: input.clientIdentity || clientIdentity(input.history), phone: input.phone, agentId: input.agentId, surveys: input.surveys, history: input.history, budgetAnswer, now: input.now, persistSurvey: input.persistSurvey });
+    if (consultation?.budget_fit_accepted) {
+      const plan = planPurchaseIntake({ conversion: input.conversion, asset: input.context.asset, text: input.text,
+        history: input.history, selectedAssetId: input.selectedAssetId, check: input.check, now: input.now, budgetFitAccepted: true });
+      if (plan) {
+        const result = await replyFromClosingPlan({ ...input, plan, history: publicConversationHistory(input.history) });
+        return { ...result, consultation: consultation.consultation, survey_state: null,
+          budget_fit_accepted: true, budget_answer_handled: true };
+      }
+      return { ...consultation, budget_fit_accepted: false,
+        reply: 'Ketersediaan aset ini perlu dikonfirmasi kembali oleh tim sebelum draf MOU dilanjutkan. Saya belum dapat melanjutkan persiapannya untuk aset yang sudah dikonfirmasi terjual.' };
+    }
     if (consultation) return { ...consultation, knowledge: { ...consultation.knowledge,
       status: needsAuctionCheck(input.context.asset, input.now) ? 'auction_check_needed' : input.context.status,
       source: input.context.source || 'verified_listing_and_visit_policy',
@@ -337,20 +380,26 @@ export async function generatePropertyReply({ catalog, ai, text, history, previo
   let decision = interactionDecision({ text, previousId, history, state: { ...state, canScheduleVisit: !!surveys } });
   const rules = (reply, status, action = 'reply') => ({ reply, action, suppressed: reply === null, qualification: {}, asset: null, knowledge: { status, source: 'interaction_policy' } });
   if (state.is_bot_active === false) return rules(null, 'human_handoff_paused');
+  if (decision === 'human') return rules(NON_BUYER_HANDOVER_MESSAGE, 'handover_simulated', 'handoff');
   if (isPrivateRequest(text, state.conversion)) return rules(null, 'waiting_for_property');
   if (decision === 'handoff') return rules(HANDOVER_MESSAGE, 'handover_simulated', 'handoff');
   const client = clientIntroductionTurn({ text, history, identity: state.client_identity,
     hasContext: !!previousId || !!state.buyer_state?.searchStarted || history.some((item) => item.role === 'user' && requestsPropertySearch(item.content)) });
+  const budgetAnswer = localPropertyScope(text) === 'other' ? null : await resolveBudgetAnswer(text,
+    { history, consultation: state.consultation, assetId: previousId,
+      otherIntent: hasPropertyReference(text) || requestsPropertySearch(text) || isPurchaseCostQuestion(text) || requestsPropertyDetails(text) ||
+        isConditionQuestion(text) || isVisitRequest(text) || isPurchasePreparationText(text, state.conversion) || detectClosingIntent(text, { selectedAssetId: previousId, history }) }, ai, signal);
+  decision = await resolveInteractionDecision({ text, previousId, history, state: { ...state, budget_answer: budgetAnswer, canScheduleVisit: !!surveys } }, ai, signal);
+  if (['human', 'handoff'].includes(decision)) return rules(decision === 'human' ? NON_BUYER_HANDOVER_MESSAGE : HANDOVER_MESSAGE, 'handover_simulated', 'handoff');
   if (client.reply) return rules(client.reply, client.identity.asked || client.identity.name || client.identity.salutation || client.identity.declined ? 'client_identified' : 'context_required');
-  decision = await resolveInteractionDecision({ text, previousId, history, state: { ...state, canScheduleVisit: !!surveys } }, ai, signal);
   if (decision === 'silent') return rules(null, 'waiting_for_property');
   if (decision === 'nudge') return rules(CONTEXT_REQUIRED_MESSAGE, 'context_required');
-  const context = await resolvePropertyContext(catalog, text, previousId, history, now, signal, state.buyer_state, state.conversion, ai, { surveyState: state.survey_state, consultation: state.consultation }, decision === 'search');
+  const context = await resolvePropertyContext(catalog, text, previousId, history, now, signal, state.buyer_state, state.conversion, ai, { surveyState: state.survey_state, consultation: state.consultation, budgetAnswer }, decision === 'search');
   const check = await requestAuctionCheck({ asset: context.checkAsset || context.asset, sandbox, now });
   const result = await replyFromPropertyContext({ context, ai, text, history, qualification, check, now, signal,
     selectedAssetId: previousId,
     conversion: state.conversion, clarify: decision === 'clarify', clientIdentity: client.identity,
-    consultation: state.consultation, surveyState: state.survey_state, surveys, agentId, phone: sandbox ? '6280000000001' : null });
+    consultation: state.consultation, budgetAnswer, surveyState: state.survey_state, surveys, agentId, phone: sandbox ? '6280000000001' : null });
   if (result.action === 'out_of_scope') return rules(null, 'waiting_for_property');
   return { ...result, buyer_state: context.buyer?.continuation || null };
 }

@@ -363,14 +363,19 @@ test('auth SQLite menyimpan kredensial, Buffer, tipe key baru, dan mencegah dua 
 
 test('handover melalui Baileys menghentikan AI dan membalas sekali', async () => {
   const f = fixture();
-  const c = config();
+  const c = { ...config(), replyDelayMs: 0 };
   const store = new MemoryStore(c, () => NOW);
   let aiCalls = 0;
   const processor = new MessageProcessor({ config: c, store, whatsapp: f.client, catalog: new Catalog(),
     ai: { generate: async () => { aiCalls += 1; return { reply: 'Halo', qualification: {} }; } }, now: () => NOW });
   f.client.onMessages = (messages) => processor.acceptBatch(messages);
   await f.client.updateConnection(f.sockets[0], { connection: 'open' });
-  const batch = { type: 'notify', messages: [incoming('trigger', 'survei lokasi'), incoming('after', 'Halo lagi')] };
+  f.sockets[0].ev.emit('messages.upsert', { type: 'notify', messages: [incoming('without-opening', 'survei lokasi')] });
+  await f.client.inbound; await processor.drain();
+  assert.equal(store.get(PHONE), undefined); assert.deepEqual(f.sent, []);
+  const opening = 'Halo Jason 👋\n\nSaya tertarik dengan properti lelang berikut, apakah masih tersedia?\n' +
+    'https://solusindoaset.com/Lelang/rumah-31551\nSaya ingin survei lokasi.';
+  const batch = { type: 'notify', messages: [incoming('trigger', opening), incoming('after', 'Halo lagi')] };
   f.sockets[0].ev.emit('messages.upsert', batch);
   await f.client.inbound; await processor.drain();
   f.sockets[0].ev.emit('messages.upsert', batch);

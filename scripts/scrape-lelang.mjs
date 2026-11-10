@@ -46,10 +46,11 @@
 //   --dry-run             scrape + tampilkan hasil TANPA menulis DB & tanpa Drive
 // ───────────────────────────────────────────────────────────────────────────────
 
-import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
-import { google } from "googleapis";
-import { Readable } from "stream";
+import dotenv from "dotenv";
+import { createDrivePool } from "../src/lib/server/googleDrivePool.mjs";
+dotenv.config({ path: ".env.local", override: false, quiet: true });
+dotenv.config({ quiet: true });
 import {
   bacaBukti,
   certFromBarangs,
@@ -208,33 +209,12 @@ function imageUrlsFromPhotos(photos) {
 
 // ─── Google Drive (replika dari route.ts, OAuth2 dari .env) ───────────────────
 function getDrive() {
-  const clientId = process.env.GOOGLE_DRIVE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_DRIVE_CLIENT_SECRET;
-  const refreshToken = process.env.GOOGLE_DRIVE_REFRESH_TOKEN;
-  if (!clientId || !clientSecret || !refreshToken) return null;
-  const oauth2 = new google.auth.OAuth2(
-    clientId,
-    clientSecret,
-    "https://developers.google.com/oauthplayground"
-  );
-  oauth2.setCredentials({ refresh_token: refreshToken });
-  return google.drive({ version: "v3", auth: oauth2 });
+  return createDrivePool();
 }
 
 async function uploadPdfToDrive(drive, buffer, name) {
-  const safeName = name.replace(/[<>:"/\\|?*]/g, "-");
-  const res = await drive.files.create({
-    requestBody: { name: safeName, parents: [LAMPIRAN_FOLDER_ID] },
-    media: { mimeType: "application/pdf", body: Readable.from(buffer) },
-    fields: "id",
-  });
-  const fileId = res.data.id;
-  try {
-    await drive.permissions.create({
-      fileId,
-      requestBody: { role: "reader", type: "anyone" },
-    });
-  } catch {}
+  const { fileId } = await drive.upload({ buffer, name, mimeType: "application/pdf",
+    purpose: "attachments", primaryParent: LAMPIRAN_FOLDER_ID, publicRead: true });
   return fileId;
 }
 

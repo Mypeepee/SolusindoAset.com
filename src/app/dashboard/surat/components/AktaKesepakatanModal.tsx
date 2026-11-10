@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import { Icon } from "@iconify/react";
 import { X } from "lucide-react";
 import type { SuratTemplate } from "./data";
+import { downloadSurat } from "@/lib/suratDownload";
+import { toast } from "sonner";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -754,7 +756,7 @@ export function AktaKesepakatanModal({ open, template, onClose }: Props) {
     setWarns: (w: string[]) => void,
     setPihak: React.Dispatch<React.SetStateAction<Pihak>>,
   ) => {
-    if (file.size > 10 * 1024 * 1024) { alert("Ukuran file maksimal 10 MB."); return; }
+    if (file.size > 10 * 1024 * 1024) { setError("Ukuran file maksimal 10 MB."); return; }
     setImg(URL.createObjectURL(file));
     setLoading(true); setStatus("scanning"); setWarns([]);
     try {
@@ -787,7 +789,7 @@ export function AktaKesepakatanModal({ open, template, onClose }: Props) {
   // ── Risalah OCR ───────────────────────────────────────────────────────────
 
   const onRisalahFile = useCallback(async (file: File) => {
-    if (file.size > 20 * 1024 * 1024) { alert("Ukuran file maksimal 20 MB."); return; }
+    if (file.size > 20 * 1024 * 1024) { setError("Ukuran file maksimal 20 MB."); return; }
     const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
     setRisalahName(file.name);
     setRisalahImg(isPdf ? "" : URL.createObjectURL(file));
@@ -856,25 +858,11 @@ export function AktaKesepakatanModal({ open, template, onClose }: Props) {
         tahap1_tanggal:   akta.tanggal_ttd,
         batas_tanggal:    komp.batas_tanggal,
       };
-      const res = await fetch("/api/surat/generate-akta-kesepakatan", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as { detail?: string };
-        setError(err.detail ?? "Gagal generate dokumen. Coba lagi.");
-        return;
-      }
-      const disp = res.headers.get("Content-Disposition") ?? "";
-      const filename = disp.match(/filename="([^"]+)"/)?.[1] ?? "AktaKesepakatan.pdf";
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement("a");
-      a.href = url; a.download = filename; a.click();
-      URL.revokeObjectURL(url);
+      await downloadSurat("/api/surat/generate-akta-kesepakatan", payload, "AktaKesepakatan.pdf");
+      toast.success("Dokumen berhasil dibuat. Unduhan PDF dimulai.");
       onClose();
-    } catch (e) {
-      console.error(e);
-      setError("Gagal menghubungi server.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Gagal membuat dokumen. Coba lagi.");
     } finally { setGenerating(false); }
   };
 

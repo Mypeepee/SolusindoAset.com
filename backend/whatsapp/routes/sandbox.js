@@ -82,15 +82,16 @@ export function createSandboxRouter({ config, catalog, ai, documents = config.mo
       // Existing sessions, idle resets and human pauses keep server ownership.
       if (stored && !existing && previousId && !detectClosingIntent(text, { selectedAssetId: previousId })) stored.asset_id = previousId;
       const scope = stored ? { ...stored, history: [...stored.history] } : { ...historyPolicy(history), asset_id: previousId || null };
+      scope.handoffNonBuyerMessages = config.handoffNonBuyerMessages === true;
       if (stored) sessions.resetIfIdle(scope);
       scope.last_user_received_at = now(); scope.updated_at = now();
       if (stored) sessions.append(scope, 'user', text);
       const activeHistory = (stored ? scope.history : history).filter((item) => !item.property_ignored);
       const generate = async () => {
         const result = await generatePropertyReply({ catalog, ai, text, signal: controller.signal,
-          history: activeHistory.map(({ role, content, seq }) => ({ role, content, ...(seq != null ? { seq } : {}) })), previousId: scope.asset_id,
+          history: activeHistory.map(({ role, content, seq, budget_answer }) => ({ role, content, ...(seq != null ? { seq } : {}), ...(budget_answer ? { budget_answer: true } : {}) })), previousId: scope.asset_id,
           policyState: scope, now: now() });
-        if (stored && documents && shouldSendMouDocument({ asset: result.asset, conversion: result.conversion, history: activeHistory, text, selectedAssetId: scope.asset_id })) {
+        if (stored && documents && shouldSendMouDocument({ asset: result.asset, conversion: result.conversion, history: activeHistory, text, selectedAssetId: scope.asset_id, budgetFitAccepted: result.budget_fit_accepted === true })) {
           try {
             const file = validatePdf(await documents.generate(result.asset.id, result.conversion.max_bid || null, { signal: controller.signal }));
             if (file.assetId !== result.asset.id) throw new ServiceError('MOU_ASSET_MISMATCH', 502);
@@ -110,6 +111,7 @@ export function createSandboxRouter({ config, catalog, ai, documents = config.mo
       };
       const result = await Promise.race([generate(), cancelled]);
       if (!res.destroyed && !controller.signal.aborted) {
+        if (result.budget_answer_handled && stored) scope.history.at(-1).budget_answer = true;
         if (result.suppressed && stored) scope.history.at(-1).property_ignored = true;
         if (result.action === 'handoff') { scope.is_bot_active = false; result.knowledge = { status: 'handover_simulated', source: 'sandbox' }; }
         if (result.knowledge.status === 'context_required') scope.out_of_scope_notified = true;

@@ -94,12 +94,11 @@ export type PrefRingkas = {
   budget_max?: Prisma.Decimal | number | null;
 };
 
-/** Lokasi paling spesifik yang terisi — sama dengan yang MENGIKAT di mesin
- *  pencocokan. Menampilkan kotanya padahal yang mengikat kecamatannya akan
- *  membuat agent mengira mesinnya salah saat hasilnya lebih sedikit dari
- *  dugaannya. */
+/** Lokasi terpilih beserta induk pembeda, sama dengan cakupan pencocokan. */
 export function lokasiRingkas(p: PrefRingkas): string | null {
-  return p.loc_kelurahan || p.loc_kecamatan || p.loc_kota || p.loc_provinsi || p.lokasi_dicari || null;
+  if (p.loc_kelurahan) return [p.loc_kelurahan, p.loc_kecamatan, p.loc_kota].filter(Boolean).join(", ");
+  if (p.loc_kecamatan) return [p.loc_kecamatan, p.loc_kota].filter(Boolean).join(", ");
+  return p.loc_kota || p.loc_provinsi || p.lokasi_dicari || null;
 }
 
 /** Label satu baris, mis. "Rumah · Gresik · ≤ 500 jt" atau "Kos · Sewa · Surabaya". */

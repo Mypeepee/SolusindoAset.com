@@ -394,14 +394,15 @@ function TambahPropertyContent() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to upload images');
+        const failure = await response.json().catch(() => ({}));
+        throw new Error(failure.error || 'Gagal mengunggah gambar. Silakan coba lagi.');
       }
 
       const result = await response.json();
       return result.imageUrls;
     } catch (error) {
       console.error('Upload error:', error);
-      throw new Error('Gagal mengupload gambar ke Google Drive');
+      throw new Error(error instanceof Error ? error.message : 'Gagal mengupload gambar ke Google Drive');
     }
   };
 

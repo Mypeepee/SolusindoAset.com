@@ -41,17 +41,13 @@ export async function ocrKTP(file: File): Promise<OcrKtpResult> {
   const res = await fetch("/api/surat/ocr-ktp", {
     method: "POST",
     body: formData,
+    signal: AbortSignal.timeout(60_000),
   });
 
   if (!res.ok) {
     let message = "Gagal OCR KTP";
-    try {
-      const errJson = await res.json();
-      message = errJson.detail || message;
-    } catch {
-      const text = await res.text().catch(() => "");
-      message = text || message;
-    }
+    const errJson = await res.json().catch(() => ({}));
+    message = errJson.detail || errJson.error || message;
     throw new Error(message);
   }
 

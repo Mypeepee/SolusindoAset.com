@@ -25,7 +25,7 @@ export function purchaseHandoffText({ stockStatus, paymentClaimed = false } = {}
 }
 
 /** A buyer-preparation path alongside the existing on-demand SOP explanations. */
-export function planPurchaseIntake({ conversion, asset, text, history = [], selectedAssetId = null, searching = false, check, now = Date.now() }) {
+export function planPurchaseIntake({ conversion, asset, text, history = [], selectedAssetId = null, searching = false, budgetFitAccepted = false, check, now = Date.now() }) {
   if (!asset || asset.transaction_type !== 'LELANG' || searching || requestsClosingExit(text) || conversion?.outcome) return null;
   const active = conversion?.mode === CLOSING_STATE && conversion.asset_id === asset.id;
   const informed = selectedAssetId === asset.id || history.some(item => item.role === 'assistant' &&
@@ -33,7 +33,7 @@ export function planPurchaseIntake({ conversion, asset, text, history = [], sele
     (item.content.includes(`Kode ${asset.id}`) || asset.detail_url && item.content.includes(asset.detail_url)));
   const interested = detectClosingIntent(text, { selectedAssetId: asset.id, history });
   const current = active ? conversion.purchase_intake : null;
-  if (!current && !(informed && interested)) return null;
+  if (!current && !(informed && (interested || budgetFitAccepted))) return null;
   const stock = closingStockStatus(asset, check, now);
   if (stock === 'sold') return null;
   const value = normalize(text);
@@ -44,7 +44,7 @@ export function planPurchaseIntake({ conversion, asset, text, history = [], sele
     conversion?.pending_action === 'purchase_prepare' && /^(?:belum(?: ada| siap)?|tidak ada|gak ada|nggak ada|ga ada)(?:\s+(?:pak|bu|kak))?$/.test(value);
   const ready = !notReady && (mentionsDocs && /\b(?:siap|sudah ada|udah ada|lengkap)\b/.test(value) || pending && /^(?:sudah|udah|dua duanya|ada|lengkap)(?:\s+(?:ada|siap|lengkap))?(?:\s+(?:pak|bu|kak))?$/.test(value));
   const preparing = (pending || current && conversion.pending_action === 'explain_readiness') && affirmative.test(text.trim());
-  if (current && !preparing && !ready && !notReady && !reportsPayment && !interested && !isPurchasePreparationText(text, conversion)) return null;
+  if (current && !preparing && !ready && !notReady && !reportsPayment && !interested && !budgetFitAccepted && !isPurchasePreparationText(text, conversion)) return null;
   if (current && /\b(?:refund|kalah|biaya|balik nama|dp berapa|jaminan|jadwal|bidding|akun|mou)\b/.test(value) && !ready && !notReady && !reportsPayment && !preparing) return null;
   const next = { ...(active ? conversion : {}), mode: CLOSING_STATE, asset_id: asset.id,
     flow_version: CLOSING_FLOW_VERSION, version: (conversion?.version || 0) + 1,
@@ -71,7 +71,7 @@ export function planPurchaseIntake({ conversion, asset, text, history = [], sele
   next.topic = 'purchase_preparation'; next.phase = 'purchase_preparation'; next.stage = 1;
   let body, question, action;
   if (!current) {
-    body = `Baik, saya bantu lanjutkan persiapan pembelian aset kode ${asset.id}. Kelengkapan untuk prosesnya adalah KTP dan cover buku tabungan atas nama Anda, serta ${dpText}. Silakan pelajari ketentuannya di draf MOU. ${paymentGate}`;
+    body = `${budgetFitAccepted ? 'Baik, estimasi totalnya sesuai anggaran Anda. Saya bantu siapkan draf MOU' : 'Baik, saya bantu lanjutkan persiapan pembelian'} aset kode ${asset.id}. Kelengkapan untuk prosesnya adalah KTP dan cover buku tabungan atas nama Anda, serta ${dpText}. Silakan pelajari ketentuannya di draf MOU. ${paymentGate}`;
     question = 'Dari draf MOU ini, ada yang ingin ditanyakan?'; action = 'ask_question';
   } else if (notReady) {
     next.purchase_intake.documents_reported_ready = false;

@@ -22,7 +22,7 @@ type Props = {
   open: boolean;
   template: SuratTemplate | null;
   onClose: () => void;
-  onSubmit?: (payload: { template: SuratTemplate; values: Record<string, string> }) => Promise<void> | void;
+  onSubmit: (payload: { template: SuratTemplate; values: Record<string, string> }) => Promise<void> | void;
 };
 
 type TransaksiItem = {
@@ -103,6 +103,7 @@ export function InvoiceModal({ open, template, onClose, onSubmit }: Props) {
   const [selectedTrx, setSelectedTrx]     = useState<TransaksiItem | null>(null);
   const [trxSearch, setTrxSearch]         = useState("");
   const [trxOpen, setTrxOpen]             = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -118,6 +119,7 @@ export function InvoiceModal({ open, template, onClose, onSubmit }: Props) {
 
   useEffect(() => {
     if (!open) {
+      setErrorMsg("");
       setValues(EMPTY);
       setIsGenerating(false);
       setSelectedTrx(null);
@@ -137,7 +139,10 @@ export function InvoiceModal({ open, template, onClose, onSubmit }: Props) {
     setIsFetchingTrx(true);
     try {
       const res = await fetch("/api/surat/transaksi-list");
-      if (res.ok) setTransaksiList(await res.json() as TransaksiItem[]);
+      if (!res.ok) throw new Error("Daftar transaksi gagal dimuat. Tutup dan buka kembali form untuk mencoba lagi.");
+      setTransaksiList(await res.json() as TransaksiItem[]);
+    } catch (cause) {
+      setErrorMsg(cause instanceof Error ? cause.message : "Gagal menghubungi server.");
     } finally {
       setIsFetchingTrx(false);
     }
@@ -159,9 +164,9 @@ export function InvoiceModal({ open, template, onClose, onSubmit }: Props) {
 
   const handleSubmit = async () => {
     if (!template || !canSubmit || isGenerating || !selectedTrx) return;
-    setIsGenerating(true);
+    setIsGenerating(true); setErrorMsg("");
     try {
-      await onSubmit?.({
+      await onSubmit({
         template,
         values: {
           nama_pembeli:    values.nama_pembeli,
@@ -174,6 +179,8 @@ export function InvoiceModal({ open, template, onClose, onSubmit }: Props) {
           nama_agent:      selectedTrx.nama_agent,
         },
       });
+    } catch (cause) {
+      setErrorMsg(cause instanceof Error ? cause.message : "Gagal membuat invoice. Coba lagi.");
     } finally {
       setIsGenerating(false);
     }
@@ -555,6 +562,7 @@ export function InvoiceModal({ open, template, onClose, onSubmit }: Props) {
           </div>
         </div>
 
+        {errorMsg && <p role="alert" className="mx-5 shrink-0 rounded-xl border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-rose-200">{errorMsg}</p>}
         {/* ── Footer ──────────────────────────────────────────────────────── */}
         <div className="relative shrink-0 border-t border-white/[0.06] bg-[#0b0b14] px-6 py-4">
           {/* Subtle top glow */}

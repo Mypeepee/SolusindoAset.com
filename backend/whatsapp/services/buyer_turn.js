@@ -1,8 +1,9 @@
 import { normalizeBuyerQuantities, unrestrictedPreferenceAnswer, assistantQuestions } from './buyer_language.js';
 import { PROPERTY_CATEGORY_LABELS } from './property_category.js';
 import { transactionExplanation, transactionAnswerText, isTransactionQuestion, TRANSACTION_QUESTION } from './property_transaction.js';
+import { normalizeLandDimensions } from './land_dimensions.js';
 
-export const UNDERSTANDING_VERSION = '2026-10-22-auction-timeline-v31';
+export const UNDERSTANDING_VERSION = '2026-11-06-overnight-followup-v33';
 export const CONFIRM_PREFIX = 'Apakah maksud Bapak/Ibu: ';
 const affirmative = /^(?:(?:iya|ya|betul|benar|oke|ok|setuju|sip|lanjut)(?:\s+(?:betul|benar|itu|sudah|sesuai|pak|bu|bapak|ibu|kak|ya|saja|aja))*)[.!\s]*$/i;
 
@@ -45,9 +46,11 @@ export function buyerTurn(text, { preceding = '', landClarification = null, cate
     return both ? 'jenis bebas, luas tanah bebas' : clause;
   }).join('');
   if (landClarification && /batas minimal, batas maksimal, atau luas persis/i.test(preceding) &&
-      /^\s*(?:yang\s+)?(?:minimal|minimum|min|maksimal|maksimum|max|maks|persis|pas|tepat)(?:\s+(?:saja|aja|pak|bu|ya))*[.!]?\s*$/i.test(content)) {
-    const value = normalizeBuyerQuantities(landClarification).match(/\d+(?:[.,]\d+)*\s*(?:m\s*[2²]|meter(?:\s+(?:persegi|kuadrat))?|hektar|ha|are)(?![\p{L}\p{N}])/giu);
-    if (value?.length === 1) content = `luas tanah ${content.replace(/\b(?:yang|saja|aja|pak|bu|ya)\b|[.!]/gi, '').trim()} ${value[0]}`;
+      /^\s*(?:yang\s+)?(?:batas\s+)?(?:minimal|minimum|min|maksimal|maksimum|max|maks|persis|pas|tepat)(?:\s+(?:saja|aja|pak|bu|ya))*[.!]?\s*$/i.test(content)) {
+    const measurement = normalizeLandDimensions(normalizeBuyerQuantities(landClarification));
+    const value = measurement.match(/\d+(?:[.,]\d+)*\s*(?:m\s*[2²]|meter(?:\s+(?:persegi|kuadrat))?|hektar|ha|are)(?![\p{L}\p{N}])/giu) ||
+      (/^\s*\d+(?:[.,]\d+)?\s*$/.test(measurement) ? [`${measurement.trim()} m2`] : null);
+    if (value?.length === 1) content = `luas tanah ${content.replace(/\b(?:yang|batas|saja|aja|pak|bu|ya)\b|[.!]/gi, '').trim()} ${value[0]}`;
   }
   return { content };
 }

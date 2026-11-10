@@ -20,12 +20,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "@iconify/react";
 import { motion, AnimatePresence } from "framer-motion";
-import toast from "react-hot-toast";
 import {
   type RegionLevel,
   type SelectedRegion,
   normalizeRegionName,
-  regionKey,
+  isSameRegion,
   regionLabel,
 } from "@/lib/regionSearch";
 
@@ -45,6 +44,8 @@ interface LocationPickerProps {
   label?: string;
   /** Investor uses the same picker, ending at kota/kabupaten. */
   maxLevel?: "kota" | "kelurahan";
+  /** CRM stores the full administrative chain, including Kota/Kabupaten. */
+  hierarchy?: "search" | "administrative";
 }
 
 interface ThemeTokens {
@@ -156,6 +157,7 @@ export default function LocationPicker({
   maxLevel = "kelurahan",
   focusTone = "brand",
   presentation = "default",
+  hierarchy = "search",
 }: LocationPickerProps) {
   const campaign = presentation === "campaign";
   const t = campaign ? {
@@ -173,6 +175,7 @@ export default function LocationPicker({
       ? "bg-gray-50 border-gray-200 text-gray-800 hover:bg-gray-100"
       : "bg-white/5 border-white/15 text-white hover:bg-white/10"
     : t.triggerChip;
+  const focusOutline = focusTone === "neutral" ? "focus-visible:outline-slate-400" : "focus-visible:outline-primary";
 
   // --- responsif: desktop popover vs mobile bottom sheet ---
   const [isDesktop, setIsDesktop] = useState(true);
@@ -186,6 +189,7 @@ export default function LocationPicker({
 
   // --- panel di-portal ke body (lepas dari stacking/transform induk) ---
   const triggerRef = useRef<HTMLDivElement>(null);
+  const queryRef = useRef<HTMLInputElement>(null);
   const [rect, setRect] = useState<DOMRect | null>(null);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -209,18 +213,22 @@ export default function LocationPicker({
   const [provincesIndex, setProvincesIndex] = useState<SelectedRegion[]>([]);
   const [citiesIndex, setCitiesIndex] = useState<SelectedRegion[]>([]);
   const [indexLoaded, setIndexLoaded] = useState(false);
+  const [indexError, setIndexError] = useState(false);
   const indexLoadingRef = useRef(false);
 
   const ensureIndex = useCallback(async () => {
     if (indexLoaded || indexLoadingRef.current) return;
     indexLoadingRef.current = true;
+    setIndexError(false);
     try {
       const [provRes, cityRes] = await Promise.all([
         fetch("/api/regions/wilayah?level=provinsi"),
         fetch("/api/regions/cities"),
       ]);
-      const provJson = await provRes.json().catch(() => ({}));
-      const cityJson = await cityRes.json().catch(() => ({}));
+      if (!provRes.ok || !cityRes.ok) throw new Error("REGIONS_UNAVAILABLE");
+      const provJson = await provRes.json();
+      const cityJson = await cityRes.json();
+      if (!Array.isArray(provJson.items) || !Array.isArray(cityJson.cities)) throw new Error("INVALID_REGIONS");
       const provinces: SelectedRegion[] = sortByName(
         (provJson.items ?? []).map((p: { id: string; name: string }) => ({
           id: String(p.id),
@@ -234,22 +242,26 @@ export default function LocationPicker({
           name: c.name,
           level: "kota" as const,
           parent: c.province,
+          ...(hierarchy === "administrative" ? { ancestors: [c.province || ""] } : {}),
         })
       );
       setProvincesIndex(provinces);
       setCitiesIndex(cities);
       setIndexLoaded(true);
     } catch {
-      toast.error("Gagal memuat data wilayah");
+      setIndexError(true);
     } finally {
       indexLoadingRef.current = false;
     }
-  }, [indexLoaded]);
+  }, [indexLoaded, hierarchy]);
 
   // --- drill-down (breadcrumb stack: setiap elemen = induk yang di-drill) ---
   const [path, setPath] = useState<SelectedRegion[]>([]);
   const [childList, setChildList] = useState<SelectedRegion[]>([]);
   const [loadingList, setLoadingList] = useState(false);
+  const [listError, setListError] = useState(false);
+  const childRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => childRequest.current?.abort(), []);
 
   const [query, setQuery] = useState("");
 
@@ -268,6 +280,9 @@ export default function LocationPicker({
   // Loading the index changes ensureIndex's identity. Only opening the picker
   // should reset navigation; completing a fetch must preserve the user's typing.
   useEffect(() => {
+    childRequest.current?.abort();
+    setLoadingList(false);
+    setListError(false);
     if (!open) return;
     setPath([]);
     setChildList([]);
@@ -278,7 +293,12 @@ export default function LocationPicker({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onOpenChange(false);
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onOpenChange(false);
+        triggerRef.current?.focus();
+      }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -318,20 +338,15 @@ export default function LocationPicker({
   }, [open, isDesktop]);
 
   // --- selection ---
-  const selectedKeys = useMemo(
-    () => new Set(value.map((v) => regionKey(v))),
-    [value]
-  );
   const isSelected = useCallback(
-    (r: { name: string; level: RegionLevel }) => selectedKeys.has(regionKey(r)),
-    [selectedKeys]
+    (r: SelectedRegion) => value.some(v => isSameRegion(v, r)),
+    [value]
   );
 
   const toggle = useCallback(
     (region: SelectedRegion) => {
-      const key = regionKey(region);
-      if (selectedKeys.has(key)) {
-        onChange(value.filter((v) => regionKey(v) !== key));
+      if (isSelected(region)) {
+        onChange(value.filter((v) => !isSameRegion(v, region)));
         return;
       }
       let next = value.slice();
@@ -344,17 +359,8 @@ export default function LocationPicker({
       }
       next.push(region);
       onChange(next);
-      toast.success(`${regionLabel(region)} ditambahkan`, {
-        icon: "📍",
-        style: {
-          borderRadius: "10px",
-          background: "#333",
-          color: "#fff",
-          fontSize: "12px",
-        },
-      });
     },
-    [value, onChange, selectedKeys]
+    [value, onChange, isSelected]
   );
 
   const clearAll = useCallback(() => onChange([]), [onChange]);
@@ -365,13 +371,21 @@ export default function LocationPicker({
     if (parent.level === maxLevel) return;
     const lvl = NEXT_LEVEL[parent.level];
     if (!lvl) return;
+    childRequest.current?.abort();
+    const controller = new AbortController();
+    childRequest.current = controller;
     setLoadingList(true);
+    setListError(false);
     setChildList([]);
     try {
       const res = await fetch(
-        `/api/regions/wilayah?level=${lvl}&parentId=${encodeURIComponent(parent.id)}`
+        `/api/regions/wilayah?level=${lvl}&parentId=${encodeURIComponent(parent.id)}`,
+        { signal: controller.signal }
       );
-      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error("REGIONS_UNAVAILABLE");
+      const json = await res.json();
+      if (!Array.isArray(json.items)) throw new Error("INVALID_REGIONS");
+      if (controller.signal.aborted) return;
       /**
        * Rantai induk yang akan dibawa anak-anak ini sampai ke URL.
        *
@@ -383,7 +397,9 @@ export default function LocationPicker({
        * tanpa menambah ketepatan apa pun.
        */
       const rantai =
-        lvl === "kecamatan" || lvl === "kelurahan"
+        hierarchy === "administrative"
+          ? [parent.name, ...(parent.ancestors ?? (parent.parent ? [parent.parent] : []))]
+          : lvl === "kecamatan" || lvl === "kelurahan"
           ? [
               normalizeRegionName(parent.name, parent.level),
               ...(parent.ancestors ?? []),
@@ -401,11 +417,13 @@ export default function LocationPicker({
         )
       );
     } catch {
-      toast.error("Gagal memuat data wilayah");
+      if (!controller.signal.aborted) {
+        setListError(true);
+      }
     } finally {
-      setLoadingList(false);
+      if (!controller.signal.aborted) setLoadingList(false);
     }
-  }, [maxLevel]);
+  }, [maxLevel, hierarchy]);
 
   const drillInto = useCallback(
     (region: SelectedRegion) => {
@@ -428,7 +446,12 @@ export default function LocationPicker({
     setPath(newPath);
     const newParent = newPath[newPath.length - 1];
     if (newParent) loadChildren(newParent);
-    else setChildList([]);
+    else {
+      childRequest.current?.abort();
+      setLoadingList(false);
+      setListError(false);
+      setChildList([]);
+    }
   }, [path, loadChildren]);
 
   // --- daftar yang ditampilkan ---
@@ -457,7 +480,8 @@ export default function LocationPicker({
   }, [globalSearch, isAtRoot, provincesIndex, citiesIndex, childList, ql, hasQuery]);
 
   // Sedang memuat? (akar/global menunggu index; level dalam menunggu fetch)
-  const isLoading = isAtRoot ? !indexLoaded : loadingList;
+  const isLoading = isAtRoot ? !indexLoaded && !indexError : loadingList;
+  const regionError = isAtRoot ? indexError : listError;
 
   // ============ RENDER HELPERS (fungsi inline, bukan komponen, agar tidak remount) ============
 
@@ -487,7 +511,9 @@ export default function LocationPicker({
         <button
           type="button"
           onClick={() => toggle(region)}
-          className="flex-1 flex items-center gap-3 px-4 py-3 text-left min-w-0"
+          aria-pressed={selected}
+          aria-label={regionLabel(region)}
+          className={`flex-1 flex items-center gap-3 px-4 py-3 text-left min-w-0 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 ${focusOutline}`}
         >
           {checkBox(selected)}
           <Icon
@@ -616,6 +642,7 @@ export default function LocationPicker({
             className={`absolute left-3 top-1/2 -translate-y-1/2 text-base ${t.inputIcon}`}
           />
           <input
+            ref={queryRef}
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -629,7 +656,7 @@ export default function LocationPicker({
           {query && (
             <button
               type="button"
-              onClick={() => setQuery("")}
+              onClick={() => { setQuery(""); queryRef.current?.focus(); }}
               className={`absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full ${t.iconBtn}`}
               aria-label="Bersihkan"
             >
@@ -661,10 +688,11 @@ export default function LocationPicker({
       {/* LIST */}
       <div className={`overflow-y-auto custom-scrollbar flex-1 min-h-0 ${t.bodyBg}`}>
         {/* "Pilih semua di X" — saat drilled, tidak loading, tidak sedang mem-filter */}
-        {!globalSearch && !isLoading && !hasQuery && parentRegion && (
+        {!globalSearch && !isLoading && !regionError && !hasQuery && parentRegion && (
           <button
             type="button"
             onClick={() => toggle(parentRegion)}
+            aria-pressed={isSelected(parentRegion)}
             className={`w-full text-left px-4 py-3 ${campaign ? "bg-white/5 hover:bg-white/10" : "bg-primary/5 hover:bg-primary/10"} border-b ${t.rowBorder} flex items-center gap-3 transition-colors`}
           >
             {checkBox(isSelected(parentRegion))}
@@ -676,6 +704,17 @@ export default function LocationPicker({
 
         {isLoading ? (
           loadingSkeleton
+        ) : regionError ? (
+          <div role="alert" className={`px-4 py-8 text-center text-sm ${t.ghostText}`}>
+            <p>Gagal memuat data wilayah</p>
+            <button
+              type="button"
+              onClick={() => parentRegion ? loadChildren(parentRegion) : ensureIndex()}
+              className={`mt-3 rounded-xl px-4 py-2 font-bold cursor-pointer focus-visible:outline focus-visible:outline-2 ${focusOutline} ${t.resetBtn}`}
+            >
+              Coba lagi
+            </button>
+          </div>
         ) : rows.length > 0 ? (
           rows.map((r) => regionRow(r))
         ) : (
@@ -811,7 +850,7 @@ export default function LocationPicker({
             onOpenChange(!open);
           }
         }}
-        className="cursor-pointer h-full flex flex-col justify-center group"
+        className={`cursor-pointer h-full flex flex-col justify-center group rounded-xl focus-visible:outline focus-visible:outline-2 ${focusOutline}`}
         onClick={() => onOpenChange(!open)}
       >
         {label ? (
