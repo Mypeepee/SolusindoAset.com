@@ -811,15 +811,28 @@ test("snapshot comparison ignores JSONB key order while detecting changed facts"
     false,
   );
 });
-test("caption uses the existing listing template and retains factual auction disclosure", () => {
+test("campaign caption uses FOMO and agent contact without duplicating poster facts", () => {
   const asset = d.snapshotAsset(
-    listing({ listingCategory: "LELANG", auctionDate: "2026-12-20T01:00:00Z" }),
+    listing({
+      listingCategory: "LELANG",
+      auctionDate: "2026-12-20T01:00:00Z",
+      agentName: "Agent Contoh",
+      agentPhone: "081234567891",
+    }),
   );
   const text = c.campaignCaption(asset, d.DEFAULT_CONFIG);
   assert.equal(text, d.captionFor(asset, d.DEFAULT_CONFIG));
-  assert.match(text, /Jalan Contoh/);
-  assert.match(text, /400\.000\.000/);
-  assert.match(text, /Penjualan melalui lelang/);
+  assert.match(text, /Hari lelang makin dekat/);
+  assert.match(text, /Agent: Agent Contoh/);
+  assert.match(text, /WhatsApp: \+6281234567891/);
+  assert.doesNotMatch(
+    text,
+    /Jalan Contoh|400\.000\.000|Penjualan melalui lelang/,
+  );
+});
+test("campaign API explains server outages with a useful error code", () => {
+  assert.match(c.campaignErrors.SERVICE_UNAVAILABLE, /kendala/i);
+  assert.match(c.campaignErrors.SERVICE_UNAVAILABLE, /SERVICE_UNAVAILABLE/);
 });
 test("campaign lifecycle labels respect WIB, period boundaries, and paused state", () => {
   const campaign = { brief: brief(), state: "running" };

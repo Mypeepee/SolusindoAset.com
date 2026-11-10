@@ -400,6 +400,8 @@ export function sameCampaignAsset(a: AssetSnapshot, b: AssetSnapshot) {
   return facts(a) === facts(b);
 }
 export const campaignErrors: Record<string, string> = {
+  SERVICE_UNAVAILABLE:
+    "Layanan Pemasaran sedang mengalami kendala. Coba lagi beberapa saat. Kode: SERVICE_UNAVAILABLE.",
   CAMPAIGN_POLICY_CHANGED:
     "Aturan penjadwalan berubah. Susun ulang jadwal dengan batas H−5 sebelum diterapkan.",
   CAMPAIGN_ENDED:

@@ -17,11 +17,19 @@ export async function campaignApi(
       : {}),
   });
   const result = await response.json();
-  if (!response.ok)
-    throw new Error(
-      campaignErrors[result.error] ||
-        errorLabels[result.error] ||
-        "Permintaan belum berhasil. Coba kembali.",
+  if (!response.ok) {
+    const code =
+      typeof result?.error === "string"
+        ? result.error
+        : `HTTP_${response.status}`;
+    throw Object.assign(
+      new Error(
+        campaignErrors[code] ||
+          errorLabels[code] ||
+          `Permintaan gagal (${code}). Coba kembali beberapa saat lagi.`,
+      ),
+      { code, status: response.status },
     );
+  }
   return result;
 }

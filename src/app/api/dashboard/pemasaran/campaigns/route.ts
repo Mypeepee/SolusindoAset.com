@@ -75,13 +75,15 @@ export async function GET(request: NextRequest) {
           );
     return NextResponse.json(result, { headers: privateHeaders });
   } catch (error) {
-    return failure(error);
+    return failure(error, "GET");
   }
 }
 export async function POST(request: NextRequest) {
+  let action = "parse";
   try {
     await requireMarketingOwner(request, true);
     const input = await readJson(request);
+    action = typeof input.action === "string" ? input.action : "unknown";
     let result;
     if (input.action === "inventory")
       result = await campaignInventory(
@@ -144,14 +146,28 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json(result, { headers: privateHeaders });
   } catch (error) {
-    return failure(error);
+    return failure(error, action);
   }
 }
-function failure(error: unknown) {
+function failure(error: unknown, action: string) {
   if (error instanceof z.ZodError)
     return NextResponse.json(
       { error: "INVALID_SETTINGS", fields: error.flatten().fieldErrors },
       { status: 400, headers: privateHeaders },
     );
+  if (!(error instanceof MarketingError)) {
+    const detail = error as {
+      name?: unknown;
+      code?: unknown;
+      message?: unknown;
+    };
+    console.error("[marketing campaigns API] Unexpected failure", {
+      action,
+      name: typeof detail?.name === "string" ? detail.name : "UnknownError",
+      code: typeof detail?.code === "string" ? detail.code : undefined,
+      message:
+        typeof detail?.message === "string" ? detail.message : "Unknown error",
+    });
+  }
   return apiFailure(error);
 }
