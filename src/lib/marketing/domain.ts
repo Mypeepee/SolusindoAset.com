@@ -110,9 +110,23 @@ export type AssetSnapshot = {
   propertyType: string;
   auctionDate: string | null;
   listingUrl: string;
+  agentName?: string | null;
+  agentPhone?: string | null;
   images: string[];
   revision: string;
   sourceListedAt?: string | null;
+  slug?: string;
+  sourceCityName?: string | null;
+  agentId?: string | null;
+  sourcePrice?: number | null;
+  sourcePromoPrice?: number | null;
+  sourceLimitPrice?: number | null;
+  auctionDeposit?: number | null;
+  buildingAreaSqm?: number | null;
+  bedroomCount?: number | null;
+  bathroomCount?: number | null;
+  floorCount?: number | null;
+  auctionHistoryPoints?: { date: string | null; price: number }[];
   marketSpreadPct?: number | null;
   auctionDropPct?: number | null;
 };
@@ -219,6 +233,8 @@ export function snapshotAsset(item: InvestorListing): AssetSnapshot {
     propertyType: item.propertyType,
     auctionDate: item.auctionDate,
     listingUrl: item.listingUrl,
+    agentName: item.agentName || null,
+    agentPhone: item.agentPhone || null,
     images: [
       ...new Set(
         item.imageUrls?.length
@@ -230,6 +246,21 @@ export function snapshotAsset(item: InvestorListing): AssetSnapshot {
     ].slice(0, 3),
     revision: item.sourceRevision || "",
     sourceListedAt: item.sourceListedAt || null,
+    slug: item.slug,
+    sourceCityName: item.sourceCityName || null,
+    agentId: item.agentId || null,
+    sourcePrice: item.sourcePrice ?? null,
+    sourcePromoPrice: item.sourcePromoPrice ?? null,
+    sourceLimitPrice: item.sourceLimitPrice ?? null,
+    auctionDeposit: item.auctionDeposit ?? null,
+    buildingAreaSqm: item.buildingAreaSqm ?? null,
+    bedroomCount: item.bedroomCount ?? null,
+    bathroomCount: item.bathroomCount ?? null,
+    floorCount: item.floorCount ?? null,
+    auctionHistoryPoints: item.auctionHistoryPoints?.map((point) => ({
+      date: point.date,
+      price: point.price,
+    })),
     marketSpreadPct: item.metricMarketSpreadPct ?? null,
     auctionDropPct: item.metricAuctionDropPct ?? null,
   };
@@ -257,80 +288,21 @@ const captionText = (value: string, limit: number) =>
   value.replace(/\s+/g, " ").trim().slice(0, limit);
 
 export function captionFor(asset: AssetSnapshot, config: MarketingConfig) {
-  const money = new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(asset.price);
-  const type = asset.propertyType.toUpperCase();
-  const hook = /RUMAH|APARTEMEN|VILLA/.test(type)
-    ? "🏡 Bayangkan punya tempat untuk memulai cerita baru."
-    : /TANAH|LAHAN|KEBUN/.test(type)
-      ? "✨ Rencana besar Anda layak punya ruang untuk tumbuh."
-      : /GUDANG|PABRIK/.test(type)
-        ? "✨ Usaha Anda punya langkah berikutnya. Mulai dari ruangnya."
-        : /RUKO|TOKO|KANTOR|KIOS/.test(type)
-          ? "✨ Bayangkan babak berikutnya untuk usaha Anda dimulai di sini."
-          : "✨ Wujudkan langkah berikutnya lewat properti pilihan Anda.";
   const auction = asset.category === "LELANG";
-  const auctionTime = asset.auctionDate ? Date.parse(asset.auctionDate) : NaN;
-  const listingUrl = marketingListingUrl(asset.listingUrl);
-  const footer = [
-    "Suka yang Anda lihat? Kenali detailnya dan diskusikan rencana Anda bersama kami. ↓",
-    listingUrl ? "🔗 Detail properti:\n" + listingUrl : "",
-    "📩 Kirim DM dengan kode properti " +
-      captionText(asset.id, 50) +
-      " untuk bertanya atau menjadwalkan survei.",
-    config.companyPhone
-      ? "📲 WhatsApp: +" + normalizePhone(config.companyPhone)
-      : "",
-    captionText(config.companyName, 100),
+  const message = auction
+    ? "⏳ Hari lelang makin dekat. Jangan tunggu sampai kesempatan ini lewat begitu saja—hubungi agent sekarang, pahami prosesnya, dan siapkan langkah Anda sebelum penawaran dimulai."
+    : "🔥 Jangan hanya simpan peluang ini di feed. Aset incaran bisa lebih dulu diambil orang lain—hubungi agent hari ini dan jadwalkan survei sebelum kesempatan terlewat.";
+  const agentName = captionText(asset.agentName || "", 100);
+  const agentPhone = normalizePhone(asset.agentPhone || config.companyPhone);
+  const contact = [
+    agentName
+      ? "👤 Agent: " + agentName
+      : captionText(config.companyName, 100),
+    agentPhone ? "📲 WhatsApp: +" + agentPhone : "",
   ]
     .filter(Boolean)
-    .join("\n\n");
-  const body = [
-    hook,
-    "",
-    captionText(asset.title, 220),
-    [asset.propertyType.replace(/_/g, " "), asset.city]
-      .filter(Boolean)
-      .map((v) => captionText(v, 100))
-      .join(" • "),
-    "",
-    "📍 " + captionText(asset.address || asset.city, 350),
-    Number.isFinite(asset.landArea) && asset.landArea! > 0
-      ? "▸ Luas tanah " +
-        new Intl.NumberFormat("id-ID").format(asset.landArea!) +
-        " m²"
-      : "",
-    asset.certificateType
-      ? "▸ Legalitas " + captionText(asset.certificateType, 80)
-      : "",
-    "▸ " + (auction ? "Limit lelang " : "Harga penawaran ") + money,
-    auction && Number.isFinite(auctionTime)
-      ? "▸ Jadwal lelang " +
-        new Intl.DateTimeFormat("id-ID", {
-          timeZone: "Asia/Jakarta",
-          dateStyle: "long",
-          timeStyle: "short",
-        }).format(new Date(auctionTime)) +
-        " WIB"
-      : "",
-    "",
-    "Geser untuk melihat foto detailnya. Simpan atau bagikan kepada orang yang ingin Anda ajak merencanakannya.",
-    "",
-    auction
-      ? "Penjualan melalui lelang. Cek jadwal, kondisi aset, dan persyaratan sebelum mengikuti."
-      : "Konfirmasikan kondisi dan ketersediaan terbaru bersama tim kami.",
-  ]
-    .filter((line, index, lines) => line || (index > 0 && lines[index - 1]))
     .join("\n");
-  // Reserve the CTA and complete URL before trimming optional descriptive copy.
-  return (
-    body.slice(0, Math.max(0, 2200 - footer.length - 2)).trimEnd() +
-    "\n\n" +
-    footer
-  );
+  return [message, contact].filter(Boolean).join("\n\n");
 }
 export function jakartaDate(now = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {

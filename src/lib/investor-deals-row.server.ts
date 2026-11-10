@@ -42,6 +42,18 @@ export interface ListingRow {
   judul: string;
   slug: string;
   alamat_lengkap: string | null;
+  poster_city_name?: string | null;
+  agent_id?: string | null;
+  poster_source_price?: Numeric | null;
+  poster_source_promo_price?: Numeric | null;
+  poster_source_limit_price?: Numeric | null;
+  poster_auction_deposit?: Numeric | null;
+  poster_building_area_m2?: Numeric | null;
+  poster_bedrooms?: number | null;
+  poster_bathrooms?: number | null;
+  poster_floors?: number | null;
+  agent_name?: string | null;
+  agent_phone?: string | null;
   gambar: string | null;
   transaction_type: TransactionType;
   listing_category: ListingCategory | null;
@@ -157,6 +169,8 @@ export function serializeInvestorListing(
     propertyType: row.property_type,
     certificateType: row.certificate_type ?? row.history_legalitas ?? null,
     address: row.alamat_lengkap || "",
+    agentName: row.agent_name ?? null,
+    agentPhone: row.agent_phone ?? null,
     initialAuctionPrice:
       row.auction_initial_price !== undefined
         ? row.auction_initial_price
@@ -194,6 +208,17 @@ export function serializeInvestorListing(
         : row.listing_category === "LELANG"
           ? `/Lelang/${encodeURIComponent(row.slug)}-${row.id}`
           : `/Jual/${encodeURIComponent(row.slug)}-${row.id}`,
+    slug: row.slug,
+    sourceCityName: row.poster_city_name ?? null,
+    agentId: row.agent_id ?? null,
+    sourcePrice: number(row.poster_source_price),
+    sourcePromoPrice: number(row.poster_source_promo_price),
+    sourceLimitPrice: number(row.poster_source_limit_price),
+    auctionDeposit: number(row.poster_auction_deposit),
+    buildingAreaSqm: number(row.poster_building_area_m2),
+    bedroomCount: row.poster_bedrooms ?? null,
+    bathroomCount: row.poster_bathrooms ?? null,
+    floorCount: row.poster_floors ?? null,
     auctionHistoryPoints: history.map((event, i) => ({
       round: event.round || i + 1,
       sourceListingId: event.id,

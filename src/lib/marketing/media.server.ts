@@ -6,7 +6,15 @@ import path from "node:path";
 import sharp from "sharp";
 import QRCode from "qrcode";
 import { resolveFetchableImage } from "@/lib/fotoListing";
+import { buildJualPosterData } from "@/lib/jualPoster";
+import { buildLelangPosterPayload } from "@/lib/lelangPoster";
 import { renderStoryPoster } from "@/lib/server/posterRender";
+import {
+  renderJualPosterImage,
+  renderLelangPosterImage,
+} from "@/lib/server/posterTemplates";
+import type { AuctionHistoryResult } from "@/lib/auctionHistory";
+import { SITE_URL } from "@/lib/site";
 import {
   type AssetSnapshot,
   type MarketingConfig,
@@ -189,10 +197,83 @@ export async function fitMarketingPoster(page: any) {
     }
   });
 }
+
+function auctionHistoryForPoster(asset: AssetSnapshot): AuctionHistoryResult {
+  const toItem = (
+    id: string,
+    date: string | null,
+    price: number,
+    isCurrent: boolean,
+    round: number,
+  ) => ({
+    id_property: id,
+    urutan: round,
+    is_current: isCurrent,
+    judul: isCurrent ? asset.title : "",
+    slug: isCurrent ? asset.slug || "" : "",
+    harga: price,
+    nilai_limit_lelang: price,
+    harga_efektif: price,
+    uang_jaminan: isCurrent ? asset.auctionDeposit ?? null : null,
+    tanggal_lelang: date,
+    tanggal_dibuat: null,
+    gambar_utama: null,
+    gambar_list: [],
+    status_tayang: "TERSEDIA",
+    jenis_transaksi: "LELANG",
+    kelurahan: null,
+    kecamatan: null,
+    kota: asset.city,
+    provinsi: null,
+    legalitas: asset.certificateType || null,
+    nomor_legalitas: null,
+    nomor_legalitas_list: [],
+    nomor_cocok: [],
+    cakupan: "SAMA" as const,
+    alamat_lengkap: asset.address,
+    luas_tanah: asset.landArea,
+    luas_bangunan: asset.buildingAreaSqm ?? null,
+    link: null,
+    id_agent: asset.agentId || null,
+    confidence: "PASTI" as const,
+    alasan_cocok: [],
+    duplikat_ids: [],
+    delta_persen: null,
+  });
+  const past = (asset.auctionHistoryPoints || [])
+    .filter((point) => point.date && Number.isFinite(Date.parse(point.date)))
+    .map((point, index) =>
+      toItem(
+        `history-${index + 1}`,
+        point.date,
+        point.price,
+        false,
+        index + 1,
+      ),
+    );
+  const current = toItem(
+    asset.id,
+    asset.auctionDate,
+    asset.price,
+    true,
+    past.length + 1,
+  );
+  return {
+    ok: true,
+    items: [...past, current],
+    total: past.length + 1,
+    total_lain: past.length,
+    total_sebidang: past.length + 1,
+    total_lot_terkait: 0,
+    match: null,
+    alasan_tanpa_riwayat: past.length ? null : "TIDAK_ADA_KECOCOKAN",
+  };
+}
+
 export async function buildMarketingMedia(
   jobId: string,
   asset: AssetSnapshot,
-  config: MarketingConfig,
+  _config: MarketingConfig,
 ) {
   const photos: Buffer[] = [];
   for (const reference of asset.images) {
@@ -215,48 +296,98 @@ export async function buildMarketingMedia(
   const dir = path.join(mediaDirectory(), jobId);
   await mkdir(dir, { recursive: true, mode: 0o700 });
   const media: MarketingMedia[] = [];
-  const fontData = (
-    await readFile(
-      path.join(
-        process.cwd(),
-        "public",
-        "fonts",
-        "plus-jakarta-sans",
-        "PlusJakartaSans-Variable.ttf",
-      ),
-    )
-  ).toString("base64");
-  const logo =
-    "data:image/png;base64," +
-    (
-      await readFile(
-        path.join(process.cwd(), "public/images/logo/LogoSolusindoPremier.png"),
-      )
-    ).toString("base64");
-  const listingUrl = marketingListingUrl(asset.listingUrl);
-  const qrImage = listingUrl
-    ? await QRCode.toDataURL(listingUrl, {
-        width: 360,
-        margin: 3,
-        errorCorrectionLevel: "M",
-      })
-    : "";
-  for (const story of [false, true]) {
-    const name = story ? "story.jpg" : "feed.jpg",
-      height = story ? 1920 : 1350;
-    const buffer = await renderStoryPoster(
-      posterHtml(asset, config, photos, story, fontData, logo, qrImage),
-      fitMarketingPoster,
-      { width: 1080, height, deviceScaleFactor: 1 },
-    );
-    await writeFile(path.join(dir, name), buffer, { mode: 0o600 });
-    media.push({
-      name,
-      channel: story ? "whatsapp" : "instagram",
-      width: 1080,
-      height,
-    });
-  }
+  const posterPhotos = photos.map(
+    (photo) => "data:image/jpeg;base64," + photo.toString("base64"),
+  );
+  const selfAgent = {
+    nama: asset.agentName || undefined,
+    whatsapp: asset.agentPhone || undefined,
+  };
+  const poster =
+    asset.category === "LELANG"
+      ? await renderLelangPosterImage(
+          Object.assign(
+            buildLelangPosterPayload(
+              {
+                id_property: asset.id,
+                slug: asset.slug,
+                judul: asset.title,
+                kota: asset.sourceCityName || asset.city,
+                alamat_lengkap: asset.address,
+                luas_tanah: asset.landArea,
+                luas_bangunan: asset.buildingAreaSqm,
+                legalitas: asset.certificateType,
+                nilai_limit_lelang: asset.sourceLimitPrice,
+                harga: asset.sourcePrice ?? asset.price,
+                uang_jaminan: asset.auctionDeposit,
+                tanggal_lelang: asset.auctionDate,
+                agent: {
+                  nama: asset.agentName,
+                  whatsapp: asset.agentPhone,
+                },
+              },
+              {
+                agentCode: asset.agentId,
+                selfAgent,
+                riwayatLelang: auctionHistoryForPoster(asset),
+                origin: SITE_URL,
+              },
+            ),
+            { photos: posterPhotos },
+          ),
+        )
+      : await renderJualPosterImage(
+          Object.assign(
+            buildJualPosterData(
+              {
+                id_property: asset.id,
+                slug: asset.slug,
+                jenis_transaksi: asset.category,
+                judul: asset.title,
+                kota: asset.sourceCityName || asset.city,
+                alamat_lengkap: asset.address,
+                luas_tanah: asset.landArea,
+                luas_bangunan: asset.buildingAreaSqm,
+                kamar_tidur: asset.bedroomCount,
+                kamar_mandi: asset.bathroomCount,
+                jumlah_lantai: asset.floorCount,
+                legalitas: asset.certificateType,
+                harga: asset.sourcePrice ?? asset.price,
+                harga_promo: asset.sourcePromoPrice,
+                agent: {
+                  nama: asset.agentName,
+                  whatsapp: asset.agentPhone,
+                },
+              },
+              {
+                agentCode: asset.agentId,
+                selfAgent,
+                origin: SITE_URL,
+              },
+            ),
+            { photos: posterPhotos },
+          ),
+        );
+  const storyName = "story.jpg";
+  await writeFile(path.join(dir, storyName), poster, { mode: 0o600 });
+  media.push({
+    name: storyName,
+    channel: "whatsapp",
+    width: 1080,
+    height: 1920,
+  });
+  const feedName = "feed.jpg";
+  const feedPoster = await sharp(poster)
+    .resize(1080, 1350, { fit: "contain", background: "#FFFFFF" })
+    .jpeg({ quality: 88 })
+    .toBuffer();
+  await writeFile(path.join(dir, feedName), feedPoster, { mode: 0o600 });
+  media.push({
+    name: feedName,
+    channel: "instagram",
+    width: 1080,
+    height: 1350,
+  });
   for (let i = 0; i < photos.length; i++) {
     const name = "photo-" + (i + 1) + ".jpg";
     await writeFile(

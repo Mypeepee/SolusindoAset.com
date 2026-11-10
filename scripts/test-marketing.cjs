@@ -152,79 +152,60 @@ test("property search explains blocked matches without relaxing publication elig
       assert.equal(domain.eligibleAsset(asset, c, when), false);
   }
 });
-test("public caption uses facts, hides private scores and distinguishes auction limit", () => {
+test("auction caption uses urgent copy and assigned agent contact without repeating poster facts", () => {
   const caption = domain.captionFor(
-    domain.snapshotAsset(listing("1", { listingCategory: "LELANG" })),
+    domain.snapshotAsset(
+      listing("1", {
+        listingCategory: "LELANG",
+        agentName: "Agent Contoh",
+        agentPhone: "081234567891",
+      }),
+    ),
     config(),
   );
-  assert.match(caption, /Limit lelang Rp/);
-  assert.match(caption, /400\.000\.000/);
-  assert.match(caption, /6281234567890/);
+  assert.match(caption, /Hari lelang makin dekat/);
+  assert.match(caption, /hubungi agent sekarang/i);
+  assert.match(caption, /Agent: Agent Contoh/);
+  assert.match(caption, /WhatsApp: \+6281234567891/);
+  assert.doesNotMatch(caption, /400\.000\.000|Jalan Contoh|Luas tanah|SHM/);
   assert.doesNotMatch(caption, /ROI|score|100%|keuntungan|pasti/i);
 });
-test("sales caption connects an emotional headline, source specifications and a complete public detail URL", () => {
-  const asset = domain.snapshotAsset(
-    listing("71", {
-      title: "Rumah untuk cerita baru",
-      certificateType: "SHM",
-      listingCategory: "LELANG",
-      auctionDate: "2026-12-20T02:00:00Z",
-      listingUrl: "/Lelang/rumah-71?ref=company",
-    }),
+test("sales caption uses a FOMO call to action and assigned agent contact without property specifications", () => {
+  const caption = domain.captionFor(
+    domain.snapshotAsset(
+      listing("71", {
+        title: "Rumah untuk cerita baru",
+        agentName: "Agent Surabaya",
+        agentPhone: "081222233344",
+      }),
+    ),
+    config(),
   );
-  const caption = domain.captionFor(asset, config());
-  assert.match(caption.split("\n")[0], /Bayangkan/);
-  for (const fact of [
-    "Rumah untuk cerita baru",
-    "Jalan Contoh 71",
-    "100 m²",
-    "SHM",
-    "20 Desember 2026",
-    "09.00 WIB",
-  ])
-    assert.ok(caption.includes(fact), fact);
-  assert.match(caption, /https:\/\/[^\s]+\/Lelang\/rumah-71\?ref=company/);
-  assert.ok(
-    caption.indexOf("Luas tanah") < caption.indexOf("🔗 Detail properti"),
-  );
-  assert.match(caption, /kode properti 71/);
-  assert.ok(caption.length <= 2200);
+  assert.match(caption, /Jangan hanya simpan peluang ini di feed/);
+  assert.match(caption, /hubungi agent hari ini/i);
+  assert.match(caption, /Agent: Agent Surabaya/);
+  assert.match(caption, /WhatsApp: \+6281222233344/);
+  assert.doesNotMatch(caption, /Rumah untuk cerita baru|Jalan Contoh|100 m|SHM|https:/);
   assert.doesNotMatch(
     caption,
     /dijamin|pasti untung|termurah|tinggal satu|lokasi strategis|ROI|score/i,
   );
 });
-test("caption omits unknown facts, handles invalid dates and preserves the CTA when source copy is very long", () => {
+test("caption truncates unusually long agent data while preserving the call to action", () => {
   const asset = domain.snapshotAsset(
     listing("9", {
-      title: "Judul panjang ".repeat(500),
-      address: "Alamat panjang ".repeat(500),
-      cityName: "Kota ".repeat(500),
-      certificateType: null,
-      landAreaSqm: null,
-      listingCategory: "LELANG",
-      auctionDate: "invalid",
-      listingUrl: "/Lelang/detail-9",
+      agentName: "Agen ".repeat(500),
+      agentPhone: "081234567891",
     }),
   );
   const text = domain.captionFor(asset, {
     ...config(),
     companyName: "Perusahaan ".repeat(100),
   });
-  assert.ok(text.length <= 2200);
-  assert.match(text, /https:\/\/[^\s]+\/Lelang\/detail-9/);
-  assert.match(text, /kode properti 9/);
-  assert.doesNotMatch(
-    text,
-    /Luas tanah|Legalitas|Jadwal lelang|Invalid Date|undefined|null/,
-  );
-  const land = domain.captionFor({ ...asset, propertyType: "TANAH" }, config());
-  const warehouse = domain.captionFor(
-    { ...asset, propertyType: "GUDANG" },
-    config(),
-  );
-  assert.match(land.split("\n")[0], /tumbuh/);
-  assert.match(warehouse.split("\n")[0], /Usaha/);
+  assert.ok(text.length < 400);
+  assert.match(text, /Jangan hanya simpan peluang ini di feed/);
+  assert.ok(text.includes("Agen"));
+  assert.match(text, /WhatsApp: \+6281234567891/);
 });
 test("poster and caption detail destinations reject unsafe and foreign links", () => {
   for (const link of [
@@ -256,10 +237,27 @@ test("listing links use the canonical site even when media is served through a t
     );
     assert.match(
       domain.captionFor(
-        domain.snapshotAsset(listing("71", { listingUrl: "/Lelang/rumah-71" })),
+        domain.snapshotAsset(
+          listing("71", {
+            listingCategory: "LELANG",
+            listingUrl: "/Lelang/rumah-71",
+          }),
+        ),
         config(),
       ),
-      /https:\/\/solusindoaset\.com\/Lelang\/rumah-71/,
+      /Hari lelang makin dekat/,
+    );
+    assert.doesNotMatch(
+      domain.captionFor(
+        domain.snapshotAsset(
+          listing("71", {
+            listingCategory: "LELANG",
+            listingUrl: "/Lelang/rumah-71",
+          }),
+        ),
+        config(),
+      ),
+      /https:/,
     );
   } finally {
     if (old === undefined) delete process.env.MARKETING_PUBLIC_ORIGIN;
@@ -2821,9 +2819,13 @@ test("carousel materials preserve every source photo after the design cover, inc
       writeFile: async (file, bytes) =>
         writes.set(require("node:path").basename(file), bytes),
     },
-    "@/lib/server/posterRender": {
-      renderStoryPoster: async (html) => {
-        rendered.push(html);
+    "@/lib/server/posterTemplates": {
+      renderJualPosterImage: async (payload) => {
+        rendered.push({ type: "jual", payload });
+        return source;
+      },
+      renderLelangPosterImage: async (payload) => {
+        rendered.push({ type: "lelang", payload });
         return source;
       },
     },
@@ -2837,6 +2839,13 @@ test("carousel materials preserve every source photo after the design cover, inc
       writes.clear();
       const asset = domain.snapshotAsset(
         listing("1", {
+          slug: "rumah-contoh-1",
+          agentId: "AG108",
+          agentName: "Agent Contoh",
+          agentPhone: "081234567890",
+          sourceCityName: "Surabaya",
+          sourcePrice: 450e6,
+          sourcePromoPrice: 400e6,
           imageUrls: Array.from(
             { length: count },
             (_, i) => `https://property.example.test/${i}.jpg`,
@@ -2865,12 +2874,60 @@ test("carousel materials preserve every source photo after the design cover, inc
       assert.equal(photo.width, 1080);
       assert.equal(photo.height, 1350);
     }
-    assert.equal(rendered.length, 4);
+    assert.equal(rendered.length, 2);
+    assert.ok(rendered.every((result) => result.type === "jual"));
     assert.ok(
       rendered.every(
-        (html) =>
-          html.includes("story-frame") && html.includes("Informasi properti"),
+        ({ payload }) =>
+          payload.listingType === "Secondary" &&
+          payload.harga === 450e6 &&
+          payload.hargaPromo === 400e6 &&
+          payload.qrUrl === "https://solusindoaset.com/Jual/rumah-contoh-1-1/AG108" &&
+          payload.agenNama === "Agent Contoh" &&
+          payload.agenTelp === "081234567890" &&
+          payload.photos.length > 0 &&
+          payload.photos.every((photo) => photo.startsWith("data:image/jpeg;base64,")),
       ),
+    );
+    const primary = domain.snapshotAsset(
+      listing("2", {
+        listingCategory: "PRIMARY",
+        slug: "primary-2",
+        sourcePrice: 800e6,
+        agentId: "AG109",
+        imageUrls: ["https://property.example.test/primary.jpg"],
+      }),
+    );
+    await mediaModule.buildMarketingMedia(
+      "a0000000-0000-0000-0000-000000000002",
+      primary,
+      config(),
+    );
+    const auction = domain.snapshotAsset(
+      listing("3", {
+        listingCategory: "LELANG",
+        slug: "auction-3",
+        sourcePrice: 500e6,
+        sourceLimitPrice: 400e6,
+        auctionDeposit: 40e6,
+        agentId: "AG110",
+        auctionDate: "2026-12-20T02:00:00Z",
+        auctionHistoryPoints: [{ date: "2025-12-20T02:00:00Z", price: 900e6 }],
+        imageUrls: ["https://property.example.test/auction.jpg"],
+      }),
+    );
+    await mediaModule.buildMarketingMedia(
+      "a0000000-0000-0000-0000-000000000003",
+      auction,
+      config(),
+    );
+    assert.equal(rendered[2].payload.listingType, "Primary");
+    assert.equal(rendered[3].type, "lelang");
+    assert.equal(rendered[3].payload.hargaLimit.replace(/\s/g, ""), "Rp400.000.000");
+    assert.equal(rendered[3].payload.hargaLelangAwal.replace(/\s/g, ""), "Rp900.000.000");
+    assert.equal(
+      rendered[3].payload.qrUrl,
+      "https://solusindoaset.com/Lelang/auction-3-3/AG110",
     );
     assert.equal(
       mediaModule.validMediaPath(

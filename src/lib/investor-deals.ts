@@ -166,6 +166,20 @@ export type InvestorListing = Omit<
     sourceListingUrl?: string;
   })[];
   listingUrl: string;
+  /** Source listing fields required to reproduce the public download poster. */
+  slug?: string;
+  sourceCityName?: string | null;
+  agentId?: string | null;
+  sourcePrice?: number | null;
+  sourcePromoPrice?: number | null;
+  sourceLimitPrice?: number | null;
+  auctionDeposit?: number | null;
+  buildingAreaSqm?: number | null;
+  bedroomCount?: number | null;
+  bathroomCount?: number | null;
+  floorCount?: number | null;
+  agentName?: string | null;
+  agentPhone?: string | null;
   status: string;
   coordinates: { latitude: number; longitude: number } | null;
   auctionHistory: AuctionHistory[];

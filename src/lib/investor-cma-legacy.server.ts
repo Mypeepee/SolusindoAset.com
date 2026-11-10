@@ -158,11 +158,19 @@ export function legacyCmaQuery(
    CASE WHEN m.metric_market_spread_pct IS NULL AND m.metric_auction_drop_pct IS NULL THEN NULL WHEN m.metric_market_spread_pct IS NULL OR m.metric_auction_drop_pct>=m.metric_market_spread_pct THEN 'AUCTION_DROP' ELSE 'MARKET_SPREAD' END primary_deal_type,
    m.benchmark_avg,m.benchmark_count,m.nk kelurahan_sample_count,m.benchmark_scope,
    CURRENT_TIMESTAMP benchmark_version,coalesce(media.tanggal_diupdate,m.source_created_at) updated_at,
-   media.judul,media.slug,media.alamat_lengkap,${includeMedia ? Prisma.sql`media.gambar` : Prisma.sql`NULL::text AS gambar`},media.latitude,media.longitude,m.tanggal_lelang,
+   media.judul,media.slug,media.alamat_lengkap,media.kota poster_city_name,media.id_agent agent_id,
+   media.harga poster_source_price,media.harga_promo poster_source_promo_price,
+   media.nilai_limit_lelang poster_source_limit_price,media.uang_jaminan poster_auction_deposit,
+   media.luas_bangunan poster_building_area_m2,media.kamar_tidur poster_bedrooms,
+   media.kamar_mandi poster_bathrooms,media.jumlah_lantai poster_floors,
+   ${includeMedia ? Prisma.sql`media.gambar` : Prisma.sql`NULL::text AS gambar`},media.latitude,media.longitude,m.tanggal_lelang,
    media.harga history_raw_price,media.nilai_limit_lelang history_raw_limit,m.legalitas::text certificate_type,m.legalitas history_legalitas,media.nomor_legalitas history_nomor_legalitas,media.kota history_city_name,media.tanggal_dibuat history_created_at,
+   agent_user.nama_lengkap agent_name,coalesce(nullif(agent_contact.nomor_whatsapp,''),nullif(agent_user.nomor_telepon,'')) agent_phone,
    '[]'::jsonb history,
    md5(jsonb_build_array(m.id_property,media.kota,media.provinsi,media.kecamatan,media.kelurahan,media.tanggal_diupdate)::text) source_revision
-  FROM metrics m JOIN listing media ON media.id_property=m.id_property`;
+  FROM metrics m JOIN listing media ON media.id_property=m.id_property
+  LEFT JOIN agent agent_contact ON agent_contact.id_agent=media.id_agent
+  LEFT JOIN pengguna agent_user ON agent_user.id_pengguna=agent_contact.id_pengguna`;
 }
 
 let regionCache: { registry: Registry; expires: number } | null = null;
@@ -215,9 +223,17 @@ async function snapshot(
     const rows = stored
       ? await tx.$queryRaw<
           LegacyRow[]
-        >`SELECT v.*,s.judul,s.slug,s.alamat_lengkap,NULL::text AS gambar,s.latitude,s.longitude,s.tanggal_lelang,
-          s.harga history_raw_price,s.nilai_limit_lelang history_raw_limit,s.legalitas::text certificate_type,s.legalitas history_legalitas,s.nomor_legalitas history_nomor_legalitas,s.kota history_city_name,s.tanggal_dibuat history_created_at
+        >`SELECT v.*,s.judul,s.slug,s.alamat_lengkap,s.kota poster_city_name,s.id_agent agent_id,
+          s.harga poster_source_price,s.harga_promo poster_source_promo_price,
+          s.nilai_limit_lelang poster_source_limit_price,s.uang_jaminan poster_auction_deposit,
+          s.luas_bangunan poster_building_area_m2,s.kamar_tidur poster_bedrooms,
+          s.kamar_mandi poster_bathrooms,s.jumlah_lantai poster_floors,
+          NULL::text AS gambar,s.latitude,s.longitude,s.tanggal_lelang,
+          s.harga history_raw_price,s.nilai_limit_lelang history_raw_limit,s.legalitas::text certificate_type,s.legalitas history_legalitas,s.nomor_legalitas history_nomor_legalitas,s.kota history_city_name,s.tanggal_dibuat history_created_at,
+          agent_user.nama_lengkap agent_name,coalesce(nullif(agent_contact.nomor_whatsapp,''),nullif(agent_user.nomor_telepon,'')) agent_phone
           FROM investor_listing_valuations v JOIN listing s ON s.id_property=v.source_listing_id
+          LEFT JOIN agent agent_contact ON agent_contact.id_agent=s.id_agent
+          LEFT JOIN pengguna agent_user ON agent_user.id_pengguna=agent_contact.id_pengguna
           WHERE v.is_latest AND v.transaction_type=${transactionType} AND (${cityId || null}::text IS NULL OR v.city_id=${cityId || null})`
       : await tx.$queryRaw<LegacyRow[]>(
           legacyCmaQuery(registry, cityId, transactionType, null, false, extendedTypes),

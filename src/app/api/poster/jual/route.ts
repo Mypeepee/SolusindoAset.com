@@ -1,25 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFile } from "fs/promises";
-import path from "path";
 import type { JualPosterData } from "@/lib/jualPoster";
-import { renderStoryPoster } from "@/lib/server/posterRender";
+import { renderJualPosterImage } from "@/lib/server/posterTemplates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-const TEMPLATE_PATH = path.join(
-  process.cwd(),
-  "public",
-  "templates",
-  "katalog-primary-secondary_Solusindo.html",
-);
-
-let templateCache: string | null = null;
-async function getTemplate(): Promise<string> {
-  if (!templateCache) templateCache = await readFile(TEMPLATE_PATH, "utf8");
-  return templateCache;
-}
 
 export async function POST(req: NextRequest) {
   let data: JualPosterData;
@@ -33,23 +18,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const html = await getTemplate();
-
-    // Template ini mengisi datanya sendiri lewat window.renderKatalog(d).
-    // Tunggu library QR siap, lalu render ulang dengan data asli.
-    const buffer = await renderStoryPoster(html, async (page) => {
-      try {
-        await page.waitForFunction("typeof window.qrcode !== 'undefined'", {
-          timeout: 8000,
-        });
-      } catch {
-        // QR gagal dimuat → poster tetap dibuat tanpa QR.
-      }
-      await page.evaluate((d: JualPosterData) => {
-        (window as any).renderKatalog(d);
-      }, data);
-    });
-
+    const buffer = await renderJualPosterImage(data);
     return new NextResponse(buffer as any, {
       status: 200,
       headers: {
