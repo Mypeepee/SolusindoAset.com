@@ -6,6 +6,10 @@
  *  Uang itu sensitif: server (penegak aturan) dan UI (penampil angka) WAJIB
  *  memakai rumus yang sama persis. Semua rumus itu ada di berkas ini saja.
  *
+ *  Form arus kas baru memakai `requiredAdditionalCapital` terhadap saldo kas
+ *  proyek. Helper anggaran per pos di bawah tetap dipakai untuk ringkasan dan
+ *  penutupan kekurangan dari data lama.
+ *
  *  ── DUA BUKU YANG BERBEDA (jangan pernah dicampur) ──────────────────────
  *
  *  1) KAS PROYEK = uang riil yang benar-benar ada.
@@ -144,6 +148,12 @@ export function money(value: unknown): number {
 function positiveMoney(value: unknown): number {
   const n = money(value);
   return n > 0 ? n : 0;
+}
+
+/** Modal tambahan minimum agar pengeluaran tidak membuat kas proyek negatif. */
+export function requiredAdditionalCapital(sisaKas: unknown, nominal: unknown) {
+  const kekurangan = Math.max(0, positiveMoney(nominal) - money(sisaKas));
+  return Math.round((kekurangan + Number.EPSILON) * 100) / 100;
 }
 
 /** Rencana anggaran per pos dari kolom project. Σ = target_pendanaan. */

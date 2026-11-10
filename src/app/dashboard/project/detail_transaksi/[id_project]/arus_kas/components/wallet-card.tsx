@@ -96,7 +96,7 @@ export default function WalletCard({
             {overBudget ? (
               <>
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-300/80" />
-                <span>Harus ditalangi investor</span>
+                <span>Tambahan modal investor diperlukan</span>
               </>
             ) : (
               <span className="truncate">
@@ -110,7 +110,7 @@ export default function WalletCard({
             <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-amber-300/15 bg-amber-400/[0.08] px-2.5 py-1 text-[11px] text-amber-100/80">
               <HandCoins className="h-3 w-3 shrink-0" />
               <span>
-                Termasuk talangan investor {formatCurrency(wallet.talangan)}
+                Termasuk setoran modal tambahan {formatCurrency(wallet.talangan)}
               </span>
             </div>
           ) : null}

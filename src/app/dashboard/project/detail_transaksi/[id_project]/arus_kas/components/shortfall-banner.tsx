@@ -111,9 +111,9 @@ export default function ShortfallBanner({
                   )}`}
             </h3>
             <p className="mt-1 text-sm leading-6 text-slate-300">
-              Pengeluaran melebihi saldo dompet. Bebankan kekurangannya ke
-              investor — modal disetornya bertambah dan porsi kepemilikan semua
-              investor dihitung ulang otomatis.
+              Pengeluaran melebihi saldo dompet. Investor yang dipilih akan
+              menerima setoran modal tambahan; saldo dan porsi kepemilikan
+              proyek diperbarui setelah transaksi disimpan.
             </p>
 
             <div className="mt-4 flex flex-wrap gap-2">
@@ -200,8 +200,8 @@ export default function ShortfallBanner({
 
               {investors.length === 0 ? (
                 <div className="rounded-[18px] border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-sm leading-6 text-rose-100">
-                  Project ini belum punya investor, jadi kekurangan dana belum
-                  bisa ditalangi.
+                  Project ini belum memiliki investor, jadi tambahan modal
+                  belum dapat dicatat.
                 </div>
               ) : (
                 <div className="space-y-2">

@@ -464,3 +464,29 @@ Acceptance: `npm run test:drive` covers the pool and actual upload handlers with
 injected Google/database adapters. `npm run diagnose:drive` reads real account
 capacity and configuration without uploading or changing files. Second-account
 activation requires its genuine OAuth refresh token and an application restart.
+
+## Arus kas project — 2026-11-10
+
+Authority: the user's cash-shortfall rule. The project cash ledger and
+`requiredAdditionalCapital` own the displayed estimate; the authenticated
+`/api/project/catat_arus_kas` route recalculates it from current database state.
+
+| Capability | Canonical owner | Source of truth | Required behavior |
+| --- | --- | --- | --- |
+| Expense form | CashflowQuickForm / CashflowEntrySheet | Current project cash and investor membership | Preview the shortfall; for multiple investors require one selection; for one investor show the automatic recipient |
+| Cashflow write | `/api/project/catat_arus_kas` | Current ledger plus `ProjectInvestor.nominal_terbayar` | A recorded expense cannot leave project cash below zero; reject if the project has no investor to receive required additional capital |
+| Additional capital | ProjectInvestor + linked `setoran_modal` ledger row | Server-calculated shortfall | Increase the selected investor's paid capital and commitment by exactly the shortfall, then recalculate ownership and project funding total once |
+| Edit/delete | `/api/project/catat_arus_kas/[id]` | Linked additional-capital row | Reject edits that need additional capital; delete and recreate to select an investor. Deleting a linked expense reverses its capital and ownership changes atomically |
+
+The UI describes the adjustment as additional paid-in capital. The project cash
+formula counts `nominal_terbayar` and excludes the linked `setoran_modal` row,
+so the same capital is never counted twice. Cashflow writes serialize on the
+project row before reading the balance. If a preview is stale, the server is
+authoritative and the form remains recoverable.
+
+Acceptance cases: Rp10,000,000 available with Rp11,000,000 expense adds exactly
+Rp1,000,000 to the selected investor and leaves zero cash; one investor is
+selected automatically; multiple investors require an explicit selection; no
+investor prevents an over-balance expense; sufficient cash adds no modal; a
+cancelled expense adds no modal; deleting a covered expense reverses only its
+linked capital; editing cannot create a negative cash balance.

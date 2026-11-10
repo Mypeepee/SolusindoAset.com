@@ -56,7 +56,7 @@ export function kategoriLabel(value: string) {
   if (found) return found.label;
 
   if (value === "setoran_modal") return "Setoran modal";
-  if (value === "talangan_investor") return "Talangan investor";
+  if (value === "talangan_investor") return "Setoran modal tambahan";
 
   return value
     .replaceAll("_", " ")

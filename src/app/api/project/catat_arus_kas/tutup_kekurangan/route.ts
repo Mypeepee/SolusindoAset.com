@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
           return {
             error: {
               message:
-                "Project ini belum punya investor, jadi kekurangan dana belum bisa ditalangi.",
+                "Project ini belum memiliki investor, jadi tambahan modal belum dapat dicatat.",
               status: 400,
             },
           };
@@ -196,7 +196,7 @@ export async function POST(request: NextRequest) {
             tanggal_transaksi: tanggal,
             jenis_transaksi: "pemasukan",
             kategori_transaksi: "talangan_investor",
-            judul_transaksi: `Talangan ${nama} — kekurangan ${WALLET_LABELS[walletKey]}`,
+            judul_transaksi: `Setoran modal tambahan ${nama} — kekurangan ${WALLET_LABELS[walletKey]}`,
             nominal: new Prisma.Decimal(tambahanAnggaran.toFixed(2)),
             status_transaksi: "tercatat",
             catatan: `Menambah anggaran pos ${WALLET_LABELS[walletKey]} yang terlanjur terlampaui.`,
@@ -282,7 +282,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       {
-        message: "Kekurangan dana berhasil ditutup investor.",
+        message: "Kekurangan dana berhasil ditutup dan modal investor diperbarui.",
         data: (result as { data: unknown }).data,
       },
       { status: 201 }

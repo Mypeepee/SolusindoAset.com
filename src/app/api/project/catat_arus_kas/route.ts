@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
 import { prisma } from "@/lib/prisma";
 import { loadFundState } from "@/lib/project-kas-server";
-import { planExpense, WALLET_LABELS } from "@/lib/project-kas";
+import { requiredAdditionalCapital } from "@/lib/project-kas";
 import { refreshOwnershipCache } from "./_lib/cash";
 
 /** Kategori yang HANYA boleh dibuat sistem (mengubah modal & kepemilikan). */
@@ -116,6 +116,19 @@ function isAutoUpdateAllowedTarget(
     typeof value === "string" &&
     AUTO_UPDATE_ALLOWED_TARGETS.includes(value as AutoUpdateAllowedTarget)
   );
+}
+
+function parseInvestorId(value: unknown): bigint | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string" || !/^\d+$/.test(value.trim())) {
+    throw new HttpError("Investor penanggung tidak valid.", 400);
+  }
+
+  try {
+    return BigInt(value.trim());
+  } catch {
+    throw new HttpError("Investor penanggung tidak valid.", 400);
+  }
 }
 
 function normalizeJenis(value: unknown): JenisArusKas {
@@ -434,13 +447,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           message:
-            "Setoran modal dan talangan investor dicatat otomatis oleh sistem, bukan lewat form transaksi.",
+            "Setoran modal investor dicatat otomatis oleh sistem, bukan lewat form transaksi.",
         },
         { status: 400 }
       );
     }
 
     const result = await prisma.$transaction(async (tx) => {
+      // Serialize cashflow writes for this project so simultaneous expenses
+      // cannot spend the same available balance.
+      await tx.$queryRaw(
+        Prisma.sql`SELECT id_project FROM project WHERE id_project = ${idProject} FOR UPDATE`
+      );
+
       const project = await tx.project.findUnique({
         where: { id_project: idProject },
         select: {
@@ -472,66 +491,62 @@ export async function POST(request: NextRequest) {
         throw new HttpError("Project tidak ditemukan.", 404);
       }
 
-      // ── Kekurangan dana ───────────────────────────────────────────────────
-      // Dua jenis, sengaja dipisah supaya angka anggaran tidak melar:
-      //   • anggaran pos kurang  → talangan (anggaran pos & kas naik)
-      //   • anggaran cukup, kas kurang → setoran modal (hanya kas yang naik)
-      // Lihat @/lib/project-kas.
-      // Arus kas baru tidak memakai kuota/dompet anggaran atau talangan
-      // otomatis. Saldo boleh negatif agar catatan mencerminkan kondisi riil.
-      const isRecordedExpense = false;
-
-      const plan = isRecordedExpense
-        ? planExpense({
-            state: fundState,
-            walletKey,
-            nominal: Number(nominal.toString()),
-          })
-        : null;
-
-      const tambahanAnggaran = new Prisma.Decimal(
-        (plan?.tambahanAnggaran ?? 0).toFixed(2)
+      // Kekurangan modal dihitung dari saldo kas aktual agar transaksi baru
+      // tidak membuat saldo proyek menjadi negatif.
+      const isActiveExpense =
+        jenisTransaksi === "pengeluaran" && statusTransaksi !== "dibatalkan";
+      const deficit = new Prisma.Decimal(
+        (
+          isActiveExpense
+            ? requiredAdditionalCapital(
+                fundState.sisaKas,
+                Number(nominal.toString())
+              )
+            : 0
+        ).toFixed(2)
       );
-      const tambahanKas = new Prisma.Decimal(
-        (plan?.tambahanKas ?? 0).toFixed(2)
-      );
-      const deficit = tambahanAnggaran.plus(tambahanKas);
-      const needsCover = deficit.gt(0);
+      const needsInvestor = deficit.gt(0);
 
-      // Kalau project cuma punya SATU investor, tak ada yang perlu dipilih —
-      // kekurangan otomatis dibebankan ke dia.
       let penanggungId: bigint | null = null;
+      let penanggungOtomatis = false;
 
-      if (needsCover && !penanggungId) {
+      if (needsInvestor) {
+        const investorIdDiminta = parseInvestorId(body.id_project_investor);
         const kandidat = await tx.projectInvestor.findMany({
           where: { id_project: idProject },
           select: { id_project_investor: true },
           take: 2,
         });
 
-        if (kandidat.length === 1) {
-          penanggungId = kandidat[0].id_project_investor;
-        } else if (kandidat.length === 0) {
+        if (kandidat.length === 0) {
           throw new HttpError(
-            "Project ini belum punya investor, jadi kekurangan dana tidak bisa ditalangi. Tambahkan investor lebih dulu.",
+            "Project ini belum memiliki investor. Tambahkan investor sebelum mencatat pengeluaran ini.",
             400
           );
         }
-      }
 
-      if (needsCover && !penanggungId) {
-        const alasan = tambahanAnggaran.gt(0)
-          ? `Anggaran ${WALLET_LABELS[walletKey]} tinggal ${formatIDR(
-              plan!.sisaAnggaranPos
-            )}`
-          : `Kas proyek tinggal ${formatIDR(plan!.sisaKas)}`;
+        if (kandidat.length === 1 && !investorIdDiminta) {
+          penanggungId = kandidat[0].id_project_investor;
+          penanggungOtomatis = true;
+        } else if (investorIdDiminta) {
+          penanggungId = investorIdDiminta;
+        } else {
+          throw new HttpError(
+            `Saldo proyek kurang ${formatIDR(deficit)}. Muat ulang halaman, lalu pilih investor yang menambah modal.`,
+            400
+          );
+        }
 
-        throw new HttpError(
-          `${alasan}, kurang ${formatIDR(
-            deficit
-          )} untuk transaksi ini. Pilih investor yang menanggung kekurangannya.`,
-          400
-        );
+        if (
+          kandidat.length === 1 &&
+          investorIdDiminta &&
+          investorIdDiminta !== kandidat[0].id_project_investor
+        ) {
+          throw new HttpError(
+            "Investor penanggung tidak ditemukan di project ini.",
+            404
+          );
+        }
       }
 
       let coverSummary: Record<string, unknown> | null = null;
@@ -569,7 +584,7 @@ export async function POST(request: NextRequest) {
       // ── (2) PENUTUP KEKURANGAN: tautkan ke pengeluaran
       // (id_arus_kas_terkait) supaya bisa dibatalkan bersama saat pengeluaran
       // dihapus.
-      if (needsCover && penanggungId) {
+      if (needsInvestor && penanggungId) {
         const investor = await tx.projectInvestor.findFirst({
           where: {
             id_project_investor: penanggungId,
@@ -600,58 +615,37 @@ export async function POST(request: NextRequest) {
           investor.agent?.pengguna?.nama_lengkap?.trim() ||
           investor.id_agent;
 
-        // (a) Bagian yang MENAMBAH ANGGARAN POS (belanja melebihi rencana pos)
-        //     → talangan_investor pada pos tersebut.
-        if (tambahanAnggaran.gt(0)) {
-          await tx.projectArusKas.create({
-            data: {
-              id_project: idProject,
-              wallet_key: walletKey,
-              tanggal_transaksi: tanggalTransaksi,
-              jenis_transaksi: "pemasukan",
-              kategori_transaksi: "talangan_investor",
-              judul_transaksi: `Talangan ${namaPenanggung} — ${judulTransaksi}`,
-              nominal: tambahanAnggaran,
-              status_transaksi: "tercatat",
-              catatan: `Menambah anggaran ${WALLET_LABELS[walletKey]} untuk: ${judulTransaksi}`,
-              id_project_investor: penanggungId,
-              id_arus_kas_terkait: created.id_project_arus_kas,
-            },
-          });
-        }
+        // Catatan modal ditautkan ke pengeluaran agar pembatalan transaksi
+        // dapat membalik setoran dan kepemilikan dalam satu operasi.
+        await tx.projectArusKas.create({
+          data: {
+            id_project: idProject,
+            wallet_key: walletKey,
+            tanggal_transaksi: tanggalTransaksi,
+            jenis_transaksi: "pemasukan",
+            kategori_transaksi: "setoran_modal",
+            judul_transaksi: `Setoran modal tambahan ${namaPenanggung} — ${judulTransaksi}`,
+            nominal: deficit,
+            status_transaksi: "tercatat",
+            catatan: `Setoran modal tambahan untuk menutup kekurangan pada transaksi: ${judulTransaksi}`,
+            id_project_investor: penanggungId,
+            id_arus_kas_terkait: created.id_project_arus_kas,
+          },
+        });
 
-        // (b) Bagian yang HANYA MENAMBAH KAS (rencana pos masih cukup, uangnya
-        //     yang belum masuk) → setoran_modal. Anggaran pos sengaja tidak
-        //     ikut naik supaya rencana belanja tidak melar.
-        if (tambahanKas.gt(0)) {
-          await tx.projectArusKas.create({
-            data: {
-              id_project: idProject,
-              wallet_key: walletKey,
-              tanggal_transaksi: tanggalTransaksi,
-              jenis_transaksi: "pemasukan",
-              kategori_transaksi: "setoran_modal",
-              judul_transaksi: `Setoran modal ${namaPenanggung} — ${judulTransaksi}`,
-              nominal: tambahanKas,
-              status_transaksi: "tercatat",
-              catatan: `Menutup kekurangan kas untuk: ${judulTransaksi}`,
-              id_project_investor: penanggungId,
-              id_arus_kas_terkait: created.id_project_arus_kas,
-            },
-          });
-        }
-
-        // (c) modal disetor & komitmen penanggung bertambah sebesar keduanya
+        // Modal disetor & komitmen penanggung bertambah sesuai kekurangan kas.
         const terbayarSebelum = toDecimal(investor.nominal_terbayar);
         const terbayarSesudah = terbayarSebelum.plus(deficit);
+        const komitmenSesudah = toDecimal(investor.nominal_komitmen).plus(deficit);
         await tx.projectInvestor.update({
           where: { id_project_investor: penanggungId },
           data: {
             nominal_terbayar: terbayarSesudah,
-            nominal_komitmen: toDecimal(investor.nominal_komitmen).plus(deficit),
-            // Uangnya benar-benar masuk, jadi statusnya tidak boleh tertinggal
-            // "menunggu pembayaran".
-            status: "lunas",
+            nominal_komitmen: komitmenSesudah,
+            status:
+              komitmenSesudah.gt(0) && terbayarSesudah.gte(komitmenSesudah)
+                ? "lunas"
+                : "menunggu_pembayaran",
           },
         });
 
@@ -692,10 +686,10 @@ export async function POST(request: NextRequest) {
           id_project_investor: investor.id_project_investor.toString(),
           id_agent: investor.id_agent,
           nama: namaPenanggung,
-          otomatis: true,
+          otomatis: penanggungOtomatis,
           nominal_tambahan: Number(deficit.toString()),
-          tambahan_anggaran_pos: Number(tambahanAnggaran.toString()),
-          tambahan_kas: Number(tambahanKas.toString()),
+          tambahan_anggaran_pos: 0,
+          tambahan_kas: Number(deficit.toString()),
           terbayar_sebelum: Number(terbayarSebelum.toString()),
           terbayar_sesudah: Number(terbayarSesudah.toString()),
           persentase_sebelum: persenSebelum,
