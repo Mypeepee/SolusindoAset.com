@@ -286,6 +286,69 @@ export async function dashboard(page = 1, month = jakartaDate().slice(0, 7)) {
     },
   };
 }
+/** Reuse an approved campaign slot as the activation sample when one exists. */
+async function activationPreview(config: MarketingConfig) {
+  async function prepareSample(
+    jobId: string,
+    asset: AssetSnapshot,
+    sampleConfig: MarketingConfig,
+  ) {
+    try {
+      await readMarketingMedia(jobId, "feed.jpg");
+      return true;
+    } catch {
+      try {
+        await buildMarketingMedia(jobId, asset, sampleConfig);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  }
+
+  const now = new Date();
+  const campaignJobs = await prisma.marketingJob.findMany({
+    where: {
+      campaignId: { not: null },
+      status: "queued",
+      scheduledFor: { gt: now },
+      campaign: { is: { state: "running" } },
+    },
+    include: { campaign: true },
+    orderBy: { scheduledFor: "asc" },
+    take: 3,
+  });
+  for (const job of campaignJobs) {
+    const plan = campaignPlan(job);
+    const asset = job.snapshot as unknown as AssetSnapshot;
+    if (
+      !plan?.listingId ||
+      asset.id !== plan.listingId ||
+      campaignExecutionIssue(job.campaign, job.scheduledFor, now)
+    )
+      continue;
+    if (
+      await prepareSample(
+        job.id,
+        asset,
+        campaignConfig(config, plan.criteria),
+      )
+    )
+      return job.id;
+  }
+
+  const preparedJobs = await prisma.marketingJob.findMany({
+    where: { listingId: { not: null } },
+    orderBy: { updatedAt: "desc" },
+    take: 3,
+  });
+  for (const job of preparedJobs) {
+    const asset = job.snapshot as unknown as AssetSnapshot;
+    if (asset.id !== job.listingId) continue;
+    if (await prepareSample(job.id, asset, config)) return job.id;
+  }
+  return null;
+}
 export async function updateConfiguration(config: MarketingConfig) {
   if (config.enabled) {
     if (!normalizePhone(config.companyPhone))
@@ -311,12 +374,9 @@ export async function updateConfiguration(config: MarketingConfig) {
         throw new MarketingError("INVALID_AUDIENCE");
       config = { ...config, whatsappAccount: connection.whatsapp.phone };
     }
-    const preview = await prisma.marketingJob.findFirst({
-      where: { listingId: { not: null } },
-      orderBy: { updatedAt: "desc" },
-    });
-    if (!preview) throw new MarketingError("PREVIEW_REQUIRED");
-    if (config.instagram) await probePublicMedia(preview.id);
+    const previewId = await activationPreview(config);
+    if (!previewId) throw new MarketingError("PREVIEW_REQUIRED");
+    if (config.instagram) await probePublicMedia(previewId);
   }
   return saveSettings(config);
 }

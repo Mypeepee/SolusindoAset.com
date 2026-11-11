@@ -83,7 +83,8 @@ const explanations: Record<string, string> = {
   INVALID_PLANNING_SLOT:
     "Pilih slot pada jadwal tersimpan, mulai sekarang hingga 90 hari ke depan.",
   PLANNING_SLOT_LOCKED: "Slot ini sudah diproses dan tidak dapat diganti.",
-  PREVIEW_REQUIRED: "Buat pratinjau materi sebelum mengaktifkan otomatisasi.",
+  PREVIEW_REQUIRED:
+    "Belum ada materi yang bisa dipakai. Siapkan pratinjau di Planner atau pastikan campaign berjalan punya aset terjadwal.",
   COMPANY_PHONE_REQUIRED: "Isi nomor WhatsApp perusahaan terlebih dahulu.",
   WORKER_BUSY: "Sistem sedang memproses publikasi. Coba kembali sebentar lagi.",
   SETTINGS_CONFLICT:

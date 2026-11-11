@@ -321,7 +321,7 @@ export default function MarketingSettings({
           <p className="ms-automation-help">
             {dirty
               ? "Simpan perubahan sebelum mengubah otomatisasi atau mengirim uji."
-              : "Siapkan materi di Planner sebelum aktivasi. Publikasi berjalan setelah otomatisasi aktif dan kanal siap."}
+              : "Materi campaign berjalan dipakai jika tersedia. Jika tidak, siapkan materi di Planner sebelum aktivasi. Publikasi berjalan setelah otomatisasi aktif dan kanal siap."}
           </p>
         </div>
       </div>
