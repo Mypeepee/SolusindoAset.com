@@ -46,6 +46,10 @@ function fixture(id, mode = 'sendiri') {
   for (const f of contract.suratFields(id, values)) values[f.key] = 'QA ' + f.key;
   return { ...values, ...pemohon, tanggal_surat: '2026-11-04', LT: '120',
     nama_kuasa: 'KUASA QA', nik_kuasa: '9876543210987654', tanggallahir_kuasa: '2 Februari 1982',
+    tempatlahir_kuasa: 'Kota Kuasa QA', kelamin_kuasa: 'Laki-laki', agama_kuasa: 'Islam',
+    warga_negara_kuasa: 'Indonesia', alamat_kuasa: 'ALAMAT PENERIMA KUASA QA',
+    pekerjaan_kuasa: 'Advokat QA', statuskawin_kuasa: 'Belum Menikah',
+    nomor_surat_kuasa: '1/SKP/NOV/2026', tanggal_surat_kuasa: '2026-11-04',
     nama_debitur: 'DEBITUR QA', alamat_debitur: 'ALAMAT DEBITUR QA',
     lokasi_asset: 'ALAMAT ASET QA', pengadilan: 'Pengadilan Negeri Uji',
     kpknl: 'KPKNL Uji', nomor_kwitansi: 'KUITANSI-QA-2026', tanggal_kwitansi: '3 November 2026',
@@ -140,6 +144,7 @@ const akta = {
 };
 const cases = [
   ['generate-permohonan-pn', fixture('permohonan-eksekusi-pn')],
+  ['generate-permohonan-pn', fixture('permohonan-eksekusi-pn', 'kuasa')],
   ['generate-akta-grosse', fixture('permohonan-akte-grosse')],
   ['generate-akta-grosse', fixture('permohonan-akte-grosse', 'kuasa')],
   ['generate-MOU', { id_transaksi: mou.id_transaksi }],
@@ -155,15 +160,22 @@ const cases = [
 test('form/API contracts, OCR mapping and Jakarta date boundaries', async () => {
   assert.equal(contract.tanggalWib(new Date('2026-11-03T17:05:00Z')), '2026-11-04');
   assert.equal(contract.formatTanggalSurat('2026-11-04'), '4 November 2026');
+  assert.equal(contract.nomorSuratKuasaDefault('2026-11-04'), '1/SKP/NOV/2026');
   assert.equal(contract.tanggalSuratValid('2026-02-30'), false);
   assert.equal(contract.tanggalSuratValid('2024-02-29'), true);
   assert.deepEqual(contract.ktpSuratPatch({ nama_pemohon: ' QA ', nik_pemohon: '', alamat_pemohon: 'Alamat QA' }, 'kuasa'), { nama_kuasa: 'QA', alamat_kuasa: 'Alamat QA' });
+  assert.deepEqual(contract.ktpSuratPatch({ warga_negara: 'Indonesia', agama_pemohon: 'Islam' }, 'kuasa'), { agama_kuasa: 'Islam', warga_negara_kuasa: 'Indonesia' });
   for (const id of ['permohonan-eksekusi-pn', 'permohonan-akte-grosse']) {
     const body = fixture(id);
     assert.deepEqual(contract.suratErrors(id, body), {});
     assert.ok(contract.suratErrors(id, { ...body, nik_pemohon: '123' }).nik_pemohon);
     assert.ok(contract.suratErrors(id, { ...body, tanggal_surat: '2026-02-30' }).tanggal_surat);
   }
+  const power = fixture('permohonan-eksekusi-pn', 'kuasa');
+  assert.deepEqual(contract.suratErrors('permohonan-eksekusi-pn', power), {});
+  assert.ok(contract.suratErrors('permohonan-eksekusi-pn', { ...power, nomor_surat_kuasa: '1/SKP/DEC/2026' }).nomor_surat_kuasa);
+  assert.ok(contract.suratErrors('permohonan-eksekusi-pn', { ...power, nomor_surat_kuasa: '0/SKP/NOV/2026' }).nomor_surat_kuasa);
+  assert.ok(contract.suratErrors('permohonan-eksekusi-pn', { ...power, tanggal_surat_kuasa: '2026-12-04' }).nomor_surat_kuasa);
 });
 
 test('all letter routes render actual templates against current Prisma schema', async t => {
@@ -186,6 +198,58 @@ test('all letter routes render actual templates against current Prisma schema', 
         assert.ok(xml.includes('ALAMAT ASET QA'));
         assert.ok(xml.includes('Bank QA Indonesia'));
         assert.ok(xml.includes('3 November 2026'));
+        if (body.bertindakSebagai === 'kuasa') {
+          assert.ok(xml.includes('bangunan yang berdiri diatasnya, masing-masing sesuai'));
+          for (const value of [
+            'KUASA QA', '9876543210987654', 'Kota Kuasa QA', '2 Februari 1982',
+            'Laki-laki', 'Islam', 'Indonesia', 'ALAMAT PENERIMA KUASA QA',
+            'Advokat QA', 'Belum Menikah', '1/SKP/NOV/2026', '4 November 2026',
+            'PEMBERI KUASA', 'PENERIMA KUASA', 'JUSTICIA LAWFIRM',
+          ]) assert.ok(xml.includes(value), `Kuasa template is missing ${value}`);
+          for (const [field, value] of Object.entries({
+            kota: body.kota,
+            pengadilan: body.pengadilan,
+            alamat_PN: body.alamat_PN,
+            nama_pemohon: 'PEMOHON QA &amp; REKAN',
+            NIK_pemohon: body.nik_pemohon,
+            tempatlahir_pemohon: body.tempatlahir_pemohon,
+            tanggallahir_pemohon: body.tanggallahir_pemohon,
+            kelamin_pemohon: body.kelamin_pemohon,
+            agama_pemohon: body.agama_pemohon,
+            warga_negara: body.warga_negara,
+            alamat_pemohon: body.alamat_pemohon,
+            pekerjaan_pemohon: body.pekerjaan_pemohon,
+            statuskawin_pemohon: body.statuskawin_pemohon,
+            nama_kuasa: body.nama_kuasa,
+            NIK_kuasa: body.nik_kuasa,
+            tempatlahir_kuasa: body.tempatlahir_kuasa,
+            tanggallahir_kuasa: body.tanggallahir_kuasa,
+            kelamin_kuasa: body.kelamin_kuasa,
+            agama_kuasa: body.agama_kuasa,
+            warga_negara_kuasa: body.warga_negara_kuasa,
+            alamat_kuasa: body.alamat_kuasa,
+            pekerjaan_kuasa: body.pekerjaan_kuasa,
+            statuskawin_kuasa: body.statuskawin_kuasa,
+            nama_debitur: body.nama_debitur,
+            alamat_debitur: body.alamat_debitur,
+            jenis_sertifikat: body.jenis_sertifikat,
+            singkatan_sertifikat: body.singkatan_sertifikat,
+            nomor_nib: body.nomor_nib,
+            LT: body.LT,
+            lokasi_asset: body.lokasi_asset,
+            kelurahan_asset: body.kelurahan_asset,
+            kecamatan_asset: body.kecamatan_asset,
+            kota_asset: body.kota_asset,
+            nama_bank: body.nama_bank,
+            kantor_lelang: body.kantor_lelang,
+            nomor_risalah: body.nomor_risalah,
+            tanggal_risalah: body.tanggal_risalah,
+            nomor_kwitansi: body.nomor_kwitansi,
+            tanggal_kwitansi: body.tanggal_kwitansi,
+          })) assert.ok(xml.includes(value), `Kuasa template field ${field} was not populated`);
+        } else {
+          assert.ok(!xml.includes('SURAT KUASA'));
+        }
       }
     }
     const pdf = Buffer.from(await response.arrayBuffer());
@@ -193,6 +257,10 @@ test('all letter routes render actual templates against current Prisma schema', 
     if (process.env.SURAT_QA_PDF === '1') {
       const parsed = await require('pdf-parse/lib/pdf-parse.js')(pdf);
       assert.ok(parsed.numpages > 0);
+      if (endpoint === 'generate-permohonan-pn' && body.bertindakSebagai === 'kuasa') {
+        for (const value of ['SURAT KUASA', '1/SKP/NOV/2026', 'ALAMAT PENERIMA KUASA QA', '4 November 2026'])
+          assert.ok(parsed.text.includes(value), `Generated PDF is missing ${value}`);
+      }
       fs.mkdirSync('/tmp/kosku-surat-qa', { recursive: true });
       fs.writeFileSync(`/tmp/kosku-surat-qa/${index + 1}-${endpoint}.pdf`, pdf);
       console.log(JSON.stringify({ endpoint, pages: parsed.numpages, bytes: pdf.length, database: 'in-memory' }));

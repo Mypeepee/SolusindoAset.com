@@ -11,6 +11,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
 import { SITE_URL, lelangOgImageUrl } from "@/lib/site";
 import { getAuctionHistory } from "@/lib/auctionHistory";
+import { bisaLihatRiwayatLelang } from "@/lib/sessionJabatan";
 
 // --- TYPES ---
 type ParamsShape = {
@@ -248,7 +249,8 @@ export default async function DetailPage({ params }: Props) {
 
   const session = await getServerSession(authOptions);
   const currentAgentId = (session?.user as any)?.agentId || null;
-  const role = (session?.user as any)?.role || (session?.user as any)?.peran || null;
+  const role = (session?.user as any)?.peran || (session?.user as any)?.role || null;
+  const jabatan = (session?.user as any)?.jabatan || null;
   const referralCode = (session?.user as any)?.kode_referral || null;
   const isAgentUser = Boolean(currentAgentId) || role === "AGENT";
 
@@ -285,8 +287,8 @@ export default async function DetailPage({ params }: Props) {
   const fotoArray = normalizeListingImages(product.gambar);
 
   // Rekomendasi "Properti Serupa" — campuran Primary/Secondary/Lelang, di-ranking relevansi.
-  // Riwayat lelang diambil di server (bukan fetch dari browser) supaya bloknya
-  // selalu ada di HTML pertama. Lihat @/lib/auctionHistory.
+  // Detail riwayat hanya dikirim ke Owner/Agent. Pengunjung lain menerima
+  // ringkasan jumlah untuk layar subscription.
   const [similarItems, riwayatLelang] = await Promise.all([
     getSimilarItems(product),
     getAuctionHistory(product.id_property).catch((e) => {
@@ -294,6 +296,10 @@ export default async function DetailPage({ params }: Props) {
       return null;
     }),
   ]);
+  const canViewAuctionHistory = bisaLihatRiwayatLelang({ role, jabatan });
+  const auctionHistoryCount = riwayatLelang?.total ?? 0;
+  const hasAuctionHistory = auctionHistoryCount > 1;
+  const visibleAuctionHistory = canViewAuctionHistory ? riwayatLelang : null;
 
   const productAgentPhoto = normalizeAgentPhoto(
     product.agent?.foto_profil_url
@@ -378,8 +384,10 @@ export default async function DetailPage({ params }: Props) {
         fotoArray={fotoArray}
         similarProperties={similarItems}
         currentAgentId={null}
-        riwayatLelang={riwayatLelang}
-        isLoggedIn={Boolean(session?.user)}
+        canViewAuctionHistory={canViewAuctionHistory}
+        riwayatLelang={visibleAuctionHistory}
+        auctionHistoryCount={auctionHistoryCount}
+        hasAuctionHistory={hasAuctionHistory}
       />
     </main>
   );

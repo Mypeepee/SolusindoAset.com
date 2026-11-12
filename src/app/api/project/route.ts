@@ -278,11 +278,13 @@ export async function GET() {
           Prisma.sql`
             SELECT
               COALESCE(SUM(pi.nominal_komitmen), 0)::text AS total_dana,
-              COALESCE(SUM(CASE WHEN pi.status = 'lunas' THEN pi.nominal_komitmen ELSE 0 END), 0)::text AS total_lunas,
-              COALESCE(SUM(CASE WHEN pi.status = 'menunggu_pembayaran' THEN pi.nominal_komitmen ELSE 0 END), 0)::text AS total_pending,
+              -- Nilai diterima berasal dari pembayaran aktual, bukan status
+              -- atau nilai komitmen (keduanya dapat tertinggal dari nominal).
+              COALESCE(SUM(pi.nominal_terbayar), 0)::text AS total_lunas,
+              COALESCE(SUM(GREATEST(pi.nominal_komitmen - pi.nominal_terbayar, 0)), 0)::text AS total_pending,
               COUNT(DISTINCT pi.id_project)::int AS project_aktif,
-              COUNT(*) FILTER (WHERE pi.status = 'menunggu_pembayaran')::int AS pending_payment_count,
-              COUNT(DISTINCT CASE WHEN pi.status = 'menunggu_pembayaran' THEN pi.id_project END)::int AS pending_project_count,
+              COUNT(*) FILTER (WHERE pi.nominal_komitmen > pi.nominal_terbayar)::int AS pending_payment_count,
+              COUNT(DISTINCT CASE WHEN pi.nominal_komitmen > pi.nominal_terbayar THEN pi.id_project END)::int AS pending_project_count,
               (
                 SELECT COALESCE(SUM(psi.profit), 0)
                 FROM project_selesai_investor psi

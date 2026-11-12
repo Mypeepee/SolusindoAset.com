@@ -104,6 +104,7 @@ interface DetailClientProps {
   currentAgentId?: string | null;
   currentRole?: "AGENT" | "OWNER" | "USER" | string | null;
   currentJabatan?: string | null;
+  canViewAuctionHistory?: boolean;
   stokerPhone?: string | null;
   /** Agent yang kodenya ada di URL — identitas & nomor yang dilihat klien. */
   presentingAgent?: PresentingAgent | null;
@@ -115,8 +116,9 @@ interface DetailClientProps {
    * ada di HTML pertama dan tidak bergantung pada fetch dari browser.
    */
   riwayatLelang?: AuctionHistoryResult | null;
-  /** Apakah pengunjung sudah login (dihitung di server, bukan dari useSession). */
-  isLoggedIn?: boolean;
+  /** Ringkasan aman untuk layar subscription; detail hanya dikirim ke Owner/Agent. */
+  auctionHistoryCount?: number;
+  hasAuctionHistory?: boolean;
   /**
    * Hasil pemindaian "apa yang ada di sekitar" yang sudah tersimpan, dibaca di
    * server. Ada supaya aset yang pernah dipindai tampil lengkap di HTML
@@ -132,11 +134,13 @@ export default function DetailClient({
   currentAgentId,
   currentRole,
   currentJabatan,
+  canViewAuctionHistory,
   stokerPhone,
   presentingAgent = null,
   selfAgent = null,
   riwayatLelang = null,
-  isLoggedIn,
+  auctionHistoryCount = 0,
+  hasAuctionHistory = false,
   sekitar = null,
 }: DetailClientProps) {
   useEffect(() => {
@@ -404,8 +408,10 @@ export default function DetailClient({
             currentAgentId={currentAgentId}
             currentRole={currentRole}
             currentJabatan={currentJabatan}
+            canViewAuctionHistory={canViewAuctionHistory}
             riwayatLelang={riwayatLelang}
-            isLoggedIn={isLoggedIn}
+            auctionHistoryCount={auctionHistoryCount}
+            hasAuctionHistory={hasAuctionHistory}
           />
 
           {isAgent ? (

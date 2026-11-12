@@ -11,6 +11,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
 import { SITE_URL, lelangOgImageUrl } from "@/lib/site";
 import { getAuctionHistory } from "@/lib/auctionHistory";
+import { bisaLihatRiwayatLelang } from "@/lib/sessionJabatan";
 
 export const revalidate = 3600;
 
@@ -263,8 +264,8 @@ export default async function DetailPage({ params }: Props) {
   }
 
   // Jalankan semua query independen secara paralel.
-  // Riwayat lelang sengaja diambil di server: blok ini wajib ada di HTML
-  // pertama, bukan hasil fetch dari browser yang bisa gagal/terlambat.
+  // Riwayat dihitung di server. Detail lengkap hanya dikirim ke Owner/Agent;
+  // pengunjung lain hanya menerima ringkasan untuk layar subscription.
   const [session, stoker, presentingAgent, similarItems, riwayatLelang] =
     await Promise.all([
     getServerSession(authOptions),
@@ -286,8 +287,13 @@ export default async function DetailPage({ params }: Props) {
   ]);
 
   const loggedInAgentId = (session?.user as any)?.agentId || null;
-  const role = (session?.user as any)?.role || null;
+  const role =
+    (session?.user as any)?.peran || (session?.user as any)?.role || null;
   const jabatan = (session?.user as any)?.jabatan || null;
+  const canViewAuctionHistory = bisaLihatRiwayatLelang({ role, jabatan });
+  const auctionHistoryCount = riwayatLelang?.total ?? 0;
+  const hasAuctionHistory = auctionHistoryCount > 1;
+  const visibleAuctionHistory = canViewAuctionHistory ? riwayatLelang : null;
   const currentAgentId = loggedInAgentId;
   const stokerPhone =
     stoker?.pengguna?.nomor_telepon || stoker?.nomor_whatsapp || null;
@@ -338,11 +344,13 @@ export default async function DetailPage({ params }: Props) {
         currentAgentId={currentAgentId}
         currentRole={role}
         currentJabatan={jabatan}
+        canViewAuctionHistory={canViewAuctionHistory}
         stokerPhone={stokerPhone}
         presentingAgent={presentingAgent}
         selfAgent={selfAgent}
-        riwayatLelang={riwayatLelang}
-        isLoggedIn={Boolean(session?.user)}
+        riwayatLelang={visibleAuctionHistory}
+        auctionHistoryCount={auctionHistoryCount}
+        hasAuctionHistory={hasAuctionHistory}
       />
     </main>
   );

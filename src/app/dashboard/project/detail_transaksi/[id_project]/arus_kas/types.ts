@@ -35,6 +35,8 @@ export type DbCashflow = {
   investor_nama?: string | null;
   /** Baris ini dibuat otomatis oleh sistem (talangan/setoran) → tak bisa diedit. */
   dikunci?: boolean;
+  /** Baris historis virtual boleh dikoreksi tanpa mengubah transaksi kas lain. */
+  bisaDikoreksi?: boolean;
 };
 
 /** Satu investor project, lengkap dengan porsi kepemilikannya. */

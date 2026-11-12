@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/authOptions";
 import { prisma } from "@/lib/prisma";
 import { getAuctionHistory } from "@/lib/auctionHistory";
+import { bisaLihatRiwayatLelang } from "@/lib/sessionJabatan";
 
 export const dynamic = "force-dynamic";
 
 /**
  * Riwayat lelang untuk modul closing. Pencocokan asetnya memakai mesin yang
- * sama dengan halaman detail publik (@/lib/auctionHistory) supaya angka yang
- * dilihat agent di closing tidak pernah berbeda dari yang dilihat klien.
+ * sama dengan halaman detail (@/lib/auctionHistory) supaya angka di closing
+ * tidak pernah berbeda dari halaman aset.
  * Bentuk respons dipertahankan demi RiwayatLelangModal di ClosingShell.
  */
 export async function GET(
@@ -15,9 +18,27 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const privateHeaders = { "Cache-Control": "private, no-store" };
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json(
+        { error: "LOGIN_DIBUTUHKAN" },
+        { status: 401, headers: privateHeaders },
+      );
+    }
+    if (!bisaLihatRiwayatLelang(session.user)) {
+      return NextResponse.json(
+        { error: "AKSES_KHUSUS_OWNER_AGENT" },
+        { status: 403, headers: privateHeaders },
+      );
+    }
+
     const hasil = await getAuctionHistory(params.id);
     if (!hasil) {
-      return NextResponse.json({ error: "Listing not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Listing not found" },
+        { status: 404, headers: privateHeaders },
+      );
     }
 
     const current = hasil.items.find((i) => i.is_current) ?? hasil.items[0];
@@ -25,19 +46,22 @@ export async function GET(
     // Listing non-lelang tidak punya riwayat lelang — pertahankan perilaku lama
     // (rows kosong) supaya modal closing tidak menampilkan dirinya sendiri.
     if (current && current.jenis_transaksi !== "LELANG") {
-      return NextResponse.json({
-        current: {
-          id_property: current.id_property,
-          jenis_transaksi: current.jenis_transaksi,
-          kelurahan: current.kelurahan,
-          kecamatan: current.kecamatan,
-          kota: current.kota,
-          legalitas: current.legalitas,
-          nomor_legalitas: current.nomor_legalitas,
+      return NextResponse.json(
+        {
+          current: {
+            id_property: current.id_property,
+            jenis_transaksi: current.jenis_transaksi,
+            kelurahan: current.kelurahan,
+            kecamatan: current.kecamatan,
+            kota: current.kota,
+            legalitas: current.legalitas,
+            nomor_legalitas: current.nomor_legalitas,
+          },
+          rows: [],
+          matchCriteria: null,
         },
-        rows: [],
-        matchCriteria: null,
-      });
+        { headers: privateHeaders },
+      );
     }
 
     // Nama agent penayang tiap event — jumlah baris kecil, satu query cukup.
@@ -91,36 +115,39 @@ export async function GET(
       duplikat_ids: i.duplikat_ids,
     }));
 
-    return NextResponse.json({
-      current: {
-        id_property: current?.id_property ?? String(params.id),
-        jenis_transaksi: "LELANG",
-        kelurahan: current?.kelurahan ?? null,
-        kecamatan: current?.kecamatan ?? null,
-        kota: current?.kota ?? null,
-        legalitas: current?.legalitas ?? null,
-        nomor_legalitas: current?.nomor_legalitas ?? null,
+    return NextResponse.json(
+      {
+        current: {
+          id_property: current?.id_property ?? String(params.id),
+          jenis_transaksi: "LELANG",
+          kelurahan: current?.kelurahan ?? null,
+          kecamatan: current?.kecamatan ?? null,
+          kota: current?.kota ?? null,
+          legalitas: current?.legalitas ?? null,
+          nomor_legalitas: current?.nomor_legalitas ?? null,
+        },
+        rows,
+        total_sebidang: hasil.total_sebidang,
+        total_lot_terkait: hasil.total_lot_terkait,
+        matchCriteria: hasil.match
+          ? {
+              wilayah_level: hasil.match.wilayah_level,
+              kelurahan: hasil.match.kelurahan,
+              kecamatan: hasil.match.kecamatan,
+              kota: hasil.match.kota,
+              legalitas: hasil.match.legalitas,
+              nomor_legalitas: hasil.match.nomor_legalitas,
+              nomor_normal: hasil.match.nomor_normal,
+            }
+          : null,
       },
-      rows,
-      total_sebidang: hasil.total_sebidang,
-      total_lot_terkait: hasil.total_lot_terkait,
-      matchCriteria: hasil.match
-        ? {
-            wilayah_level: hasil.match.wilayah_level,
-            kelurahan: hasil.match.kelurahan,
-            kecamatan: hasil.match.kecamatan,
-            kota: hasil.match.kota,
-            legalitas: hasil.match.legalitas,
-            nomor_legalitas: hasil.match.nomor_legalitas,
-            nomor_normal: hasil.match.nomor_normal,
-          }
-        : null,
-    });
+      { headers: privateHeaders },
+    );
   } catch (e: any) {
     console.error("❌ Gagal mengambil riwayat lelang (closing):", e);
     return NextResponse.json(
       { error: e?.message ?? "Unknown error" },
-      { status: 500 }
+      { status: 500, headers: { "Cache-Control": "private, no-store" } }
     );
   }
 }

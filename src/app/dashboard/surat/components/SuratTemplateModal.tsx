@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ocrKTP } from "@/lib/ocrKtp";
 import { ocrRisalah } from "@/lib/ocrRisalah";
 import { ktpSuratPatch, suratErrors, suratFields, tanggalWib, type SuratValues } from "@/lib/suratGeneration";
+import { PermohonanEksekusiModal } from "./PermohonanEksekusiModal";
 import type { SuratTemplate } from "./data";
 
 type Props = {
@@ -19,7 +20,12 @@ type Props = {
 
 const action = "min-h-11 cursor-pointer rounded-xl px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300 disabled:cursor-not-allowed disabled:opacity-50";
 
-export function SuratTemplateModal({ open, template, onClose, onSubmit }: Props) {
+export function SuratTemplateModal(props: Props) {
+  if (props.template?.id === "permohonan-eksekusi-pn") return <PermohonanEksekusiModal {...props} />;
+  return <GenericSuratTemplateModal {...props} />;
+}
+
+function GenericSuratTemplateModal({ open, template, onClose, onSubmit }: Props) {
   const [values, setValues] = useState<SuratValues>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
@@ -143,7 +149,7 @@ export function SuratTemplateModal({ open, template, onClose, onSubmit }: Props)
         <p className="mt-2 text-xs leading-relaxed text-slate-400">
           {isMou ? "Masukkan ID atau kode MOU dari Transaksi. Skema komisi dan nilai biaya mengikuti data MOU yang tersimpan. Identitas kosong menggunakan data MOU."
             : isGrosse ? "Isi data secara manual atau gunakan scan untuk membantu pengisian. Kolom bertanda * wajib diisi."
-            : "Sesuai template yang tersedia, surat PN ditandatangani langsung oleh pemohon. Lengkapi data pemohon, debitur, aset, dan lelang. Kolom bertanda * wajib diisi."}
+            : "Isi data yang diperlukan sesuai template surat. Kolom bertanda * wajib diisi."}
         </p>
       </div>
       <form ref={form} noValidate onSubmit={submit} aria-busy={!!busy} className="flex min-h-0 flex-1 flex-col">
@@ -192,7 +198,7 @@ export function SuratTemplateModal({ open, template, onClose, onSubmit }: Props)
                   return <div key={field.key} className={field.type === "textarea" ? "sm:col-span-2" : "min-w-0"}>
                     <label htmlFor={id} className="mb-1.5 block text-xs font-medium text-slate-300">{field.label}{field.required && " *"}</label>
                     {field.type === "textarea" ? <Textarea {...common} rows={3} className="min-h-[88px] resize-none" />
-                      : <Input {...common} type={field.type === "number" ? "number" : "text"}
+                      : <Input {...common} type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
                           min={field.type === "number" ? "0" : undefined} step={field.type === "number" ? "any" : undefined}
                           inputMode={field.key.startsWith("nik_") ? "numeric" : undefined} />}
                     {errors[field.key] && <p id={`${id}-error`} className="mt-1 text-xs text-rose-300">{errors[field.key]}</p>}

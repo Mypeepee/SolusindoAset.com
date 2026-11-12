@@ -42,6 +42,10 @@ components:
 
 CRM discount preference uses the shared `FormPreferensi` in all client create/edit surfaces. Retain the existing dark emerald form identity and DM Sans. Its compact nested field group pairs an authored `SearchSelect` with one numeric percentage; pin, descending arrows and layers identify Kelurahan, Turun lelang and Keduanya in both trigger and options. The controls stack on phones and keep 44px targets, visible focus and reduced-motion support. Runtime ownership stays with the existing search primitive and form Tailwind classes.
 
+## Riwayat lelang di halaman detail
+
+Detail riwayat dan analisis harga hanya untuk Owner dan Agent. USER serta pengunjung belum login hanya melihat panel terkunci saat aset memiliki riwayat sebelumnya. Pertahankan permukaan gelap dengan aksen oranye; jelaskan bahwa data termasuk subscription dan fitur subscription sedang disiapkan. Jangan ajak pengguna mendaftar gratis atau menjanjikan akses sekarang. Panel boleh menyebut jumlah riwayat, tetapi tidak menampilkan tanggal, harga, alamat, foto, atau isi catatan yang dikunci.
+
 CRM location preferences reuse `LocationPicker` with its administrative hierarchy variant. District pills include their city/regency; village pills include their district and city/regency. The complete saved ancestry and Kota/Kabupaten prefix survive create, edit and reload. Keep the existing pill styling and horizontal scrolling so the identifying parent remains available on narrow screens.
 
 Scope: the existing About / company profile page and its owner-only completed-project editor. This records the existing identity, without prescribing a redesign of other routes. Public content is a brand surface; the owner editor follows the application behavior contract in UX-CONTRACT.md.

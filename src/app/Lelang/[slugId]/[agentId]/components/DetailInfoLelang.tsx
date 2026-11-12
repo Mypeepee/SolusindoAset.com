@@ -50,6 +50,7 @@ import {
   type Aksen,
 } from "@/lib/detailTheme";
 import type { AksesTerdekat } from "@/lib/kosDetail";
+import { bisaLihatRiwayatLelang } from "@/lib/sessionJabatan";
 import SekitarLokasi from "@/components/property/detail/SekitarLokasi";
 import type { SekitarAwal } from "@/components/property/detail/useSekitar";
 import {
@@ -159,10 +160,12 @@ interface DetailInfoProps {
   currentAgentId?: string | null;
   currentRole?: string | null;
   currentJabatan?: string | null;
+  canViewAuctionHistory?: boolean;
   /** Riwayat lelang hasil hitungan server — lihat @/lib/auctionHistory. */
   riwayatLelang?: AuctionHistoryResult | null;
-  /** Status login dari server, supaya blok riwayat tidak salah render dulu. */
-  isLoggedIn?: boolean;
+  /** Ringkasan tanpa detail, dipakai untuk layar subscription bagi USER. */
+  auctionHistoryCount?: number;
+  hasAuctionHistory?: boolean;
 }
 
 const formatRupiah = (val: number | null | undefined) => {
@@ -327,8 +330,10 @@ export default function DetailInfo({
   currentAgentId: _currentAgentId,
   currentRole,
   currentJabatan,
+  canViewAuctionHistory: canViewAuctionHistoryProp,
   riwayatLelang = null,
-  isLoggedIn,
+  auctionHistoryCount = 0,
+  hasAuctionHistory = false,
 }: DetailInfoProps) {
   // Nomor sertifikat hanya untuk orang dalam. `currentRole` isinya `peran_enum`
   // (USER|AGENT), jadi cabang keduanya memakai `currentJabatan` — sebelumnya
@@ -337,6 +342,9 @@ export default function DetailInfo({
   // jabatan ada sebagai jaring kalau ada akun owner yang perannya belum AGENT.
   const canSeeNomorLegalitas =
     currentRole === "AGENT" || currentJabatan === "OWNER";
+  const canViewAuctionHistory =
+    canViewAuctionHistoryProp ??
+    bisaLihatRiwayatLelang({ role: currentRole, jabatan: currentJabatan });
 
   // Satu lot lelang bisa memuat beberapa bidang; nomornya ditumpuk dalam satu
   // kolom ("123,456,789"). Kalau lebih dari satu, deretan itu tidak muat di
@@ -881,7 +889,9 @@ export default function DetailInfo({
       <RiwayatLelang
         idProperty={data?.id_property}
         initialData={riwayatLelang}
-        isLoggedIn={isLoggedIn}
+        canViewHistory={canViewAuctionHistory}
+        historyCount={auctionHistoryCount}
+        hasHistory={hasAuctionHistory}
       />
 
       {/* ══ 7. EDUKASI LELANG ══

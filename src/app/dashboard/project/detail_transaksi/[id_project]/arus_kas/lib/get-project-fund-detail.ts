@@ -198,6 +198,7 @@ export async function getProjectFundDetail(
       id_project_investor: investorId,
       investor_nama: name,
       dikunci: true,
+      bisaDikoreksi: true,
     });
   }
 

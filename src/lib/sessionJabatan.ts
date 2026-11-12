@@ -53,6 +53,14 @@ export function isOwner(user: PenggunaSesi | null | undefined): boolean {
   return jabatanDari(user) === 'OWNER';
 }
 
+/** Owner dan agent dapat membuka riwayat lelang aset. */
+export function bisaLihatRiwayatLelang(
+  user: PenggunaSesi | null | undefined,
+): boolean {
+  const peran = String(user?.peran ?? user?.role ?? '').trim().toUpperCase();
+  return peran === 'AGENT' || isOwner(user);
+}
+
 /**
  * Boleh menyunting sebuah entitas: pemiliknya sendiri, atau OWNER.
  * Dipakai acara/agenda — pola yang sebelumnya disalin-tempel di tiga komponen

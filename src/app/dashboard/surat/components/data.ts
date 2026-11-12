@@ -133,7 +133,7 @@ export const suratTemplates: SuratTemplate[] = [
     code: "LIT-001",
     title: "Permohonan Eksekusi",
     category: "Litigasi Perdata",
-    description: "Permohonan eksekusi pengosongan ke Pengadilan Negeri, ditandatangani pemohon sesuai template. Isi identitas, aset, dan lelang secara manual atau dengan bantuan scan.",
+    description: "Permohonan eksekusi pengosongan ke Pengadilan Negeri. Isi sebagai pemohon atau penerima kuasa, lalu lengkapi data aset dan lelang dengan bantuan scan dokumen.",
     status: "Baru",
     updatedAt: "04 Apr 2026",
     usedCount: 0,

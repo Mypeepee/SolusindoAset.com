@@ -287,7 +287,7 @@ export default function CmaValidationPanel({
                     Muat ulang listing sebelum membuka riwayat.
                   </p>
                 ) : (
-                  <RiwayatLelang idProperty={current.id} isLoggedIn />
+                  <RiwayatLelang idProperty={current.id} canViewHistory />
                 ))}
             </div>
           )}
